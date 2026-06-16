@@ -1,0 +1,77 @@
+import { initCrudPage } from "../js/crud-page.js";
+
+initCrudPage({
+  endpoint: "/airline-tariffs",
+  title: "Tarifas de Aerolínea",
+  columns: [
+    { key: "airline_name",       label: "Aerolínea" },
+    { key: "origin_iata",        label: "Origen" },
+    { key: "destination_iata",   label: "Destino" },
+    { key: "cost_per_kg",        label: "Tarifa/kg" },
+    { key: "minimum_charge",     label: "Cargo mín." },
+    { key: "currency_code",      label: "Moneda" },
+    { key: "valid_from",         label: "Válido desde" },
+    { key: "valid_to",           label: "Válido hasta" },
+    { key: "active",             label: "Estado", format: "active-badge" },
+  ],
+  fields: [
+    {
+      name: "airline_id",
+      label: "Aerolínea",
+      type: "select",
+      required: true,
+      optionsEndpoint: "/airlines",
+      optionValue: (row) => row.id,
+      optionLabel: (row) => `${row.airline_code} — ${row.airline_name}`,
+    },
+    {
+      name: "origin_airport_id",
+      label: "Aeropuerto de Origen",
+      type: "select",
+      required: true,
+      optionsEndpoint: "/airports",
+      optionValue: (row) => row.id,
+      optionLabel: (row) => `${row.iata_code} · ${row.city}`,
+    },
+    {
+      name: "destination_airport_id",
+      label: "Aeropuerto de Destino",
+      type: "select",
+      required: true,
+      optionsEndpoint: "/airports",
+      optionValue: (row) => row.id,
+      optionLabel: (row) => `${row.iata_code} · ${row.city}`,
+    },
+    {
+      name: "cost_per_kg",
+      label: "Costo por kg",
+      type: "number",
+      step: "0.0001",
+      required: true,
+    },
+    {
+      name: "minimum_charge",
+      label: "Cargo mínimo",
+      type: "number",
+      step: "0.01",
+    },
+    {
+      name: "currency_code",
+      label: "Moneda",
+      type: "text",
+      default: "USD",
+    },
+    {
+      name: "valid_from",
+      label: "Válido desde",
+      type: "date",
+      required: true,
+    },
+    {
+      name: "valid_to",
+      label: "Válido hasta",
+      type: "date",
+    },
+    { name: "active", label: "Activo", type: "checkbox", editOnly: true },
+  ],
+});

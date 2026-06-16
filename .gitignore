@@ -1,8 +1,38 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Entornos virtuales
+.venv/
+.venv-1/
 venv/
+env/
+
+# Variables de entorno — NUNCA al repo
 .env
-.vscode/
+.env.local
+.env.production
+
+# Logs
 *.log
-Thumbs.db
+
+# Sistema operativo
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+
+# Backups y archivos temporales
+backups/
+*.zip
+*.bak
+*.tmp
+
+# Base de datos local
+*.sqlite
+*.db
