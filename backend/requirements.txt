@@ -8,3 +8,4 @@ pydantic
 alembic
 openpyxl
 python-multipart
+httpx

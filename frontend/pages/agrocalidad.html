@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLIS · Agrocalidad</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-page="agrocalidad">
+  <div id="sidebar" class="sidebar"></div>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-leaf"></i> Consulta Agrocalidad</h1>
+      <p class="page-subtitle">Requisitos fitosanitarios de exportación por especie y país de destino.</p>
+    </div>
+
+    <div class="import-card">
+      <form id="consultaForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="species_id">Especie</label>
+            <select id="species_id" required></select>
+          </div>
+          <div class="form-group">
+            <label for="country_id">País de destino</label>
+            <select id="country_id" required></select>
+          </div>
+          <div class="form-group">
+            <label for="trade_type">Tipo de trámite</label>
+            <select id="trade_type" required></select>
+          </div>
+          <div class="form-group">
+            <label for="area_code">Área</label>
+            <select id="area_code" required></select>
+          </div>
+        </div>
+
+        <div class="import-actions">
+          <button type="submit" id="btnConsultar" class="btn btn-primary">
+            <i class="ph ph-magnifying-glass"></i> Consultar
+          </button>
+        </div>
+      </form>
+
+      <div id="progressSection" class="hidden">
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <p id="progressMsg" class="progress-msg">Consultando en Agrocalidad (puede tardar hasta 90 segundos)...</p>
+      </div>
+
+      <div id="resultSection" class="hidden"></div>
+    </div>
+
+    <div class="page-header" style="margin-top: 2rem;">
+      <h2><i class="ph ph-clock-counter-clockwise"></i> Historial de consultas</h2>
+    </div>
+
+    <div class="import-card">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="filter_species">Filtrar por especie</label>
+          <select id="filter_species"><option value="">Todas</option></select>
+        </div>
+        <div class="form-group">
+          <label for="filter_country">Filtrar por país</label>
+          <select id="filter_country"><option value="">Todos</option></select>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Especie</th>
+            <th>País</th>
+            <th>Tipo</th>
+            <th>Área</th>
+            <th>Estado</th>
+            <th>Código Agrocalidad</th>
+            <th>Partida</th>
+            <th>Consultado</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr><td colspan="8" class="loading">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script type="module" src="/js/layout.js"></script>
+  <script type="module" src="/pages/agrocalidad.js"></script>
+</body>
+</html>

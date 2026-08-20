@@ -1260,6 +1260,12 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   margin-bottom: 1.5rem;
 }
 @media (max-width: 640px) { .file-fields { grid-template-columns: 1fr; } }
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
 .file-field label {
   display: flex;
   flex-direction: column;

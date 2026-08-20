@@ -23,6 +23,7 @@ from app.api.cargo_agencies import router as cargo_agencies_router
 from app.api.farms import router as farms_router
 from app.api.dartis_import import router as dartis_router
 from app.api.ingresos_locales import router as ingresos_locales_router
+from app.api.agrocalidad import router as agrocalidad_router
 
 app = FastAPI(
     title="BLIS API",
@@ -55,6 +56,7 @@ app.include_router(cargo_agencies_router, prefix="/api")
 app.include_router(farms_router, prefix="/api")
 app.include_router(dartis_router, prefix="/api")
 app.include_router(ingresos_locales_router, prefix="/api")
+app.include_router(agrocalidad_router, prefix="/api")
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
