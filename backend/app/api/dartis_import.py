@@ -99,11 +99,20 @@ def _import_recetas(ws, conn) -> dict:
         except Exception:
             errores += 1
 
-    # Deduplicar por clave única — conservar la última aparición
+    # Agrupar por clave única (incluye especie: una misma guia puede
+    # transportar varias especies distintas). Si dos lineas comparten
+    # la clave completa (mismo pedido+guia+caja+especie), son lotes
+    # separados del mismo producto y se suman sus cantidades.
     dedup = {}
     for p in params:
-        key = (p["id_pedido"], p["guia_madre"], p["guia_hija"], p["tipo_caja"])
-        dedup[key] = p
+        key = (p["id_pedido"], p["guia_madre"], p["guia_hija"], p["tipo_caja"], p["especie"])
+        if key in dedup:
+            existing = dedup[key]
+            existing["total_piezas"] = (existing["total_piezas"] or 0) + (p["total_piezas"] or 0)
+            existing["total_tallos"] = (existing["total_tallos"] or 0) + (p["total_tallos"] or 0)
+            existing["total_dolares"] = (existing["total_dolares"] or 0) + (p["total_dolares"] or 0)
+        else:
+            dedup[key] = p
     params = list(dedup.values())
 
     tuples = [
@@ -122,7 +131,7 @@ def _import_recetas(ws, conn) -> dict:
             guia_madre, guia_hija, tipo_caja,
             total_piezas, total_tallos, total_dolares
         ) VALUES %s
-        ON CONFLICT (id_pedido, guia_madre, guia_hija, tipo_caja) DO UPDATE SET
+        ON CONFLICT (id_pedido, guia_madre, guia_hija, tipo_caja, especie) DO UPDATE SET
             fecha               = EXCLUDED.fecha,
             dae                 = EXCLUDED.dae,
             id_comercializadora = EXCLUDED.id_comercializadora,
@@ -172,6 +181,15 @@ def _enrich_ventas(ws, conn) -> dict:
             })
         except Exception:
             errores += 1
+
+    # Un mismo id_pedido puede repetirse (embarques divididos). Sin
+    # deduplicar, el UPDATE...FROM deja el resultado indefinido cuando
+    # hay varias filas fuente para el mismo pedido. Se conserva la
+    # última aparición en el archivo (mismo criterio que en recetas).
+    dedup = {}
+    for p in params:
+        dedup[p["id_pedido"]] = p
+    params = list(dedup.values())
 
     tuples = [(p["id_pedido"], p["agencia_carga"], p["vendedor"]) for p in params]
 
