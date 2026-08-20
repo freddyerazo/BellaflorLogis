@@ -1266,6 +1266,73 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   gap: 1rem 1.5rem;
   margin-bottom: 1.5rem;
 }
+
+/* Sub-navegacion por pestanas dentro de un modulo (ej. Inventario LAG) */
+.subtabs {
+  display: flex;
+  gap: .25rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+.subtab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: .6rem 1rem;
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.subtab:hover { color: var(--text); }
+.subtab.active { color: var(--primary, #3b82f6); border-bottom-color: var(--primary, #3b82f6); }
+.subpanel { display: none; }
+.subpanel.active { display: block; }
+
+/* Fila repetible de items (cajas de una PO / orden de venta) */
+.item-row {
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  position: relative;
+}
+.item-row .btn-quitar {
+  position: absolute;
+  top: .5rem;
+  right: .5rem;
+}
+
+.btn-danger {
+  background: var(--danger, #c62828);
+  color: #fff;
+}
+.btn-danger:hover { filter: brightness(0.92); }
+
+/* Resultados de consultas ad-hoc (Inventario LAG y similares) */
+.resultado { margin-top: 1rem; }
+.resultado .conteo { font-size: .82rem; color: var(--text-muted, #64748b); margin-bottom: .5rem; }
+.resultado .msg-error,
+.resultado .msg-ok,
+.resultado .msg-info,
+.resultado .msg-aviso {
+  padding: .6rem .9rem;
+  border-radius: 8px;
+  font-size: .88rem;
+  margin-bottom: .5rem;
+}
+.resultado .msg-error { background: #fef2f2; color: var(--danger, #c62828); border: 1px solid #fca5a5; }
+.resultado .msg-ok    { background: #f0fdf4; color: #15803d; border: 1px solid #86efac; }
+.resultado .msg-info  { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+.resultado .msg-aviso { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.resultado .tabla-wrap { overflow-x: auto; }
+.resultado tr.pendiente { background: #fffbeb; }
+.resultado .enlace {
+  background: none; border: none; color: var(--primary, #3b82f6);
+  text-decoration: underline; cursor: pointer; padding: 0; font: inherit;
+}
 .file-field label {
   display: flex;
   flex-direction: column;

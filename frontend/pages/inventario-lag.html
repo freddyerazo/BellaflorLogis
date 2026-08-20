@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLIS · Inventario LAG</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-page="inventario-lag">
+  <div id="sidebar" class="sidebar"></div>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-warehouse"></i> Inventario LAG</h1>
+      <p class="page-subtitle">Bodega de Bellaflor en Miami (Logiztik Alliance Group) — consulta en vivo, sin datos propios.</p>
+    </div>
+
+    <nav class="subtabs">
+      <button class="subtab active" data-tab="inventario">Inventario</button>
+      <button class="subtab" data-tab="reporte">Reporte detallado</button>
+      <button class="subtab" data-tab="envios">Envíos</button>
+      <button class="subtab" data-tab="compras">Órdenes de compra</button>
+      <button class="subtab" data-tab="ventas">Órdenes de venta</button>
+    </nav>
+
+    <!-- INVENTARIO -->
+    <section id="panel-inventario" class="subpanel active">
+      <div class="import-card">
+        <h3>Piezas disponibles en bodega (Miami)</h3>
+        <div class="import-actions" style="justify-content: flex-start; gap: .75rem;">
+          <button id="btn-piezas" class="btn btn-primary"><i class="ph ph-magnifying-glass"></i> Consultar inventario</button>
+          <button id="btn-exportar" class="btn btn-secondary" disabled><i class="ph ph-download-simple"></i> Exportar CSV</button>
+          <span id="actualizado" class="page-subtitle"></span>
+        </div>
+
+        <div id="tarjetas" class="card-grid hidden" style="margin-top: 1.25rem;">
+          <div class="summary-card">
+            <span class="summary-card-value" id="kpi-piezas">0</span>
+            <span class="summary-card-label">Piezas en inventario</span>
+          </div>
+          <div class="summary-card">
+            <span class="summary-card-value" id="kpi-racks">0</span>
+            <span class="summary-card-label">Ubicaciones ocupadas</span>
+          </div>
+          <div class="summary-card">
+            <span class="summary-card-value" id="kpi-visibles">0</span>
+            <span class="summary-card-label">Piezas mostradas</span>
+          </div>
+        </div>
+
+        <div id="filtros" class="form-grid hidden" style="margin-top: 1.25rem;">
+          <div class="form-group">
+            <label>Buscar barcode</label>
+            <input id="buscar-barcode" type="search" placeholder="Ej. 12202605462" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Ubicación (rack)</label>
+            <select id="filtro-rack"><option value="">Todas</option></select>
+          </div>
+          <div class="form-group" style="align-self: end;">
+            <button type="button" id="btn-limpiar" class="btn btn-secondary">Limpiar filtros</button>
+          </div>
+        </div>
+
+        <div id="res-piezas" class="resultado"></div>
+
+        <details id="resumen-racks" class="hidden" style="margin-top: 1rem;">
+          <summary>Resumen de piezas por ubicación</summary>
+          <div id="res-racks"></div>
+        </details>
+      </div>
+
+      <div class="import-card" style="margin-top: 1.5rem;">
+        <h3>Códigos de barra por envío</h3>
+        <form id="form-barcode" class="form-grid">
+          <div class="form-group">
+            <label>Número de envío (AWB/HAWB)</label>
+            <input name="shipmentNr" required placeholder="17202083572" />
+          </div>
+          <div class="form-group" style="align-self: end;">
+            <button type="submit" class="btn btn-primary">Consultar</button>
+          </div>
+        </form>
+        <div id="res-barcode" class="resultado"></div>
+      </div>
+    </section>
+
+    <!-- REPORTE DETALLADO -->
+    <section id="panel-reporte" class="subpanel">
+      <div class="import-card">
+        <h3>Reporte detallado de piezas</h3>
+        <p class="page-subtitle">
+          Equivale al reporte ResumenCodigosDeBarra del WMS. Combina tres consultas de LAG:
+          las guías de la fecha, el detalle de cada pieza y su ubicación en bodega.
+        </p>
+
+        <form id="form-reporte" class="form-grid">
+          <div class="form-group">
+            <label>Fecha de embarque</label>
+            <input type="date" name="fecha" />
+          </div>
+          <div class="form-group">
+            <label>Guías (separadas por coma)</label>
+            <input name="guias" placeholder="023-0326 9313, 023-0326 9571" />
+          </div>
+          <div class="form-group" style="align-self: end; display: flex; gap: .5rem;">
+            <button type="submit" class="btn btn-primary">Generar reporte</button>
+            <button type="button" id="btn-exportar-rep" class="btn btn-secondary" disabled>Exportar CSV</button>
+          </div>
+        </form>
+
+        <div id="avisos-rep"></div>
+
+        <div id="tarjetas-rep" class="card-grid hidden">
+          <div class="summary-card"><span class="summary-card-value" id="rep-piezas">0</span><span class="summary-card-label">Piezas</span></div>
+          <div class="summary-card"><span class="summary-card-value" id="rep-recibidas">0</span><span class="summary-card-label">En bodega</span></div>
+          <div class="summary-card"><span class="summary-card-value" id="rep-pendientes">0</span><span class="summary-card-label">Pendientes</span></div>
+          <div class="summary-card"><span class="summary-card-value" id="rep-unidades">0</span><span class="summary-card-label">Unidades / tallos</span></div>
+          <div class="summary-card"><span class="summary-card-value" id="rep-valor">0</span><span class="summary-card-label">Valor total</span></div>
+        </div>
+
+        <div id="filtros-rep" class="form-grid hidden">
+          <div class="form-group">
+            <label>Estado</label>
+            <select id="rep-estado">
+              <option value="">Todos</option>
+              <option value="recibidas">Solo en bodega</option>
+              <option value="pendientes">Solo pendientes</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Buscar</label>
+            <input id="rep-buscar" type="search" placeholder="barcode, consignee, producto" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Consignee</label>
+            <select id="rep-consignee"><option value="">Todos</option></select>
+          </div>
+          <div class="form-group" style="align-self: end;">
+            <button type="button" id="rep-limpiar" class="btn btn-secondary">Limpiar</button>
+          </div>
+        </div>
+
+        <div id="res-reporte" class="resultado"></div>
+      </div>
+    </section>
+
+    <!-- ENVIOS -->
+    <section id="panel-envios" class="subpanel">
+      <div class="import-card">
+        <h3>Información de envíos por fecha</h3>
+        <form id="form-envios" class="form-grid">
+          <div class="form-group"><label>Fecha</label><input type="date" name="fecha" required /></div>
+          <div class="form-group" style="align-self: end;"><button type="submit" class="btn btn-primary">Consultar</button></div>
+        </form>
+        <div id="res-envios" class="resultado"></div>
+      </div>
+
+      <div class="import-card" style="margin-top: 1.5rem;">
+        <h3>Piezas despachadas a carrier</h3>
+        <form id="form-despachadas" class="form-grid">
+          <div class="form-group"><label>Fecha</label><input type="date" name="fecha" required /></div>
+          <div class="form-group" style="align-self: end;"><button type="submit" class="btn btn-primary">Consultar</button></div>
+        </form>
+        <div id="res-despachadas" class="resultado"></div>
+      </div>
+    </section>
+
+    <!-- ORDENES DE COMPRA -->
+    <section id="panel-compras" class="subpanel">
+      <div class="import-card">
+        <h3>Crear orden de compra (PO)</h3>
+        <form id="form-po">
+          <fieldset style="border: none; padding: 0; margin: 0 0 1rem;">
+            <legend style="font-weight: 600; margin-bottom: .5rem;">Cabecera</legend>
+            <div class="form-grid">
+              <div class="form-group"><label>Consignee Code *</label><input name="consignee_code" required maxlength="32" /></div>
+              <div class="form-group"><label>Destino (IATA) *</label><input name="destination_port_code" required maxlength="3" placeholder="MIA" /></div>
+              <div class="form-group">
+                <label>Tipo de PO *</label>
+                <select name="post_type" required>
+                  <option value="FINAL">FINAL</option>
+                  <option value="LOCAL">LOCAL</option>
+                </select>
+              </div>
+              <div class="form-group"><label>Warehouse Code</label><input name="warehouse_code" maxlength="8" placeholder="Requerido si LOCAL" /></div>
+              <div class="form-group"><label>Número de PO</label><input name="po_number" maxlength="32" /></div>
+              <div class="form-group"><label>Origen (IATA)</label><input name="origin_port_code" maxlength="3" placeholder="UIO" /></div>
+              <div class="form-group"><label>Fecha estimada</label><input type="date" name="estimated_date" /></div>
+              <div class="form-group">
+                <label>Acción</label>
+                <select name="accion"><option value="INSERT">INSERT</option><option value="DELETE">DELETE</option></select>
+              </div>
+              <div class="form-group"><label>Comentarios</label><input name="comments" maxlength="256" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset style="border: none; padding: 0; margin: 0 0 1rem;">
+            <legend style="font-weight: 600; margin-bottom: .5rem;">Detalle de cajas</legend>
+            <div id="items-po"></div>
+            <button type="button" id="btn-add-item" class="btn btn-secondary">+ Agregar caja</button>
+          </fieldset>
+
+          <button type="submit" class="btn btn-primary">Enviar orden de compra</button>
+        </form>
+        <div id="res-po" class="resultado"></div>
+      </div>
+    </section>
+
+    <!-- ORDENES DE VENTA -->
+    <section id="panel-ventas" class="subpanel">
+      <div class="import-card">
+        <h3>Crear orden de venta</h3>
+        <form id="form-venta">
+          <div class="form-grid">
+            <div class="form-group"><label>Customer ID *</label><input name="customerId" required maxlength="16" /></div>
+            <div class="form-group"><label>Carrier ID *</label><input name="carrierId" required maxlength="16" placeholder="PIK" /></div>
+            <div class="form-group"><label>Fecha de embarque *</label><input type="date" name="shipDate" required /></div>
+            <div class="form-group"><label>Número de orden *</label><input name="orderNumber" required maxlength="16" /></div>
+            <div class="form-group"><label>ID de orden (numérico) *</label><input type="number" name="idOrder" required /></div>
+            <div class="form-group"><label>Número de PO</label><input name="poNumber" maxlength="16" /></div>
+            <div class="form-group">
+              <label>Generar BOL</label>
+              <select name="generateBOL">
+                <option value="">(no enviar)</option>
+                <option value="true">Sí</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+          </div>
+          <fieldset style="border: none; padding: 0; margin: 0 0 1rem;">
+            <legend style="font-weight: 600; margin-bottom: .5rem;">Cajas</legend>
+            <div id="items-venta"></div>
+            <button type="button" id="btn-add-box" class="btn btn-secondary">+ Agregar caja</button>
+          </fieldset>
+          <button type="submit" class="btn btn-primary">Crear orden de venta</button>
+        </form>
+        <div id="res-venta" class="resultado"></div>
+      </div>
+
+      <div class="import-card" style="margin-top: 1.5rem;">
+        <h3>Cancelar orden de venta</h3>
+        <form id="form-cancelar" class="form-grid">
+          <div class="form-group"><label>ID de orden</label><input type="number" name="idOrder" required /></div>
+          <div class="form-group" style="align-self: end;"><button type="submit" class="btn btn-danger">Cancelar orden</button></div>
+        </form>
+        <div id="res-cancelar" class="resultado"></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/layout.js"></script>
+  <script type="module" src="/pages/inventario-lag.js"></script>
+</body>
+</html>
