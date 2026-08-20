@@ -7,3 +7,4 @@ supabase
 pydantic
 alembic
 openpyxl
+python-multipart
