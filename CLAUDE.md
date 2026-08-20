@@ -79,9 +79,16 @@ BLIS/
 | Dashboard | `/api/dashboard` | — |
 | Roles | `/api/roles` | 0 (auth pendiente) |
 | Perfiles | `/api/perfiles` | 0 (auth pendiente) |
+| Agrocalidad | `/api/agrocalidad` (`agrocalidad_requests`/`agrocalidad_requirements`) | 44 / 196 — clon de la app externa "Agrocalidad Consulta"; el scraping real sigue en GitHub Actions del repo `freddyerazo/AgrocalidadDartis`, disparado desde BLIS vía `GITHUB_TOKEN`/`GITHUB_REPO` (pendiente de configurar en `.env`) |
+
+## Módulos externos en proceso de clonarse a BLIS (una pestaña por proyecto)
+Plan completo en `C:\Users\Coordinación\.claude\plans\rustling-beaming-heron.md`. Orden: fácil → difícil.
+1. ✅ **Agrocalidad Consulta** → `/api/agrocalidad` (hecho)
+2. ⏳ **InventarioApiLag** — proxy sobre APIs de LAG (Logiztik), sin BD propia
+3. ⏳ **REPORTEUPSFEDEX** — conciliación de cajas vs UPS/FedEx/agencias locales, necesita scheduler + OAuth + bots RPA
+4. ⏳ **Auditoria_LEsp** — auditoría de etiquetas vs Dartis, hoy en Google Sheets + bot de Telegram
 
 ## Módulos con datos en Supabase pero SIN API todavía
-- `agrocalidad_requests` (44) / `agrocalidad_requirements` (196) — módulo fitosanitario
 - `markets`, `currencies`, `exchange_rates`
 - `incoterms` (4), `cost_components` (16)
 - `providers` (3), `provider_services` (3), `provider_tariffs` (1), `service_types` (9)
