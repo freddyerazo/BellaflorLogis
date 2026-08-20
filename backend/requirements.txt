@@ -9,3 +9,5 @@ alembic
 openpyxl
 python-multipart
 httpx
+pdfplumber
+apscheduler

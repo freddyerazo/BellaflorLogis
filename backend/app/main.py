@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +27,8 @@ from app.api.dartis_import import router as dartis_router
 from app.api.ingresos_locales import router as ingresos_locales_router
 from app.api.agrocalidad import router as agrocalidad_router
 from app.api.inventario_lag import router as inventario_lag_router
+from app.api.torre_control import router as torre_control_router
+from app.services import courier_reconciliation
 
 app = FastAPI(
     title="BLIS API",
@@ -59,7 +63,23 @@ app.include_router(dartis_router, prefix="/api")
 app.include_router(ingresos_locales_router, prefix="/api")
 app.include_router(agrocalidad_router, prefix="/api")
 app.include_router(inventario_lag_router, prefix="/api")
+app.include_router(torre_control_router, prefix="/api")
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+scheduler = AsyncIOScheduler()
+
+
+@app.on_event("startup")
+async def iniciar_torre_control():
+    """Igual patron que el proyecto original: un refresco inicial y luego
+    uno periodico cada REFRESH_SECONDS, protegidos por el mismo lock que
+    usa el boton 'Actualizar ahora' (app/services/courier_reconciliation)."""
+    await courier_reconciliation.refrescar()
+    scheduler.add_job(
+        courier_reconciliation.refrescar, "interval",
+        seconds=int(os.getenv("REFRESH_SECONDS", "300")),
+    )
+    scheduler.start()

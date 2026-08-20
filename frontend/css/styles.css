@@ -1398,6 +1398,7 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 .badge-blue  { background: #dbeafe; color: #1d4ed8; }
 .badge-gray  { background: #f1f5f9; color: #475569; }
 .badge-red   { background: #fee2e2; color: #b91c1c; }
+.badge-orange { background: #ffedd5; color: #c2410c; }
 .result-alert {
   border-radius: 8px;
   padding: .75rem 1rem;

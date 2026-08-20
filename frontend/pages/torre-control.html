@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLIS · Torre de Control</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-page="torre-control">
+  <div id="sidebar" class="sidebar"></div>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-radar"></i> Torre de Control</h1>
+      <p class="page-subtitle">Concilia las cajas de dartis_ventas contra los manifiestos de UPS, FedEx y agencias locales.</p>
+    </div>
+
+    <div class="import-card">
+      <div class="import-actions" style="justify-content: flex-start; gap: .75rem; flex-wrap: wrap;">
+        <button id="btnRefrescar" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> Actualizar ahora</button>
+        <button id="btnDuoplane" class="btn btn-secondary"><i class="ph ph-package"></i> Sincronizar Duoplane</button>
+        <label class="btn btn-secondary" style="cursor:pointer;">
+          <i class="ph ph-upload-simple"></i> Subir manifiesto UPS (.csv)
+          <input type="file" id="fileUps" accept=".csv" style="display:none;" />
+        </label>
+        <label class="btn btn-secondary" style="cursor:pointer;">
+          <i class="ph ph-upload-simple"></i> Subir manifiesto FedEx (.pdf)
+          <input type="file" id="fileFedex" accept=".pdf" style="display:none;" />
+        </label>
+        <span id="actualizado" class="page-subtitle"></span>
+      </div>
+      <div id="resultado" class="resultado"></div>
+    </div>
+
+    <div class="card-grid" id="kpis" style="margin-top: 1.5rem;">
+      <div class="summary-card"><span class="summary-card-value" id="kpi-guias">0</span><span class="summary-card-label">Facturas</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-ok">0</span><span class="summary-card-label">OK</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-discrepancias">0</span><span class="summary-card-label">Discrepancias</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-pendientes">0</span><span class="summary-card-label">Pendientes</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-sin-manifiesto">0</span><span class="summary-card-label">Sin manifiesto</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-no-en-dartis">0</span><span class="summary-card-label">No en Dartis</span></div>
+    </div>
+
+    <nav class="subtabs" style="margin-top: 1.5rem;">
+      <button class="subtab active" data-tab="principal">Principal (UPS / FedEx)</button>
+      <button class="subtab" data-tab="locales">Agencias locales</button>
+    </nav>
+
+    <section id="panel-principal" class="subpanel active">
+      <div class="import-card">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Estado</label>
+            <select id="filtroEstado">
+              <option value="">Todos</option>
+              <option value="OK">OK</option>
+              <option value="DISCREPANCIA">Discrepancia</option>
+              <option value="SIN MANIFIESTO">Sin manifiesto</option>
+              <option value="NO EN DARTIS">No en Dartis</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Courier</label>
+            <select id="filtroCourier">
+              <option value="">Ambos</option>
+              <option value="UPS">UPS</option>
+              <option value="FEDEX">FedEx</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Buscar</label>
+            <input type="search" id="filtroBuscar" placeholder="factura, cliente, tracking..." />
+          </div>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Factura</th><th>Courier</th><th>Empresa</th><th>Cliente</th>
+              <th>Cajas Dartis</th><th>Manifiesto</th><th>Diferencia</th>
+              <th>Estado vivo</th><th>Ubicación</th><th>Conciliación</th>
+            </tr>
+          </thead>
+          <tbody id="tablaPrincipal"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-locales" class="subpanel">
+      <div class="import-card">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Estado</label>
+            <select id="filtroEstadoLocal">
+              <option value="">Todos</option>
+              <option value="OK">OK</option>
+              <option value="PENDIENTE">Pendiente</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Buscar</label>
+            <input type="search" id="filtroBuscarLocal" placeholder="factura, agencia, cliente..." />
+          </div>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Factura</th><th>Agencia</th><th>Empresa</th><th>Cliente</th>
+              <th>Fecha Dartis</th><th>Cajas</th><th>Entrega real</th><th>Conciliación</th>
+            </tr>
+          </thead>
+          <tbody id="tablaLocales"><tr><td colspan="8" class="loading">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/layout.js"></script>
+  <script type="module" src="/pages/torre-control.js"></script>
+</body>
+</html>
