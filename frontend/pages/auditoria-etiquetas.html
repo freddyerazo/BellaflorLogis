@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLIS · Auditoría de Etiquetas</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-page="auditoria-etiquetas">
+  <div id="sidebar" class="sidebar"></div>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-clipboard-text"></i> Auditoría de Etiquetas Especiales</h1>
+      <p class="page-subtitle">Despachos de clientes especiales y su auditoría física, vía el bot de Telegram del auditor de poscosecha.</p>
+    </div>
+
+    <div class="import-card">
+      <div class="import-actions" style="justify-content: flex-start; gap: .75rem;">
+        <button id="btnGenerar" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> Generar despachos de hoy</button>
+        <span id="actualizado" class="page-subtitle"></span>
+      </div>
+      <div id="resultado" class="resultado"></div>
+    </div>
+
+    <div class="card-grid" id="kpis" style="margin-top: 1.5rem;">
+      <div class="summary-card"><span class="summary-card-value" id="kpi-total">0</span><span class="summary-card-label">Despachos hoy</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-auditados">0</span><span class="summary-card-label">Auditados</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-pendientes">0</span><span class="summary-card-label">Pendientes</span></div>
+    </div>
+
+    <div class="import-card" style="margin-top: 1.5rem;">
+      <h3>Despachos de hoy</h3>
+      <table class="data-table">
+        <thead>
+          <tr><th>Poscosecha</th><th>Cliente</th><th>Guía madre</th><th>Guía hija</th><th>Cajas</th><th>Tipo caja</th><th>Estado</th></tr>
+        </thead>
+        <tbody id="tablaDespachos"><tr><td colspan="7" class="loading">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="import-card" style="margin-top: 1.5rem;">
+      <h3>Auditorías registradas hoy</h3>
+      <table class="data-table">
+        <thead>
+          <tr><th>Hora</th><th>Auditor</th><th>Cliente</th><th>Cajas</th><th>Piezas</th><th>Tipo caja OK</th><th>Especie OK</th><th>Etiqueta OK</th><th>Observaciones</th><th>Foto</th></tr>
+        </thead>
+        <tbody id="tablaAuditorias"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script type="module" src="/js/layout.js"></script>
+  <script type="module" src="/pages/auditoria-etiquetas.js"></script>
+</body>
+</html>
