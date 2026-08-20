@@ -12,6 +12,8 @@ Equipo mixto de Bellaflor Group (exportadora de flores, Ecuador): coordinadores 
 
 BLIS (Bellaflor Logistics Intelligence System) es el sistema de apoyo logístico y comercial de Bellaflor Group. Simula costos de exportación floral, gestiona datos maestros (especies, variedades, aeropuertos, aerolíneas, clientes) y genera cotizaciones detalladas por ruta. No es un ERP financiero — su foco exclusivo es logística, simulación de costos y análisis operativo de exportaciones florales.
 
+Desde agosto de 2026, BLIS absorbió 4 herramientas que antes vivían como proyectos dispersos: consulta de requisitos fitosanitarios de exportación (Agrocalidad), inventario en tiempo real de la bodega de Miami (Inventario LAG), conciliación de cajas despachadas contra los manifiestos de UPS/FedEx/agencias locales (Torre de Control), y auditoría física de despachos de clientes especiales vía el bot de Telegram del auditor de poscosecha (Auditoría de Etiquetas). Un solo lugar reemplaza cinco sistemas distintos que antes vivían en repos, Google Sheets y bases de datos separadas.
+
 ## Brand Personality
 
 Ágil · Claro · Moderno

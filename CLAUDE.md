@@ -13,7 +13,7 @@ Sistema de apoyo logístico y comercial para Bellaflor Group (exportadora de flo
 ## Stack
 - **Frontend:** Vanilla HTML + CSS + JavaScript (sin frameworks, módulos ES6)
 - **Backend:** FastAPI (Python) — sirve el frontend como archivos estáticos
-- **Base de datos:** Supabase PostgreSQL · `kgpzhwocygonppblgmpm.supabase.co` — 43 tablas en `public`
+- **Base de datos:** Supabase PostgreSQL · `kgpzhwocygonppblgmpm.supabase.co` — 51 tablas en `public`
 - **ORM:** SQLAlchemy + psycopg2, mayormente SQL crudo vía `text()` (sin capa ORM de modelos)
 - **Autenticación:** pendiente (`roles` y `profiles` existen, 0 filas)
 - **Tests:** no hay tests automatizados (`backend/tests/` vacío)
@@ -23,12 +23,12 @@ Sistema de apoyo logístico y comercial para Bellaflor Group (exportadora de flo
 BLIS/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          ← 18 módulos activos, montados en main.py bajo /api
+│   │   ├── api/          ← 22 módulos activos, montados en main.py bajo /api
 │   │   ├── database/     ← connection.py (SQLAlchemy), helpers.py
 │   │   ├── schemas/      ← modelos Pydantic (cubre la mayoría de módulos)
 │   │   ├── models/       ← vacío, no se usa (lógica vive en api/*.py con SQL crudo)
-│   │   ├── services/     ← vacío, no se usa
-│   │   └── main.py       ← FastAPI app + CORS + monta frontend en "/"
+│   │   ├── services/     ← 12 archivos (LAG, Torre de Control, Auditoría de Etiquetas) — antes vacío
+│   │   └── main.py       ← FastAPI app + CORS + scheduler (apscheduler) + monta frontend en "/"
 │   ├── scripts/          ← carga y normalización de datos (ya ejecutados)
 │   ├── tests/            ← vacío
 │   └── .env              ← DATABASE_URL (nunca al repo)
@@ -42,10 +42,10 @@ BLIS/
 │   │   ├── api.js        ← apiGet/apiPost/apiPut/apiDelete (fetch wrapper)
 │   │   ├── crud-page.js  ← lógica CRUD reutilizable
 │   │   └── layout.js     ← carga sidebar y header
-│   ├── pages/            ← 15 páginas, un .html + un .js por módulo
+│   ├── pages/            ← 19 páginas, un .html + un .js por módulo
 │   └── index.html
 ├── database/
-│   ├── migrations/       ← 002 a 015 (cargo agencies, farms, customers, Dartis ventas)
+│   ├── migrations/       ← 002 a 019 (cargo agencies, farms, customers, Dartis ventas, módulos clonados)
 │   ├── schema/           ← schema_v1.sql
 │   ├── seeds/            ← seeds_v1.sql
 │   └── views/            ← views_v1.sql
@@ -69,12 +69,12 @@ BLIS/
 | Aeropuertos | `/api/aeropuertos` | 37 |
 | Aerolíneas | `/api/aerolineas` | 8 |
 | Países | `/api/paises` | 255 |
-| Clientes | `/api/clientes` | 1,699 |
+| Clientes | `/api/clientes` | 1,703 — incluye `es_cliente_especial` (62 marcados) |
 | Agencias de carga | `/api/cargo-agencies` (`cargo_agencies`) | 34 |
 | Fincas | `/api/farms` (`farms` / `farm_postcosecha`) | 3 / 6 |
 | Tarifas aerolínea | `/api/airline-tariffs` | 8 |
 | Cotización (Costing Engine) | `/api/cotizacion` — wizard que combina especies, variedades, tarifas | funcional, `scenario_*` con datos de prueba |
-| Importación Dartis | `/api/dartis-import` (`dartis_ventas`, `import_species_varieties`) | 12,269 / 1,211 |
+| Importación Dartis | `/api/dartis-import` (`dartis_ventas`, `import_species_varieties`) | 20,888 / 1,211 |
 | Ingresos locales | `/api/ingresos-locales` | — |
 | Dashboard | `/api/dashboard` | — |
 | Roles | `/api/roles` | 0 (auth pendiente) |
@@ -112,10 +112,12 @@ Peso Facturable  = MAX(Peso Real, Peso Volumétrico)
 
 ## Deuda técnica conocida
 - Sin tests automatizados en `backend/tests/`
-- `models/` y `services/` vacíos — toda la lógica de negocio vive directo en `api/*.py` con SQL embebido
+- `models/` vacío — toda la lógica de negocio vive directo en `api/*.py`/`services/*.py` con SQL embebido
 - `requirements.txt` duplicado entre raíz y `backend/`
 - Dos entornos virtuales locales (`.venv`, `.venv-1`) — ambos ignorados en git, revisar cuál es el vigente
-- Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — riesgo de divergencia
+- 4 módulos nuevos (Agrocalidad, Inventario LAG, Torre de Control, Auditoría de Etiquetas) corren sin credenciales reales configuradas en `.env`/Render — ver la tabla de rutas arriba para la lista exacta por módulo
+- Fase 3b (bot RPA de tracking en Dartis) y el corte del webhook de Telegram a producción (Fase 4) quedaron deliberadamente pendientes — ver plan
+- Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — las 5 se sincronizaron en esta ronda (agosto 2026), pero mantenerlas al día requiere disciplina en cada cambio futuro
 
 ## Convenciones de código
 - Ver `rules/coding-style.md`

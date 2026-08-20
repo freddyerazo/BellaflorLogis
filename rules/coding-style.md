@@ -65,6 +65,19 @@ document.addEventListener('DOMContentLoaded', init);
 - IDs de modales: `modal-especie`, `modal-variedad`, etc.
 - Clases CSS reutilizables del archivo `styles.css` global
 
+## Backend — módulos con lógica externa (services/)
+Desde las Fases 1-4, `backend/app/services/` deja de estar vacío. Patrón: `api/<modulo>.py` solo maneja rutas/HTTP; toda la lógica de negocio (clientes de APIs externas, parseo de archivos, motores de conciliación) vive en `services/<algo>.py`, importado por el router. Ejemplos: `services/lag_client.py` (Inventario LAG), `services/courier_reconciliation.py` (Torre de Control), `services/telegram_bot.py` (Auditoría de Etiquetas).
+
+## Bulk insert — nunca fila por fila
+Insertar en un loop de Python (`for row in rows: conn.execute(...)`) cuesta ~200ms por round-trip a Supabase — con miles de filas esto tarda minutos y puede parecer que el servidor se colgó (bug real encontrado en Torre de Control, ver `BLIS_DOCUMENTACION.md` §22). Usar siempre `execute_values` de `psycopg2.extras` para inserciones masivas:
+```python
+from psycopg2.extras import execute_values
+
+raw = conn.connection.cursor()
+execute_values(raw, "INSERT INTO tabla (col1, col2) VALUES %s", tuples, page_size=1000)
+```
+Ya usado en `dartis_import.py`, `courier_reconciliation.py` y el endpoint `/subir-ups` de `torre_control.py`.
+
 ## Git
 - Formato de commits: `feat:`, `fix:`, `refactor:`, `docs:`
 - Ejemplos:
