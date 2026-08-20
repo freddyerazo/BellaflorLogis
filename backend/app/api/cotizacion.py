@@ -11,7 +11,7 @@ def get_catalogo():
     """Devuelve todos los catálogos necesarios para el wizard de cotización."""
     with engine.connect() as conn:
 
-        # Países de ORIGEN con tarifa aérea activa en la fecha actual
+        # Países de ORIGEN con tarifa aérea activa y vigente
         paises_origen = conn.execute(text("""
             SELECT DISTINCT c.id, c.code, c.name
             FROM countries c
@@ -24,7 +24,7 @@ def get_catalogo():
             ORDER BY c.name
         """)).mappings().all()
 
-        # Países de DESTINO con tarifa aérea activa en la fecha actual
+        # Países de DESTINO con tarifa aérea activa y vigente
         paises_destino = conn.execute(text("""
             SELECT DISTINCT c.id, c.code, c.name
             FROM countries c

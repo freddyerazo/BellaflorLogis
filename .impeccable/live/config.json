@@ -1,0 +1,11 @@
+{
+  "files": ["frontend/**/*.html", "frontend/index.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "framework": "multi-page-static",
+  "devServer": {
+    "url": "http://localhost:8000",
+    "note": "FastAPI serves frontend at root. Run: cd backend && uvicorn app.main:app --reload"
+  },
+  "cspChecked": true
+}

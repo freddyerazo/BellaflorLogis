@@ -36,15 +36,17 @@ const state = {
   fob_usd:          0.53,
   comision_pct:     9,
 
-  // Paso 3 — Empaque
-  box_type_id:      null,
-  box_code:         "",
-  length_cm:        100,
-  width_cm:         50,
-  height_cm:        20,
-  stems_per_box:    150,
-  kg_per_box:       14,
-  cajas:            12,
+  // Paso 3 — Empaque (multi-caja)
+  cajas_config: [{ id: 1, cantidad: 1, box_type_id: null }],
+  stems_per_box: 150,   // tallos por caja (global, aplica a todas las filas)
+  // Campos legacy usados como fallback cuando cajas_config está vacío
+  box_type_id:   null,
+  box_code:      "",
+  length_cm:     100,
+  width_cm:      50,
+  height_cm:     20,
+  kg_per_box:    14,
+  cajas:         12,
 
   // Paso 4 — Ruta aérea
   aerolinea_id:     null,
@@ -68,6 +70,9 @@ const state = {
 
 const TOTAL_STEPS = 5;
 
+/* Catálogo cargado en init() — disponible globalmente para calcular() */
+let _catalog = null;
+
 /* ─── Formateo dinámico según moneda elegida ─────────────────────────── */
 const $f2 = (v) =>
   new Intl.NumberFormat("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v ?? 0);
@@ -86,12 +91,36 @@ const $kg  = (v) =>
 /* ─── Cálculo central ────────────────────────────────────────────────── */
 function calcular() {
   const s = state;
-  const total_stems      = s.stems_per_box * s.cajas;
-  const total_kg_real    = s.kg_per_box    * s.cajas;
 
-  const vol_weight_per_box = (s.length_cm * s.width_cm * s.height_cm) / s.vol_factor;
-  const chargeable_per_box = Math.max(s.kg_per_box, vol_weight_per_box);
-  const total_chargeable   = chargeable_per_box * s.cajas;
+  // ── Pesos y tallos: multi-caja cuando hay config, legado en caso contrario ──
+  let total_stems = 0, total_kg_real = 0, total_chargeable = 0, total_vol_weight = 0, total_cajas = 0;
+  const configs = (s.cajas_config || []).filter((c) => c.box_type_id && c.cantidad > 0);
+
+  if (configs.length > 0 && _catalog) {
+    for (const conf of configs) {
+      const bt = (_catalog.box_types || []).find((b) => b.id === conf.box_type_id);
+      if (!bt) continue;
+      const kg  = parseFloat(bt.reference_weight_kg) || 0;
+      const vol = (bt.length_cm * bt.width_cm * bt.height_cm) / s.vol_factor;
+      total_kg_real    += kg * conf.cantidad;
+      total_vol_weight += vol * conf.cantidad;
+      total_chargeable += Math.max(kg, vol) * conf.cantidad;
+      total_stems      += s.stems_per_box * conf.cantidad;
+      total_cajas      += conf.cantidad;
+    }
+  } else {
+    // Fallback legado (sin config multi-caja)
+    const vol_per_box = (s.length_cm * s.width_cm * s.height_cm) / s.vol_factor;
+    total_stems      = s.stems_per_box * s.cajas;
+    total_kg_real    = s.kg_per_box    * s.cajas;
+    total_vol_weight = vol_per_box     * s.cajas;
+    total_chargeable = Math.max(s.kg_per_box, vol_per_box) * s.cajas;
+    total_cajas      = s.cajas;
+  }
+
+  // Promedios por caja (para displays individuales en paso 4)
+  const vol_weight_per_box = total_cajas > 0 ? total_vol_weight / total_cajas : 0;
+  const chargeable_per_box = total_cajas > 0 ? total_chargeable / total_cajas : 0;
 
   const s1_usd       = s.fob_usd * total_stems;
   const comision_usd = s1_usd * (s.comision_pct / 100);
@@ -111,10 +140,11 @@ function calcular() {
 
   const total_usd     = s1_usd + s2_usd + s3_usd + s4_usd + s5_usd;
   const cost_per_stem = total_stems > 0 ? total_usd / total_stems : 0;
-  const cost_per_box  = s.cajas    > 0 ? total_usd / s.cajas    : 0;
+  const cost_per_box  = total_cajas  > 0 ? total_usd / total_cajas  : 0;
 
   return {
-    total_stems, total_kg_real, vol_weight_per_box, chargeable_per_box, total_chargeable,
+    total_stems, total_kg_real, total_vol_weight, total_chargeable, total_cajas,
+    vol_weight_per_box, chargeable_per_box,
     s1_usd, comision_usd,
     s2_eur, s2_usd,
     s3_eur, s3_usd,
@@ -197,7 +227,14 @@ function updatePreview() {
   document.getElementById("prev-s4").textContent = $money(c.s4_usd);
   document.getElementById("prev-s5").textContent = $money(c.s5_usd);
 
-  document.getElementById("prev-total").textContent    = $money(c.total_usd);
+  const totalEl = document.getElementById("prev-total");
+  const newTotal = $money(c.total_usd);
+  if (totalEl.textContent !== newTotal) {
+    totalEl.classList.remove("total-pop");
+    void totalEl.offsetWidth;
+    totalEl.classList.add("total-pop");
+  }
+  totalEl.textContent = newTotal;
   document.getElementById("prev-per-stem").textContent = `${$money(c.cost_per_stem)}/tallo`;
   document.getElementById("prev-per-box").textContent  = `${$money(c.cost_per_box)}/caja`;
 
@@ -222,15 +259,21 @@ function actualizarIndicador() {
 
 /* ─── Cambio de paso ─────────────────────────────────────────────────── */
 function goStep(n) {
+  const dir = n > state.step ? "slide-fwd" : "slide-back";
   state.step = n;
-  document.querySelectorAll(".step-panel").forEach((p) => p.classList.remove("active"));
+  document.querySelectorAll(".step-panel").forEach((p) =>
+    p.classList.remove("active", "slide-fwd", "slide-back")
+  );
   document.querySelectorAll(".step-indicator .step-item").forEach((it) => {
     const sn = parseInt(it.dataset.step);
     it.classList.toggle("active",  sn === n);
     it.classList.toggle("visited", sn < n);
   });
   const panel = document.getElementById(`step-${n}`);
-  if (panel) panel.classList.add("active");
+  if (panel) {
+    panel.classList.add("active", dir);
+    panel.addEventListener("animationend", () => panel.classList.remove(dir), { once: true });
+  }
 
   document.getElementById("btn-prev").disabled = n === 1;
   const btnNext = document.getElementById("btn-next");
@@ -238,10 +281,10 @@ function goStep(n) {
   dots.forEach((d) => d.classList.toggle("active", parseInt(d.dataset.step) === n));
 
   if (n === TOTAL_STEPS) {
-    btnNext.textContent = "Ver resumen ✓";
+    btnNext.innerHTML = '<i class="ph ph-check-circle"></i> Ver resumen';
     btnNext.classList.add("btn-success");
   } else {
-    btnNext.textContent = "Siguiente →";
+    btnNext.innerHTML = 'Siguiente <i class="ph ph-arrow-right"></i>';
     btnNext.classList.remove("btn-success");
   }
 }
@@ -273,7 +316,7 @@ function renderStep1(cat) {
   return `
   <div class="step-card step-card--teal">
     <div class="step-card-header">
-      <span class="step-icon">🌍</span>
+      <span class="step-icon"><i class="ph ph-map-trifold"></i></span>
       <div>
         <h2>Ruta de exportación</h2>
         <p>Define el origen, destino, aeropuerto, incoterm y moneda de la cotización</p>
@@ -295,15 +338,19 @@ function renderStep1(cat) {
         </select>
       </div>
 
-      <!-- Flecha visual origen → destino -->
+      <!-- Visualización animada de ruta -->
       <div class="ruta-arrow">
         <div class="ruta-pais" id="ruta-orig-pill">
-          <span class="ruta-flag" id="ruta-orig-flag">🌐</span>
-          <span id="ruta-orig-label">Origen</span>
+          <span class="ruta-code" id="ruta-orig-flag">EC</span>
+          <span id="ruta-orig-label">Ecuador</span>
         </div>
-        <div class="ruta-connector">✈ ──────────────</div>
+        <div class="ruta-flight-line">
+          <div class="rfl-track"></div>
+          <div class="rfl-fill" id="rfl-fill"></div>
+          <div class="rfl-plane" id="rfl-plane"><i class="ph ph-airplane-tilt"></i></div>
+        </div>
         <div class="ruta-pais" id="ruta-dest-pill">
-          <span class="ruta-flag" id="ruta-dest-flag">🌐</span>
+          <span class="ruta-code" id="ruta-dest-flag">?</span>
           <span id="ruta-dest-label">Destino</span>
         </div>
       </div>
@@ -322,18 +369,21 @@ function renderStep1(cat) {
         </select>
       </div>
 
+      <!-- Incoterm de venta -->
+      <div class="field-group">
+        <label for="sel-incoterm">Incoterm de venta</label>
+        <select id="sel-incoterm">${incotermOpts}</select>
+        <small id="incoterm-ruta-note" style="color:#e65100;font-size:.78rem;margin-top:4px;display:none">
+          <i class="ph ph-warning"></i> Sin tarifa registrada para este destino — solo disponible FOB
+        </small>
+      </div>
+
       <!-- Aerolínea -->
       <div class="field-group">
         <label for="sel-aerolinea-ruta">Aerolínea</label>
         <select id="sel-aerolinea-ruta" disabled>
           <option value="">Selecciona los aeropuertos primero</option>
         </select>
-      </div>
-
-      <!-- Incoterm de venta -->
-      <div class="field-group">
-        <label for="sel-incoterm">Incoterm de venta</label>
-        <select id="sel-incoterm">${incotermOpts}</select>
       </div>
 
       <!-- Moneda -->
@@ -354,7 +404,7 @@ function renderStep1(cat) {
       </div>
 
       <div class="field-note">
-        💡 La moneda define cómo se presentan los totales en la cotización. Los cálculos internos se realizan en USD y se convierten con el tipo de cambio configurado en el Paso 5.
+        La moneda define cómo se presentan los totales en la cotización. Los cálculos internos se realizan en USD y se convierten con el tipo de cambio configurado en el Paso 5.
       </div>
 
     </div>
@@ -373,7 +423,7 @@ function renderStep2(cat) {
   return `
   <div class="step-card step-card--green">
     <div class="step-card-header">
-      <span class="step-icon">🌸</span>
+      <span class="step-icon"><i class="ph ph-flower"></i></span>
       <div>
         <h2>Producto floral</h2>
         <p>Define la especie, variedad y precio de salida (FOB)</p>
@@ -414,7 +464,7 @@ function renderStep2(cat) {
       </div>
 
       <div class="field-note">
-        💡 Referencia Excel: Amaranthus $0.53 · Phlox $0.03 · Lisimachia $0.05
+        Referencia: Amaranthus $0.53 · Phlox $0.03 · Lisimachia $0.05
       </div>
 
     </div>
@@ -423,58 +473,50 @@ function renderStep2(cat) {
 
 /* ── PASO 2 (antes 3): Empaque ───────────────────────────────────────── */
 function renderStep3(cat) {
-  const cajasOpts = buildOptions(
-    cat.box_types, (b) => b.id,
-    (b) => `${b.box_code}${b.box_name ? ' — ' + b.box_name : ''} (${b.length_cm}×${b.width_cm}×${b.height_cm} cm${b.reference_weight_kg ? ', ref. ' + b.reference_weight_kg + ' kg' : ''})`,
-    "Selecciona tipo de caja..."
-  );
+  function buildRowOpts(selectedId) {
+    return `<option value="">Tipo de caja...</option>` +
+      cat.box_types.map((b) =>
+        `<option value="${b.id}"${b.id === selectedId ? " selected" : ""}>${b.box_code}${b.box_name ? " — " + b.box_name : ""} (${b.length_cm}×${b.width_cm}×${b.height_cm} cm${b.reference_weight_kg ? ", ref. " + b.reference_weight_kg + " kg" : ""})</option>`
+      ).join("");
+  }
+
+  const rowsHTML = state.cajas_config.map((conf) => `
+    <div class="caja-row" data-row-id="${conf.id}">
+      <input type="number" class="caja-row-qty" value="${conf.cantidad}" min="1" max="999" />
+      <select class="caja-row-type">${buildRowOpts(conf.box_type_id)}</select>
+      <button class="caja-row-remove" title="Eliminar fila"><i class="ph ph-x"></i></button>
+    </div>`).join("");
+
+  const initTallos = state.stems_per_box * state.cajas_config.reduce((a, c) => a + c.cantidad, 0);
 
   return `
   <div class="step-card step-card--amber">
     <div class="step-card-header">
-      <span class="step-icon">📦</span>
+      <span class="step-icon"><i class="ph ph-package"></i></span>
       <div>
         <h2>Configuración de empaque</h2>
-        <p>Selecciona el tipo de caja y la cantidad del embarque</p>
+        <p>Agrega los tipos de caja y piezas del embarque</p>
       </div>
     </div>
     <div class="step-fields">
 
-      <!-- Resumen de caja (primero) -->
-      <div class="caja-info">
-        <span class="caja-dim-badge">
-          <b id="ci-code">—</b>
-          <span id="ci-dims">Selecciona un tipo de caja</span>
-        </span>
-        <div class="caja-metrics">
-          <div><label>Peso real/caja</label><strong id="ci-kg-ref">—</strong></div>
-          <div><label>Peso volumétrico/caja</label><strong id="ci-vol-w">—</strong></div>
-          <div><label>Peso facturable/caja</label><strong id="ci-fact">—</strong></div>
+      <!-- Tabla multi-caja -->
+      <div class="cajas-multi-table">
+        <div class="cajas-multi-header">
+          <span>Piezas</span>
+          <span>Tipo Caja</span>
+          <span></span>
         </div>
+        <div id="cajas-rows-container">${rowsHTML}</div>
       </div>
+      <button class="btn-add-caja-row" id="btn-add-caja-row">
+        <i class="ph ph-list-plus"></i> Agregar Nuevo
+      </button>
 
-      <!-- Tipo de caja -->
-      <div class="field-group">
-        <label for="sel-caja">Tipo de caja</label>
-        <select id="sel-caja">${cajasOpts}</select>
-      </div>
-
-      <!-- Número de cajas -->
-      <div class="field-group">
-        <label for="inp-cajas">Número de cajas: <strong id="cajas-display">${state.cajas}</strong></label>
-        <div class="slider-wrap">
-          <input type="range" id="inp-cajas" min="1" max="200" step="1" value="${state.cajas}" />
-          <span class="slider-min">1</span>
-          <span class="slider-max">200</span>
-        </div>
-        <div class="field-group" style="margin-top:8px">
-          <input type="number" id="inp-cajas-num" min="1" max="999" value="${state.cajas}"
-            placeholder="O ingresa el número directo" style="max-width:160px" />
-        </div>
-        <div class="derived-row">
-          <span>Total tallos: <b id="der-total-stems">${(state.stems_per_box * state.cajas).toLocaleString("es-EC")}</b></span>
-          <span>Peso total: <b id="der-total-kg">${$kg(state.kg_per_box * state.cajas)}</b></span>
-        </div>
+      <!-- Totales derivados -->
+      <div class="derived-row" style="margin-top:14px">
+        <span>Total tallos: <b id="der-total-stems">${initTallos.toLocaleString("es-EC")}</b></span>
+        <span>Peso total: <b id="der-total-kg">—</b></span>
       </div>
 
     </div>
@@ -490,7 +532,7 @@ function renderStep4(cat) {
   return `
   <div class="step-card step-card--blue">
     <div class="step-card-header">
-      <span class="step-icon">✈️</span>
+      <span class="step-icon"><i class="ph ph-airplane-takeoff"></i></span>
       <div>
         <h2>Ruta aérea y flete</h2>
         <p>Aerolínea, ruta y tarifa de flete por kilogramo facturable</p>
@@ -528,7 +570,7 @@ function renderStep4(cat) {
       </div>
 
       <div class="weight-calc-panel">
-        <div class="wc-header">⚖️ Cálculo de peso</div>
+        <div class="wc-header"><i class="ph ph-scales"></i> Cálculo de peso</div>
         <div class="wc-grid">
           <div class="wc-row"><span>Peso real total</span><strong id="wc-real">—</strong></div>
           <div class="wc-row"><span>Peso volumétrico total</span><strong id="wc-vol">—</strong></div>
@@ -538,7 +580,7 @@ function renderStep4(cat) {
       </div>
 
       <div class="field-note">
-        💡 Referencia: Tarifa 2.73 EUR/kg all-in · Factor IATA estándar 6000
+        Referencia: Tarifa 2.73 EUR/kg all-in · Factor IATA estándar 6000
       </div>
 
     </div>
@@ -552,7 +594,7 @@ function renderStep5(cat) {
   return `
   <div class="step-card step-card--violet">
     <div class="step-card-header">
-      <span class="step-icon">🏢</span>
+      <span class="step-icon"><i class="ph ph-buildings"></i></span>
       <div>
         <h2>Costos en destino</h2>
         <p>Documentos de exportación, agente K&amp;N y logística en destino</p>
@@ -566,7 +608,7 @@ function renderStep5(cat) {
       </div>
 
       <div class="cost-section-block" style="--accent:#f57c00">
-        <div class="csb-header">📄 Sección 2 — Documentos de exportación</div>
+        <div class="csb-header"><i class="ph ph-file-text"></i> Sección 2 — Documentos de exportación</div>
         <div class="field-row">
           <div class="field-group">
             <label for="inp-due-carrier">Due carrier / Agente (EUR)</label>
@@ -604,7 +646,7 @@ function renderStep5(cat) {
       </div>
 
       <div class="cost-section-block" style="--accent:#7b1fa2">
-        <div class="csb-header">🛃 Sección 4 — Derechos de importación</div>
+        <div class="csb-header"><i class="ph ph-shield-check"></i> Sección 4 — Derechos de importación</div>
         <div class="field-group">
           <label for="inp-fitosanitario">Fitosanitario (EUR)</label>
           <div class="input-prefix"><span>€</span>
@@ -614,7 +656,7 @@ function renderStep5(cat) {
       </div>
 
       <div class="cost-section-block" style="--accent:#00897b">
-        <div class="csb-header">🚚 Sección 5 — Logística en destino</div>
+        <div class="csb-header"><i class="ph ph-truck"></i> Sección 5 — Logística en destino</div>
         <div class="field-row">
           <div class="field-group">
             <label for="inp-handling-tallo">Handling por tallo (EUR)</label>
@@ -651,6 +693,52 @@ function renderStep5(cat) {
    BIND DE EVENTOS POR PASO
    ════════════════════════════════════════════════════════════════════════ */
 
+function filterIncotermByRuta(cat) {
+  const selInc = document.getElementById("sel-incoterm");
+  const note   = document.getElementById("incoterm-ruta-note");
+  if (!selInc) return;
+
+  const origId = state.aeropuerto_origen_id;
+  const destId = state.aeropuerto_destino_id;
+
+  // Hay tarifa activa para esta ruta?
+  const hasTarifa = !!(origId && destId &&
+    (cat.rutas_activas ?? []).some(
+      (r) => r.origin_airport_id === origId && r.destination_airport_id === destId
+    )
+  );
+
+  // Habilitar/deshabilitar opciones no-FOB
+  Array.from(selInc.options).forEach((opt) => {
+    if (!opt.value) return;
+    const inc = (cat.incoterms ?? []).find((i) => i.id === opt.value);
+    opt.disabled = !hasTarifa && inc?.code !== "FOB";
+    if (opt.disabled) opt.style.color = "#bbb";
+    else opt.style.color = "";
+  });
+
+  // Si la opción actual quedó deshabilitada → forzar FOB
+  const current = selInc.options[selInc.selectedIndex];
+  if (current?.disabled) {
+    const fobOpt = Array.from(selInc.options).find((o) => {
+      const inc = (cat.incoterms ?? []).find((i) => i.id === o.value);
+      return inc?.code === "FOB";
+    });
+    if (fobOpt) {
+      selInc.value        = fobOpt.value;
+      state.incoterm_id   = fobOpt.value;
+      const inc = (cat.incoterms ?? []).find((i) => i.id === fobOpt.value);
+      state.incoterm_code = inc?.code || "";
+      updatePreview();
+    }
+  }
+
+  // Mostrar/ocultar nota explicativa
+  if (note) {
+    note.style.display = hasTarifa ? "none" : "";
+  }
+}
+
 function updateAerolineasRuta(cat) {
   const sel    = document.getElementById("sel-aerolinea-ruta");
   if (!sel) return;
@@ -661,6 +749,7 @@ function updateAerolineasRuta(cat) {
     sel.innerHTML      = `<option value="">Selecciona los aeropuertos primero</option>`;
     sel.disabled       = true;
     state.aerolinea_id = null;
+    filterIncotermByRuta(cat);
     return;
   }
 
@@ -670,6 +759,8 @@ function updateAerolineasRuta(cat) {
       .map((r) => r.airline_id)
   );
   const filtered = (cat.aerolineas ?? []).filter((a) => airlineIds.has(a.id));
+
+  filterIncotermByRuta(cat);
 
   if (filtered.length === 0) {
     sel.innerHTML      = `<option value="">Sin tarifa activa para esta ruta</option>`;
@@ -687,9 +778,22 @@ function updateAerolineasRuta(cat) {
   }
 }
 
-function bindStep1(cat) {
-  const FLAG = { EC:"🇪🇨", NL:"🇳🇱", DE:"🇩🇪", ES:"🇪🇸", US:"🇺🇸" };
+function triggerFlightAnim() {
+  const fill  = document.getElementById("rfl-fill");
+  const plane = document.getElementById("rfl-plane");
+  if (!fill || !plane) return;
+  if (state.pais_origen_id && state.pais_destino_id) {
+    fill.classList.add("active");
+    plane.classList.add("in-flight");
+    document.getElementById("ruta-orig-pill")?.classList.add("filled");
+    document.getElementById("ruta-dest-pill")?.classList.add("filled");
+  } else {
+    fill.classList.remove("active");
+    plane.classList.remove("in-flight");
+  }
+}
 
+function bindStep1(cat) {
   const selOrig = document.getElementById("sel-pais-origen");
   const selDest = document.getElementById("sel-pais-destino");
 
@@ -697,8 +801,9 @@ function bindStep1(cat) {
     const p = cat.paises_origen.find((x) => x.id === selOrig.value);
     state.pais_origen_id     = selOrig.value || null;
     state.pais_origen_nombre = p?.name || "";
-    document.getElementById("ruta-orig-flag").textContent  = FLAG[p?.code] || "🌐";
+    document.getElementById("ruta-orig-flag").textContent  = p?.code || "?";
     document.getElementById("ruta-orig-label").textContent = p?.name || "Origen";
+    triggerFlightAnim();
 
     // Filtrar aeropuertos por país de origen
     const selAeroOrig = document.getElementById("sel-aeropuerto-origen");
@@ -738,8 +843,9 @@ function bindStep1(cat) {
     const p = cat.paises_destino.find((x) => x.id === selDest.value);
     state.pais_destino_id     = selDest.value || null;
     state.pais_destino_nombre = p?.name || "";
-    document.getElementById("ruta-dest-flag").textContent  = FLAG[p?.code] || "🌐";
+    document.getElementById("ruta-dest-flag").textContent  = p?.code || "?";
     document.getElementById("ruta-dest-label").textContent = p?.name || "Destino";
+    triggerFlightAnim();
 
     // Filtrar aeropuertos por país de destino
     const selAero = document.getElementById("sel-aeropuerto-destino");
@@ -794,8 +900,9 @@ function bindStep1(cat) {
     selOrig.value = ecuador.id;
     state.pais_origen_id     = ecuador.id;
     state.pais_origen_nombre = ecuador.name;
-    document.getElementById("ruta-orig-flag").textContent  = FLAG["EC"];
+    document.getElementById("ruta-orig-flag").textContent  = "EC";
     document.getElementById("ruta-orig-label").textContent = ecuador.name;
+    document.getElementById("ruta-orig-pill")?.classList.add("filled");
 
     // Cargar aeropuertos de Ecuador
     const selAeroOrig  = document.getElementById("sel-aeropuerto-origen");
@@ -805,6 +912,9 @@ function bindStep1(cat) {
       selAeroOrig.disabled  = false;
     }
   }
+
+  // Filtrar incoterm según tarifa al cargar
+  filterIncotermByRuta(cat);
 }
 
 function bindStep2(cat) {
@@ -845,64 +955,74 @@ function bindStep2(cat) {
 }
 
 function bindStep3(cat) {
-  const selCaja = document.getElementById("sel-caja");
+  const container = document.getElementById("cajas-rows-container");
 
-  function updateCajaInfo() {
-    const caja = cat.box_types.find((b) => b.id === selCaja.value);
-    if (!caja) return;
-    state.box_type_id = caja.id;
-    state.box_code    = caja.box_code;
-    state.length_cm   = caja.length_cm;
-    state.width_cm    = caja.width_cm;
-    state.height_cm   = caja.height_cm;
-    // Peso por caja desde la tabla (valor por defecto)
-    if (caja.reference_weight_kg) state.kg_per_box = parseFloat(caja.reference_weight_kg);
-
-    document.getElementById("ci-code").textContent = caja.box_code;
-    document.getElementById("ci-dims").textContent = `${caja.length_cm} × ${caja.width_cm} × ${caja.height_cm} cm`;
-    refreshWeightBadges();
-    updateDerived();
-    updatePreview();
-  }
-
-  function refreshWeightBadges() {
-    const vol  = (state.length_cm * state.width_cm * state.height_cm) / state.vol_factor;
-    const fact = Math.max(state.kg_per_box, vol);
-    const kgEl = document.getElementById("ci-kg-ref");
-    const vEl  = document.getElementById("ci-vol-w");
-    const fEl  = document.getElementById("ci-fact");
-    if (kgEl) kgEl.textContent = $kg(state.kg_per_box);
-    if (vEl)  vEl.textContent  = $kg(vol);
-    if (fEl)  fEl.textContent  = $kg(fact);
+  function buildRowOpts(selectedId) {
+    return `<option value="">Tipo de caja...</option>` +
+      cat.box_types.map((b) =>
+        `<option value="${b.id}"${b.id === selectedId ? " selected" : ""}>${b.box_code}${b.box_name ? " — " + b.box_name : ""} (${b.length_cm}×${b.width_cm}×${b.height_cm} cm${b.reference_weight_kg ? ", ref. " + b.reference_weight_kg + " kg" : ""})</option>`
+      ).join("");
   }
 
   function updateDerived() {
+    const c  = calcular();
     const ts = document.getElementById("der-total-stems");
     const tk = document.getElementById("der-total-kg");
-    if (ts) ts.textContent = (state.stems_per_box * state.cajas).toLocaleString("es-EC");
-    if (tk) tk.textContent = $kg(state.kg_per_box * state.cajas);
+    if (ts) ts.textContent = c.total_stems.toLocaleString("es-EC");
+    if (tk) tk.textContent = $kg(c.total_kg_real);
+    updatePreview();
   }
 
-  selCaja.addEventListener("change", updateCajaInfo);
+  function addRowListeners(rowEl) {
+    const rowId = parseInt(rowEl.dataset.rowId);
 
-  // Slider de cajas
-  document.getElementById("inp-cajas").addEventListener("input", (e) => {
-    state.cajas = parseInt(e.target.value) || 1;
-    document.getElementById("cajas-display").textContent = state.cajas;
-    const num = document.getElementById("inp-cajas-num");
-    if (num) num.value = state.cajas;
-    updateDerived(); updatePreview();
+    rowEl.querySelector(".caja-row-qty").addEventListener("input", (e) => {
+      const conf = state.cajas_config.find((c) => c.id === rowId);
+      if (conf) { conf.cantidad = parseInt(e.target.value) || 1; updateDerived(); }
+    });
+
+    rowEl.querySelector(".caja-row-type").addEventListener("change", (e) => {
+      const conf = state.cajas_config.find((c) => c.id === rowId);
+      if (conf) { conf.box_type_id = e.target.value || null; updateDerived(); }
+    });
+
+    rowEl.querySelector(".caja-row-remove").addEventListener("click", () => {
+      if (state.cajas_config.length <= 1) return; // siempre mínimo 1 fila
+      state.cajas_config = state.cajas_config.filter((c) => c.id !== rowId);
+      rowEl.style.transition = "opacity .15s, transform .15s";
+      rowEl.style.opacity = "0";
+      rowEl.style.transform = "translateX(-8px)";
+      setTimeout(() => { rowEl.remove(); updateDerived(); }, 160);
+    });
+  }
+
+  // Adjuntar listeners a filas ya renderizadas
+  container.querySelectorAll(".caja-row").forEach((row) => addRowListeners(row));
+
+  // Botón "Agregar Nuevo"
+  document.getElementById("btn-add-caja-row").addEventListener("click", () => {
+    const newId = Date.now();
+    state.cajas_config.push({ id: newId, cantidad: 1, box_type_id: null });
+
+    const div = document.createElement("div");
+    div.className = "caja-row";
+    div.dataset.rowId = newId;
+    div.innerHTML = `
+      <input type="number" class="caja-row-qty" value="1" min="1" max="999" />
+      <select class="caja-row-type">${buildRowOpts(null)}</select>
+      <button class="caja-row-remove" title="Eliminar"><i class="ph ph-x"></i></button>`;
+    div.style.opacity = "0";
+    div.style.transform = "translateY(-6px)";
+    container.appendChild(div);
+    addRowListeners(div);
+    requestAnimationFrame(() => {
+      div.style.transition = "opacity .2s, transform .2s";
+      div.style.opacity = "1";
+      div.style.transform = "translateY(0)";
+    });
   });
 
-  // Input numérico directo
-  document.getElementById("inp-cajas-num").addEventListener("input", (e) => {
-    const v = parseInt(e.target.value) || 1;
-    state.cajas = v;
-    document.getElementById("cajas-display").textContent = v;
-    const slider = document.getElementById("inp-cajas");
-    if (slider) slider.value = Math.min(v, 200);
-    updateDerived(); updatePreview();
-  });
+  updateDerived();
 }
 
 function bindStep4() {
@@ -913,7 +1033,7 @@ function bindStep4() {
     const wF = document.getElementById("wc-fact");
     const wC = document.getElementById("wc-cost");
     if (wR) wR.textContent = $kg(c.total_kg_real);
-    if (wV) wV.textContent = $kg(c.vol_weight_per_box * state.cajas);
+    if (wV) wV.textContent = $kg(c.total_vol_weight);
     if (wF) wF.textContent = $kg(c.total_chargeable);
     if (wC) wC.textContent = `${$eur(c.s3_eur)} / ${$usd(c.s3_usd)}`;
   }
@@ -984,9 +1104,12 @@ function guardarCotizacion() {
   localStorage.setItem("blis_cotizaciones", JSON.stringify(saved.slice(0, 20)));
 
   const btn = document.getElementById("btn-guardar");
-  btn.textContent = "✅ Guardado";
-  btn.disabled    = true;
-  setTimeout(() => { btn.textContent = "💾 Guardar cotización"; btn.disabled = false; }, 2000);
+  btn.innerHTML = '<i class="ph ph-check-circle"></i> Guardado';
+  btn.disabled  = true;
+  setTimeout(() => {
+    btn.innerHTML = '<i class="ph ph-floppy-disk"></i> Guardar cotización';
+    btn.disabled  = false;
+  }, 2000);
 }
 
 /* ─── Render principal de la página ─────────────────────────────────── */
@@ -994,11 +1117,11 @@ function renderPage(cat) {
   const content = document.getElementById("content");
 
   const steps = [
-    { n:1, icon:"🌍", label:"Ruta",       color:"teal"   },
-    { n:2, icon:"📦", label:"Empaque",    color:"amber"  },
-    { n:3, icon:"🌸", label:"Producto",   color:"green"  },
-    { n:4, icon:"✈️", label:"Ruta aérea", color:"blue"  },
-    { n:5, icon:"🏢", label:"Costos",     color:"violet" },
+    { n:1, icon:'<i class="ph ph-map-trifold"></i>',      label:"Ruta",       color:"teal"   },
+    { n:2, icon:'<i class="ph ph-package"></i>',           label:"Empaque",    color:"amber"  },
+    { n:3, icon:'<i class="ph ph-flower"></i>',            label:"Producto",   color:"green"  },
+    { n:4, icon:'<i class="ph ph-airplane-takeoff"></i>',  label:"Ruta aérea", color:"blue"   },
+    { n:5, icon:'<i class="ph ph-buildings"></i>',         label:"Costos",     color:"violet" },
   ];
 
   const stepIndicatorHTML = steps.map((st, i) => `
@@ -1016,7 +1139,6 @@ function renderPage(cat) {
   content.innerHTML = `
     <section class="cotiz-hero">
       <div>
-        <span class="eyebrow">Costing Engine</span>
         <h1>Cotizador de exportación</h1>
         <p>Simula el costo total de un embarque floral en ${TOTAL_STEPS} pasos. Cada cambio actualiza la cotización en tiempo real.</p>
       </div>
@@ -1035,15 +1157,15 @@ function renderPage(cat) {
         <div id="step-5" class="step-panel">${renderStep5(cat)}</div>
 
         <div class="step-nav">
-          <button id="btn-prev" class="btn btn-secondary" disabled>← Anterior</button>
+          <button id="btn-prev" class="btn btn-secondary" disabled><i class="ph ph-arrow-left"></i> Anterior</button>
           <div class="step-nav-dots">${dotsHTML}</div>
-          <button id="btn-next" class="btn btn-primary">Siguiente →</button>
+          <button id="btn-next" class="btn btn-primary">Siguiente <i class="ph ph-arrow-right"></i></button>
         </div>
 
       </div>
 
       <aside class="cotiz-preview">
-        <div class="preview-header"><span>💰 Cotización en tiempo real</span></div>
+        <div class="preview-header"><i class="ph ph-currency-dollar"></i><span>Cotización en tiempo real</span></div>
 
         <!-- Ruta, aeropuerto, incoterm y moneda -->
         <div class="preview-ruta-block">
@@ -1056,8 +1178,8 @@ function renderPage(cat) {
           </div>
         </div>
         <div class="preview-ruta-meta">
-          <span class="prm-item">✈ <span id="prev-aeropuerto">—</span></span>
-          <span class="prm-item">📋 <span id="prev-incoterm">—</span></span>
+          <span class="prm-item"><i class="ph ph-airplane"></i><span id="prev-aeropuerto">—</span></span>
+          <span class="prm-item"><i class="ph ph-clipboard-text"></i><span id="prev-incoterm">—</span></span>
         </div>
 
         <div class="preview-product-tag">
@@ -1072,11 +1194,11 @@ function renderPage(cat) {
         </div>
 
         <div class="preview-sections">
-          <div class="ps-row ps-row--green"><span>🌸 S1 Valor producto</span><b id="prev-s1">$0.00</b></div>
-          <div class="ps-row ps-row--amber"><span>📄 S2 Documentos</span><b id="prev-s2">$0.00</b></div>
-          <div class="ps-row ps-row--blue"><span>✈️ S3 Flete aéreo</span><b id="prev-s3">$0.00</b></div>
-          <div class="ps-row ps-row--violet"><span>🛃 S4 Importación</span><b id="prev-s4">$0.00</b></div>
-          <div class="ps-row ps-row--teal"><span>🚚 S5 Logística</span><b id="prev-s5">$0.00</b></div>
+          <div class="ps-row ps-row--green"><span><i class="ph ph-flower"></i>S1 Valor producto</span><b id="prev-s1">$0.00</b></div>
+          <div class="ps-row ps-row--amber"><span><i class="ph ph-file-text"></i>S2 Documentos</span><b id="prev-s2">$0.00</b></div>
+          <div class="ps-row ps-row--blue"><span><i class="ph ph-airplane"></i>S3 Flete aéreo</span><b id="prev-s3">$0.00</b></div>
+          <div class="ps-row ps-row--violet"><span><i class="ph ph-shield-check"></i>S4 Importación</span><b id="prev-s4">$0.00</b></div>
+          <div class="ps-row ps-row--teal"><span><i class="ph ph-truck"></i>S5 Logística</span><b id="prev-s5">$0.00</b></div>
         </div>
 
         <div class="preview-total-block">
@@ -1094,7 +1216,7 @@ function renderPage(cat) {
           <div class="donut-empty">Completa los pasos para ver el análisis</div>
         </div>
 
-        <button class="btn btn-save" id="btn-guardar">💾 Guardar cotización</button>
+        <button class="btn btn-save" id="btn-guardar"><i class="ph ph-floppy-disk"></i> Guardar cotización</button>
       </aside>
 
     </div>`;
@@ -1122,6 +1244,17 @@ function renderPage(cat) {
   document.getElementById("btn-guardar").addEventListener("click", guardarCotizacion);
 
   updatePreview();
+
+  // Stagger de entrada en los step items (una sola vez al cargar)
+  document.querySelectorAll(".step-item").forEach((el, i) => {
+    el.style.opacity = "0";
+    el.style.transform = "translateY(6px)";
+    el.style.transition = "opacity 220ms var(--ease-out), transform 220ms var(--ease-out)";
+    setTimeout(() => {
+      el.style.opacity = "";
+      el.style.transform = "";
+    }, 60 + i * 55);
+  });
 }
 
 /* ─── Init ───────────────────────────────────────────────────────────── */
@@ -1131,6 +1264,7 @@ async function init() {
 
   try {
     const cat = await apiGet("/cotizacion/catalogo");
+    _catalog = cat;
     state.catalogo = cat;
 
     // Tipo de cambio desde BD: tabla tiene columna usd_to_eur → invertir para eur_to_usd
@@ -1140,6 +1274,16 @@ async function init() {
     }
 
     renderPage(cat);
+
+    // Aviso si no hay tarifas vigentes (debe ir después de renderPage que resetea innerHTML)
+    if (!cat.rutas_activas?.length) {
+      const banner = document.createElement("div");
+      banner.className = "tariff-warning-banner";
+      banner.innerHTML = `<i class="ph ph-warning-circle"></i>
+        <span>No hay tarifas aéreas vigentes. Los selects de país y aerolínea estarán vacíos.
+        Ve a <a href="/pages/tarifas-aerolinea.html">Tarifas Aerolínea</a> para cargar tarifas activas.</span>`;
+      document.getElementById("content").prepend(banner);
+    }
   } catch (err) {
     content.innerHTML = `
       <div class="dashboard-error">

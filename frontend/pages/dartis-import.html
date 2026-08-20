@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLIS · Importar Ventas Dartis</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-page="dartis-import">
+  <div id="sidebar" class="sidebar"></div>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-upload-simple"></i> Importar Ventas Dartis</h1>
+      <p class="page-subtitle">Sube los dos archivos Excel de Dartis para registrar las ventas del período.</p>
+    </div>
+
+    <div class="import-card">
+      <div class="import-rule">
+        <i class="ph ph-info"></i>
+        <span>Se deben subir <strong>ambos archivos</strong> al mismo tiempo: Ventas Recetas y Ventas clásico.</span>
+      </div>
+
+      <form id="importForm">
+        <div class="file-fields">
+
+          <div class="file-field">
+            <label for="file_recetas">
+              <i class="ph ph-file-xls"></i> Ventas Recetas
+              <span class="file-hint">Archivo con detalle por especie, guía y tipo de caja</span>
+            </label>
+            <div class="file-drop" id="drop_recetas" data-target="file_recetas">
+              <i class="ph ph-upload-simple"></i>
+              <span id="label_recetas">Arrastra el archivo o haz clic para seleccionar</span>
+              <input type="file" id="file_recetas" name="file_recetas" accept=".xlsx,.xls" required />
+            </div>
+          </div>
+
+          <div class="file-field">
+            <label for="file_ventas">
+              <i class="ph ph-file-xls"></i> Ventas
+              <span class="file-hint">Archivo con agencia de carga y vendedor por pedido</span>
+            </label>
+            <div class="file-drop" id="drop_ventas" data-target="file_ventas">
+              <i class="ph ph-upload-simple"></i>
+              <span id="label_ventas">Arrastra el archivo o haz clic para seleccionar</span>
+              <input type="file" id="file_ventas" name="file_ventas" accept=".xlsx,.xls" required />
+            </div>
+          </div>
+
+        </div>
+
+        <div class="import-actions">
+          <button type="submit" id="btnUpload" class="btn btn-primary" disabled>
+            <i class="ph ph-upload-simple"></i> Importar
+          </button>
+        </div>
+      </form>
+
+      <div id="progressSection" class="hidden">
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <p id="progressMsg" class="progress-msg">Procesando archivos...</p>
+      </div>
+
+      <div id="resultSection" class="hidden"></div>
+    </div>
+  </main>
+
+  <script type="module" src="/js/layout.js"></script>
+  <script type="module" src="/pages/dartis-import.js"></script>
+</body>
+</html>

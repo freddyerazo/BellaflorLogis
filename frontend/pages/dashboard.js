@@ -2,18 +2,18 @@ import { apiGet } from "../js/api.js";
 
 /* ─── Módulos principales ─────────────────────────────────────────── */
 const MODULES = [
-  { key: "species",        label: "Especies",       description: "Catálogo floral",        href: "/pages/especies.html",    icon: "✦", tone: "green"   },
-  { key: "varieties",      label: "Variedades",      description: "Portafolio disponible",  href: "/pages/variedades.html",  icon: "❋", tone: "emerald" },
-  { key: "product_sizes",  label: "Grados",          description: "Clasificación comercial",href: "/pages/grados.html",      icon: "↕", tone: "amber"   },
-  { key: "box_types",      label: "Tipos de caja",   description: "Opciones de empaque",    href: "/pages/tipos-caja.html",  icon: "□", tone: "orange"  },
-  { key: "airports",       label: "Aeropuertos",     description: "Puntos logísticos",      href: "/pages/aeropuertos.html", icon: "⌁", tone: "blue"    },
-  { key: "airlines",       label: "Aerolíneas",      description: "Socios de transporte",   href: "/pages/aerolineas.html",  icon: "➤", tone: "cyan"    },
-  { key: "customers",      label: "Clientes",        description: "Cuentas comerciales",    href: "/pages/clientes.html",    icon: "◉", tone: "violet"  },
-  { key: "markets",        label: "Mercados",        description: "Destinos comerciales",   href: "#",                       icon: "◈", tone: "teal"    },
-  { key: "providers",      label: "Proveedores",     description: "Agentes de carga",       href: "#",                       icon: "◐", tone: "slate"   },
-  { key: "incoterms",      label: "Incoterms",       description: "Términos de comercio",   href: "#",                       icon: "⊞", tone: "amber"   },
-  { key: "cost_components",label: "Costos",          description: "Componentes de flete",   href: "#",                       icon: "⊟", tone: "orange"  },
-  { key: "profiles",       label: "Usuarios",        description: "Accesos configurados",   href: "/pages/configuracion.html",icon: "◎", tone: "slate"  },
+  { key: "species",        label: "Especies",       description: "Catálogo floral",        href: "/pages/especies.html",    icon: '<i class="ph ph-flower"></i>',                  tone: "green"   },
+  { key: "varieties",      label: "Variedades",      description: "Portafolio disponible",  href: "/pages/variedades.html",  icon: '<i class="ph ph-sparkle"></i>',                 tone: "emerald" },
+  { key: "product_sizes",  label: "Grados",          description: "Clasificación comercial",href: "/pages/grados.html",      icon: '<i class="ph ph-arrows-out-line-vertical"></i>',tone: "amber"   },
+  { key: "box_types",      label: "Tipos de caja",   description: "Opciones de empaque",    href: "/pages/tipos-caja.html",  icon: '<i class="ph ph-package"></i>',                 tone: "orange"  },
+  { key: "airports",       label: "Aeropuertos",     description: "Puntos logísticos",      href: "/pages/aeropuertos.html", icon: '<i class="ph ph-airplane-landing"></i>',        tone: "blue"    },
+  { key: "airlines",       label: "Aerolíneas",      description: "Socios de transporte",   href: "/pages/aerolineas.html",  icon: '<i class="ph ph-airplane-takeoff"></i>',        tone: "cyan"    },
+  { key: "customers",      label: "Clientes",        description: "Cuentas comerciales",    href: "/pages/clientes.html",    icon: '<i class="ph ph-users"></i>',                   tone: "violet"  },
+  { key: "markets",        label: "Mercados",        description: "Destinos comerciales",   href: "#",                       icon: '<i class="ph ph-globe-hemisphere-west"></i>',   tone: "teal"    },
+  { key: "providers",      label: "Proveedores",     description: "Agentes de carga",       href: "#",                       icon: '<i class="ph ph-truck"></i>',                   tone: "slate"   },
+  { key: "incoterms",      label: "Incoterms",       description: "Términos de comercio",   href: "#",                       icon: '<i class="ph ph-handshake"></i>',               tone: "amber"   },
+  { key: "cost_components",label: "Costos",          description: "Componentes de flete",   href: "#",                       icon: '<i class="ph ph-currency-dollar-simple"></i>',  tone: "orange"  },
+  { key: "profiles",       label: "Usuarios",        description: "Accesos configurados",   href: "/pages/configuracion.html",icon: '<i class="ph ph-gear"></i>',                  tone: "slate"   },
 ];
 
 const fmt = (v) => new Intl.NumberFormat("es-EC").format(v ?? 0);
@@ -46,40 +46,40 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
     <!-- Métricas superiores -->
     <section class="metric-grid">
       <article class="metric-card metric-featured">
-        <div class="metric-icon">❋</div>
+        <div class="metric-icon"><i class="ph ph-sparkle"></i></div>
         <div>
           <span>Variedades activas</span>
           <strong>${fmt(s.varieties)}</strong>
           <small>en ${fmt(s.species)} especies</small>
         </div>
-        <a href="/pages/variedades.html" aria-label="Ver variedades">→</a>
+        <a href="/pages/variedades.html" aria-label="Ver variedades"><i class="ph ph-arrow-right"></i></a>
       </article>
       <article class="metric-card">
-        <div class="metric-icon blue">◉</div>
+        <div class="metric-icon blue"><i class="ph ph-users"></i></div>
         <div>
           <span>Clientes</span>
           <strong>${fmt(s.customers)}</strong>
           <small>${fmt(s.markets)} mercados destino</small>
         </div>
-        <a href="/pages/clientes.html" aria-label="Ver clientes">→</a>
+        <a href="/pages/clientes.html" aria-label="Ver clientes"><i class="ph ph-arrow-right"></i></a>
       </article>
       <article class="metric-card">
-        <div class="metric-icon amber">⌁</div>
+        <div class="metric-icon amber"><i class="ph ph-map-trifold"></i></div>
         <div>
           <span>Red logística</span>
           <strong>${fmt(totalLogistics)}</strong>
           <small>${fmt(s.airports)} aeropuertos · ${fmt(s.airlines)} aerolíneas</small>
         </div>
-        <a href="/pages/aeropuertos.html" aria-label="Ver red logística">→</a>
+        <a href="/pages/aeropuertos.html" aria-label="Ver red logística"><i class="ph ph-arrow-right"></i></a>
       </article>
       <article class="metric-card">
-        <div class="metric-icon violet">⊞</div>
+        <div class="metric-icon violet"><i class="ph ph-calculator"></i></div>
         <div>
           <span>Escenarios</span>
           <strong>${fmt(s.scenarios)}</strong>
           <small>${fmt(s.cost_components)} componentes de costo</small>
         </div>
-        <a href="#costing-panel" aria-label="Ver costing">→</a>
+        <a href="#costing-panel" aria-label="Ver costing"><i class="ph ph-arrow-right"></i></a>
       </article>
     </section>
 
@@ -89,7 +89,7 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
       <!-- Panel izquierdo: módulos -->
       <section class="panel overview-panel">
         <div class="panel-heading">
-          <div><span class="eyebrow">Datos maestros</span><h2>Resumen por módulo</h2></div>
+          <div><h2>Resumen por módulo</h2></div>
           <span class="panel-total">${fmt(totalCatalog + totalLogistics + (s.customers ?? 0))} registros</span>
         </div>
         <div class="module-list">
@@ -98,7 +98,6 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
             return `<a class="module-row" href="${m.href}">
               <span class="module-icon ${m.tone}">${m.icon}</span>
               <span class="module-info"><strong>${m.label}</strong><small>${m.description}</small></span>
-              <span class="module-progress"><i style="width:${Math.max((value / maxVal) * 100, value ? 4 : 0)}%"></i></span>
               <b>${fmt(value)}</b>
             </a>`;
           }).join("")}
@@ -110,12 +109,12 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
 
         <!-- Accesos rápidos -->
         <section class="panel quick-panel">
-          <div class="panel-heading"><div><span class="eyebrow">Gestión</span><h2>Accesos rápidos</h2></div></div>
+          <div class="panel-heading"><div><h2>Accesos rápidos</h2></div></div>
           <div class="quick-grid">
-            <a href="/pages/clientes.html"><span>＋</span><strong>Nuevo cliente</strong><small>Registrar cuenta</small></a>
-            <a href="/pages/variedades.html"><span>＋</span><strong>Nueva variedad</strong><small>Ampliar catálogo</small></a>
-            <a href="/pages/aeropuertos.html"><span>＋</span><strong>Aeropuerto</strong><small>Agregar destino</small></a>
-            <a href="/pages/configuracion.html"><span>⚙</span><strong>Configuración</strong><small>Roles y usuarios</small></a>
+            <a href="/pages/clientes.html"><span><i class="ph ph-user-plus"></i></span><strong>Nuevo cliente</strong><small>Registrar cuenta</small></a>
+            <a href="/pages/variedades.html"><span><i class="ph ph-flower"></i></span><strong>Nueva variedad</strong><small>Ampliar catálogo</small></a>
+            <a href="/pages/aeropuertos.html"><span><i class="ph ph-airplane"></i></span><strong>Aeropuerto</strong><small>Agregar destino</small></a>
+            <a href="/pages/configuracion.html"><span><i class="ph ph-gear"></i></span><strong>Configuración</strong><small>Roles y usuarios</small></a>
           </div>
         </section>
 
@@ -140,7 +139,7 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
       <!-- Top 5 especies por variedades -->
       <section class="panel analysis-panel">
         <div class="panel-heading">
-          <div><span class="eyebrow">Catálogo</span><h2>Top 5 especies con más variedades</h2></div>
+          <div><h2>Top 5 especies con más variedades</h2></div>
         </div>
         <div class="chart-bars">
           ${(() => {
@@ -161,7 +160,7 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
       <!-- Tipos de caja -->
       <section class="panel analysis-panel">
         <div class="panel-heading">
-          <div><span class="eyebrow">Empaque</span><h2>Tipos de caja disponibles</h2></div>
+          <div><h2>Tipos de caja disponibles</h2></div>
         </div>
         <div class="box-grid">
           ${(() => {
@@ -189,7 +188,6 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
       <section class="panel costing-summary-panel">
         <div class="panel-heading">
           <div>
-            <span class="eyebrow">Último escenario calculado</span>
             <h2>${last_scenario.scenario_name ?? last_scenario.scenario_code}</h2>
           </div>
           <span class="scenario-code-badge">${last_scenario.scenario_code}</span>
@@ -218,7 +216,7 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
       <!-- Desglose de costos -->
       <section class="panel costing-breakdown-panel">
         <div class="panel-heading">
-          <div><span class="eyebrow">Desglose</span><h2>Componentes de costo</h2></div>
+          <div><h2>Componentes de costo</h2></div>
         </div>
         <div class="cost-breakdown-list">
           ${(() => {
@@ -243,7 +241,6 @@ function renderDashboard({ summary, top_species, box_distribution, last_scenario
     </div>
     ` : `
     <section class="panel costing-empty">
-      <span class="eyebrow">Costing Engine</span>
       <p>No hay escenarios calculados aún. Cuando se registre el primer escenario aparecerá aquí el análisis de costos.</p>
     </section>
     `}
