@@ -81,12 +81,13 @@ BLIS/
 | Perfiles | `/api/perfiles` | 0 (auth pendiente) |
 | Agrocalidad | `/api/agrocalidad` (`agrocalidad_requests`/`agrocalidad_requirements`) | 44 / 196 — clon de la app externa "Agrocalidad Consulta"; el scraping real sigue en GitHub Actions del repo `freddyerazo/AgrocalidadDartis`, disparado desde BLIS vía `GITHUB_TOKEN`/`GITHUB_REPO` (pendiente de configurar en `.env`) |
 | Inventario LAG | `/api/inventario-lag` | sin BD propia — proxy en vivo sobre las APIs del WMS de Logiztik Alliance Group (bodega Miami); clon de "InventarioApiLag". Requiere `LAG_ENV`/`LAG_CUSTOMER_CODE`/`LAG_TOKEN`/`LAG_SALES_API_KEY` en `.env` (pendiente de configurar) |
+| Torre de Control | `/api/torre-control` (`courier_reconciliation`, `courier_ups_manifest`, `courier_fedex_envios`, `courier_agency_mapping`) | conciliación de cajas: `dartis_ventas` agrupada por `id_pedido` vs manifiestos UPS/FedEx vs tracking en vivo vs entregas de agencias locales; clon de "REPORTEUPSFEDEX". Scheduler propio (`apscheduler`, `REFRESH_SECONDS`). Requiere `UPS_CLIENT_ID/SECRET`, `FEDEX_CLIENT_ID/SECRET`, `DUOPLANE_API_KEY/PASSWORD` en `.env` para datos reales (por defecto `DEMO_MODE=true`) |
 
 ## Módulos externos en proceso de clonarse a BLIS (una pestaña por proyecto)
 Plan completo en `C:\Users\Coordinación\.claude\plans\rustling-beaming-heron.md`. Orden: fácil → difícil.
 1. ✅ **Agrocalidad Consulta** → `/api/agrocalidad` (hecho)
 2. ✅ **InventarioApiLag** → `/api/inventario-lag` (hecho)
-3. ⏳ **REPORTEUPSFEDEX** — conciliación de cajas vs UPS/FedEx/agencias locales, necesita scheduler + OAuth + bots RPA
+3. ✅ **REPORTEUPSFEDEX** → `/api/torre-control` (hecho; el bot RPA de tracking en Dartis queda pendiente como Fase 3b, ver plan)
 4. ⏳ **Auditoria_LEsp** — auditoría de etiquetas vs Dartis, hoy en Google Sheets + bot de Telegram
 
 ## Módulos con datos en Supabase pero SIN API todavía
