@@ -1311,6 +1311,41 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 }
 .btn-danger:hover { filter: brightness(0.92); }
 
+/* Combo buscable (select con filtro por texto, para listas largas) */
+.combo-buscable { position: relative; }
+.combo-buscable input[type="text"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.combo-buscable input[type="text"]:disabled { background: #f5f7f6; color: var(--text-muted, #64748b); }
+.combo-opciones {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.combo-opciones.abierto { display: block; }
+.combo-opciones .combo-opcion {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: .88rem;
+}
+.combo-opciones .combo-opcion:hover,
+.combo-opciones .combo-opcion.resaltada { background: var(--info-bg, #eff6ff); }
+.combo-opciones .combo-vacio { padding: 8px 12px; font-size: .85rem; color: var(--text-muted, #64748b); }
+
 /* Resultados de consultas ad-hoc (Inventario LAG y similares) */
 .resultado { margin-top: 1rem; }
 .resultado .conteo { font-size: .82rem; color: var(--text-muted, #64748b); margin-bottom: .5rem; }

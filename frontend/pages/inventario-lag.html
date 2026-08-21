@@ -260,9 +260,11 @@
           <div class="form-grid">
             <div class="form-group">
               <label>Cliente *</label>
-              <select name="customerId" id="posteo-customer" required>
-                <option value="">Cargando clientes...</option>
-              </select>
+              <div class="combo-buscable" id="posteo-customer-combo">
+                <input type="text" id="posteo-customer-search" placeholder="Cargando clientes..." autocomplete="off" disabled />
+                <input type="hidden" name="customerId" id="posteo-customer-value" />
+                <div class="combo-opciones" id="posteo-customer-opciones"></div>
+              </div>
             </div>
             <div class="form-group"><label>Carrier ID *</label><input name="carrierId" required maxlength="16" placeholder="PIK" /></div>
             <div class="form-group"><label>Miami Ship Date *</label><input type="date" name="miamiShipDate" required /></div>

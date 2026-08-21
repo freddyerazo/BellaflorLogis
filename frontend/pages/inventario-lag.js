@@ -636,27 +636,102 @@ $("#form-cancelar").addEventListener("submit", (e) => {
 // El customerId de LAG viene de customers.customer_code_lag (verificado:
 // siempre igual a customer_code cuando existe, 1,409 de 1,703 clientes lo
 // tienen poblado). Solo se listan esos — postear con un customerId
-// inventado fallaria contra LAG.
+// inventado fallaria contra LAG. Combo buscable en vez de <select> plano
+// porque son ~1,400 opciones.
+const comboCliente = {
+  clientes: [],
+  seleccionado: null,
+  resaltado: -1,
+};
+
+const normalizarBusqueda = (s) =>
+  (s || "").toString().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
 async function cargarClientesPosteo() {
-  const select = document.getElementById("posteo-customer");
+  const input = document.getElementById("posteo-customer-search");
   try {
     const clientes = await apiGet("/customers");
-    const conCodigoLag = clientes
+    comboCliente.clientes = clientes
       .filter((c) => c.customer_code_lag)
       .sort((a, b) => a.customer_name.localeCompare(b.customer_name));
-
-    select.innerHTML = '<option value="">Selecciona un cliente...</option>';
-    conCodigoLag.forEach((c) => {
-      const opt = document.createElement("option");
-      opt.value = c.customer_code_lag;
-      opt.textContent = `${c.customer_name} (${c.customer_code_lag})`;
-      select.appendChild(opt);
-    });
+    input.disabled = false;
+    input.placeholder = `Escribe para buscar (${comboCliente.clientes.length} clientes)...`;
   } catch (err) {
-    select.innerHTML = `<option value="">Error cargando clientes: ${err.message}</option>`;
+    input.placeholder = `Error cargando clientes: ${err.message}`;
   }
 }
 cargarClientesPosteo();
+
+function renderOpcionesCliente(filtro) {
+  const cont = document.getElementById("posteo-customer-opciones");
+  const norm = normalizarBusqueda(filtro);
+  const coincidencias = comboCliente.clientes
+    .filter((c) => !norm || normalizarBusqueda(c.customer_name).includes(norm) || normalizarBusqueda(c.customer_code_lag).includes(norm))
+    .slice(0, 50);
+
+  comboCliente.resaltado = -1;
+  if (!coincidencias.length) {
+    cont.innerHTML = `<div class="combo-vacio">Sin coincidencias</div>`;
+  } else {
+    cont.innerHTML = coincidencias.map((c, i) =>
+      `<div class="combo-opcion" data-index="${i}" data-code="${c.customer_code_lag}">${c.customer_name} <span style="color:var(--text-muted,#64748b);">(${c.customer_code_lag})</span></div>`
+    ).join("");
+  }
+  cont._coincidencias = coincidencias;
+  cont.classList.add("abierto");
+}
+
+function seleccionarCliente(cliente) {
+  comboCliente.seleccionado = cliente;
+  document.getElementById("posteo-customer-search").value = `${cliente.customer_name} (${cliente.customer_code_lag})`;
+  document.getElementById("posteo-customer-value").value = cliente.customer_code_lag;
+  document.getElementById("posteo-customer-opciones").classList.remove("abierto");
+}
+
+const posteoSearch = document.getElementById("posteo-customer-search");
+posteoSearch.addEventListener("input", () => {
+  comboCliente.seleccionado = null;
+  document.getElementById("posteo-customer-value").value = "";
+  renderOpcionesCliente(posteoSearch.value);
+});
+posteoSearch.addEventListener("focus", () => renderOpcionesCliente(posteoSearch.value));
+
+document.getElementById("posteo-customer-opciones").addEventListener("click", (e) => {
+  const fila = e.target.closest(".combo-opcion");
+  if (!fila) return;
+  const cont = document.getElementById("posteo-customer-opciones");
+  const cliente = cont._coincidencias[Number(fila.dataset.index)];
+  if (cliente) seleccionarCliente(cliente);
+});
+
+posteoSearch.addEventListener("keydown", (e) => {
+  const cont = document.getElementById("posteo-customer-opciones");
+  const filas = cont.querySelectorAll(".combo-opcion");
+  if (!filas.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    comboCliente.resaltado = Math.min(comboCliente.resaltado + 1, filas.length - 1);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    comboCliente.resaltado = Math.max(comboCliente.resaltado - 1, 0);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (comboCliente.resaltado >= 0) {
+      const cliente = cont._coincidencias[comboCliente.resaltado];
+      if (cliente) seleccionarCliente(cliente);
+    }
+    return;
+  } else {
+    return;
+  }
+  filas.forEach((f, i) => f.classList.toggle("resaltada", i === comboCliente.resaltado));
+});
+
+document.addEventListener("click", (e) => {
+  if (!document.getElementById("posteo-customer-combo").contains(e.target)) {
+    document.getElementById("posteo-customer-opciones").classList.remove("abierto");
+  }
+});
 
 function plantillaCajaPosteo() {
   const div = document.createElement("div");
@@ -679,6 +754,11 @@ $("#form-posteo").addEventListener("submit", (e) => {
   e.preventDefault();
   const form = e.target;
 
+  if (!form.elements.customerId.value) {
+    mostrarError("#res-posteo", "Selecciona un cliente de la lista.");
+    return;
+  }
+
   const cajas = [...form.querySelectorAll("#items-posteo .item-row")];
   if (cajas.length === 0) {
     mostrarError("#res-posteo", "Agregue al menos una caja.");
@@ -700,9 +780,12 @@ $("#form-posteo").addEventListener("submit", (e) => {
     boxIds,
   };
 
+  const nombreCliente = comboCliente.seleccionado
+    ? `${comboCliente.seleccionado.customer_name} (${payload.customerId})`
+    : payload.customerId;
   const confirmado = window.confirm(
     `Esto crea una orden REAL en el WMS de LAG (sin ambiente de pruebas).\n\n` +
-    `Customer: ${payload.customerId}\nCarrier: ${payload.carrierId}\nFecha: ${payload.miamiShipDate}\n` +
+    `Cliente: ${nombreCliente}\nCarrier: ${payload.carrierId}\nFecha: ${payload.miamiShipDate}\n` +
     `Cajas: ${boxIds.map((b) => b.boxId).join(", ")}\n\n¿Confirmas el envío?`
   );
   if (!confirmado) return;
