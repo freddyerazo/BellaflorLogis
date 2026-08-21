@@ -23,7 +23,7 @@ Sistema de apoyo logístico y comercial para Bellaflor Group (exportadora de flo
 BLIS/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          ← 22 módulos activos, montados en main.py bajo /api
+│   │   ├── api/          ← 23 módulos activos, montados en main.py bajo /api
 │   │   ├── database/     ← connection.py (SQLAlchemy), helpers.py
 │   │   ├── schemas/      ← modelos Pydantic (cubre la mayoría de módulos)
 │   │   ├── models/       ← vacío, no se usa (lógica vive en api/*.py con SQL crudo)
@@ -118,7 +118,8 @@ Peso Facturable  = MAX(Peso Real, Peso Volumétrico)
 - Dos entornos virtuales locales (`.venv`, `.venv-1`) — ambos ignorados en git, revisar cuál es el vigente
 - 4 módulos nuevos (Agrocalidad, Inventario LAG, Torre de Control, Auditoría de Etiquetas) corren sin credenciales reales configuradas en `.env`/Render — ver la tabla de rutas arriba para la lista exacta por módulo
 - Fase 3b (bot RPA de tracking en Dartis) y el corte del webhook de Telegram a producción (Fase 4) quedaron deliberadamente pendientes — ver plan
-- Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — las 5 se sincronizaron en esta ronda (agosto 2026), pero mantenerlas al día requiere disciplina en cada cambio futuro
+- Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — sincronizada por última vez el 2026-08-21 (incluye Posteo de Inventario/`truck_company`), pero mantenerlas al día requiere disciplina en cada cambio futuro
+- **Seguridad pendiente**: el token real de `LAG_PLACE_ORDER_TOKEN` fue pegado en texto plano durante la sesión donde se construyó Posteo de Inventario — rotarlo con Logiztik Alliance Group antes de dar por confiable ese flujo en producción
 
 ## Convenciones de código
 - Ver `rules/coding-style.md`

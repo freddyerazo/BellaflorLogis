@@ -23,7 +23,7 @@ Sistema de apoyo logístico y comercial para Bellaflor Group (exportadora de flo
 BLIS/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          ← 22 módulos activos, montados en main.py bajo /api
+│   │   ├── api/          ← 23 módulos activos, montados en main.py bajo /api
 │   │   ├── database/     ← connection.py (SQLAlchemy), helpers.py
 │   │   ├── schemas/      ← modelos Pydantic (cubre la mayoría de módulos)
 │   │   ├── models/       ← vacío, no se usa (lógica vive en api/*.py con SQL crudo)
@@ -73,6 +73,7 @@ BLIS/
 | Agencias de carga | `/api/cargo-agencies` (`cargo_agencies`) | 34 |
 | Fincas | `/api/farms` (`farms` / `farm_postcosecha`) | 3 / 6 |
 | Tarifas aerolínea | `/api/airline-tariffs` | 8 |
+| Carriers Miami | `/api/truck-companies` (`truck_company`) | 139 — catálogo cargado desde "ID clientes.xlsx" hoja "Listado de Carriers-Miami"; usado como Carrier ID en Posteo de Inventario (Inventario LAG) |
 | Cotización (Costing Engine) | `/api/cotizacion` — wizard que combina especies, variedades, tarifas | funcional, `scenario_*` con datos de prueba |
 | Importación Dartis | `/api/dartis-import` (`dartis_ventas`, `import_species_varieties`) | 20,888 / 1,211 |
 | Ingresos locales | `/api/ingresos-locales` | — |
@@ -80,7 +81,7 @@ BLIS/
 | Roles | `/api/roles` | 0 (auth pendiente) |
 | Perfiles | `/api/perfiles` | 0 (auth pendiente) |
 | Agrocalidad | `/api/agrocalidad` (`agrocalidad_requests`/`agrocalidad_requirements`) | 44 / 196 — clon de la app externa "Agrocalidad Consulta"; el scraping real sigue en GitHub Actions del repo `freddyerazo/AgrocalidadDartis`, disparado desde BLIS vía `GITHUB_TOKEN`/`GITHUB_REPO` (pendiente de configurar en `.env`) |
-| Inventario LAG | `/api/inventario-lag` | sin BD propia — proxy en vivo sobre las APIs del WMS de Logiztik Alliance Group (bodega Miami); clon de "InventarioApiLag". Requiere `LAG_ENV`/`LAG_CUSTOMER_CODE`/`LAG_TOKEN`/`LAG_SALES_API_KEY` en `.env` (pendiente de configurar) |
+| Inventario LAG | `/api/inventario-lag` | sin BD propia — proxy en vivo sobre las APIs del WMS de Logiztik Alliance Group (bodega Miami); clon de "InventarioApiLag". Requiere `LAG_ENV`/`LAG_CUSTOMER_CODE`/`LAG_TOKEN`/`LAG_SALES_API_KEY` en `.env` (pendiente de configurar). Incluye "Posteo de Inventario" (`POST /posteo-inventario`, endpoint legacy `PlaceOrder/ordernew`) — **sin ambiente de pruebas**, cada llamada crea una orden real; requiere `LAG_PLACE_ORDER_TOKEN` (distinto de `LAG_TOKEN`) |
 | Torre de Control | `/api/torre-control` (`courier_reconciliation`, `courier_ups_manifest`, `courier_fedex_envios`, `courier_agency_mapping`) | conciliación de cajas: `dartis_ventas` agrupada por `id_pedido` vs manifiestos UPS/FedEx vs tracking en vivo vs entregas de agencias locales; clon de "REPORTEUPSFEDEX". Scheduler propio (`apscheduler`, `REFRESH_SECONDS`). Requiere `UPS_CLIENT_ID/SECRET`, `FEDEX_CLIENT_ID/SECRET`, `DUOPLANE_API_KEY/PASSWORD` en `.env` para datos reales (por defecto `DEMO_MODE=true`) |
 | Auditoría de Etiquetas | `/api/auditoria-etiquetas` (`special_dispatches`, `special_dispatch_audits`, `telegram_conversation_state`) | despachos de `customers.es_cliente_especial` generados directo desde `dartis_ventas` (sin subir Excel), auditados vía bot de Telegram; clon de "Auditoria_LEsp". Requiere `TELEGRAM_BOT_TOKEN`/`TELEGRAM_WEBHOOK_SECRET`/`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`/`GOOGLE_DRIVE_FOLDER_ID` en `.env`. **El webhook real de Telegram todavía no se registró** — Apps Script del proyecto original sigue operando hasta que se confirme el corte |
 
@@ -116,7 +117,8 @@ Peso Facturable  = MAX(Peso Real, Peso Volumétrico)
 - Dos entornos virtuales locales (`.venv`, `.venv-1`) — ambos ignorados en git, revisar cuál es el vigente
 - 4 módulos nuevos (Agrocalidad, Inventario LAG, Torre de Control, Auditoría de Etiquetas) corren sin credenciales reales configuradas en `.env`/Render — ver la tabla de rutas arriba para la lista exacta por módulo
 - Fase 3b (bot RPA de tracking en Dartis) y el corte del webhook de Telegram a producción (Fase 4) quedaron deliberadamente pendientes
-- Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — las 5 se sincronizaron en esta ronda (agosto 2026), pero mantenerlas al día requiere disciplina en cada cambio futuro
+- Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — sincronizada por última vez el 2026-08-21 (incluye Posteo de Inventario/`truck_company`), pero mantenerlas al día requiere disciplina en cada cambio futuro
+- **Seguridad pendiente**: el token real de `LAG_PLACE_ORDER_TOKEN` fue pegado en texto plano durante la sesión donde se construyó Posteo de Inventario — rotarlo con Logiztik Alliance Group antes de dar por confiable ese flujo en producción
 
 ## Convenciones de código
 - Ver `rules/coding-style.md`

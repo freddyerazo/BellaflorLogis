@@ -1,5 +1,5 @@
 # BLIS — Bellaflor Logistics Intelligence System
-## Documentación Técnica Completa con Código · v2.0 · Agosto 2026
+## Documentación Técnica Completa con Código · v2.1 · Agosto 2026
 
 ---
 
@@ -143,6 +143,11 @@ LAG_TOKEN=
 LAG_SALES_API_KEY=
 LAG_TIMEOUT=30
 
+# Posteo de Inventario (dentro de Inventario LAG) — endpoint legacy PlaceOrder,
+# host y token distintos al resto de LAG, SIN ambiente de pruebas (solo produccion)
+LAG_PLACE_ORDER_BASE_URL=https://cloudus.logiztikalliance.com:5005/external/api
+LAG_PLACE_ORDER_TOKEN=
+
 # Torre de Control (Fase 3)
 DEMO_MODE=true
 REFRESH_SECONDS=300
@@ -173,6 +178,7 @@ GOOGLE_DRIVE_FOLDER_ID=
 | `GITHUB_TOKEN` | Agrocalidad | PAT fine-grained, permiso `actions:write` sobre `AgrocalidadDartis` |
 | `GITHUB_REPO` | Agrocalidad | `owner/repo` del proyecto original (default `freddyerazo/AgrocalidadDartis`) |
 | `LAG_ENV`, `LAG_CUSTOMER_CODE`, `LAG_TOKEN`, `LAG_SALES_API_KEY` | Inventario LAG | Credenciales de Logiztik Alliance Group |
+| `LAG_PLACE_ORDER_BASE_URL`, `LAG_PLACE_ORDER_TOKEN` | Posteo de Inventario | Endpoint legacy `PlaceOrder/ordernew`, host y token propios, **sin ambiente de pruebas** — cualquier posteo va directo a producción de LAG |
 | `DEMO_MODE` | Torre de Control | `true` = tracking simulado, sin credenciales de courier |
 | `REFRESH_SECONDS` | Torre de Control | Intervalo del scheduler (default 300s) |
 | `UPS_CLIENT_ID/SECRET`, `FEDEX_CLIENT_ID/SECRET` | Torre de Control | OAuth2 client-credentials de cada courier |
@@ -261,7 +267,7 @@ requests
 
 ### main.py
 
-Registra los 21 routers y arranca el scheduler de Torre de Control en el evento `startup`.
+Registra los 24 routers y arranca el scheduler de Torre de Control en el evento `startup`.
 
 `backend/app/main.py`
 ```python
@@ -296,6 +302,7 @@ from app.api.agrocalidad import router as agrocalidad_router
 from app.api.inventario_lag import router as inventario_lag_router
 from app.api.torre_control import router as torre_control_router
 from app.api.auditoria_etiquetas import router as auditoria_etiquetas_router
+from app.api.truck_company import router as truck_company_router
 from app.services import courier_reconciliation
 
 app = FastAPI(
@@ -333,6 +340,7 @@ app.include_router(agrocalidad_router, prefix="/api")
 app.include_router(inventario_lag_router, prefix="/api")
 app.include_router(torre_control_router, prefix="/api")
 app.include_router(auditoria_etiquetas_router, prefix="/api")
+app.include_router(truck_company_router, prefix="/api")
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -1960,6 +1968,16 @@ def _disparar_workflow(request_id: str):
 
 Clon de **InventarioApiLag**. Proxy stateless sobre las APIs del WMS de Logiztik Alliance Group (bodega de Bellaflor en Miami) — sin tabla propia, todo se consulta en vivo. A diferencia del proyecto original no valida un `X-API-Key` propio: ese proyecto exponía el backend a un frontend externo en GitHub Pages; aquí el frontend lo sirve el propio backend de BLIS, igual que el resto de módulos.
 
+**Pestaña "Posteo de Inventario" (agosto 2026)** — nueva sub-pestaña que llama al endpoint legacy `PlaceOrder/ordernew` de LAG (host y token propios, `cloudus.logiztikalliance.com:5005`, **sin ambiente de pruebas**: cualquier posteo desde BLIS impacta producción real de LAG de inmediato). Los 3 campos del formulario están conectados a datos reales de BLIS/LAG en vez de texto libre, cada uno vía el componente reutilizable `crearComboBuscable` (combo con buscador, en `inventario-lag.js`):
+
+| Campo | Fuente | Detalle |
+|---|---|---|
+| Cliente | `GET /api/customers` | filtrado a solo los que tienen `customer_code_lag`; el combo muestra el nombre, el valor real enviado a LAG es el código |
+| Carrier | `GET /api/truck-companies` | nueva tabla `truck_company` (ver abajo), el valor enviado es `id_logistic_carrier` |
+| Box ID (por caja) | `GET /api/inventario-lag/pieces` | piezas disponibles en bodega Miami, consultadas en vivo a LAG y cacheadas una sola vez por formulario (todas las filas de caja comparten la misma promesa) para no repetir la llamada |
+
+Antes de enviar, el formulario pide confirmación (`window.confirm`) mostrando cliente, carrier, fecha y cajas — dado que no hay sandbox, esta es la única red de seguridad antes de tocar producción de LAG.
+
 ### schemas/inventario_lag.py
 
 `backend/app/schemas/inventario_lag.py`
@@ -2098,9 +2116,31 @@ class SalesOrderIn(BaseModel):
 
 class SalesOrderCancelIn(BaseModel):
     idOrder: int
+
+
+# ---------------------------------------------------------------------------
+# Posteo de inventario (endpoint legacy PlaceOrder/ordernew)
+# ---------------------------------------------------------------------------
+
+
+class PlaceOrderBox(BaseModel):
+    boxId: str = Field(max_length=16)
+    stemPrice: Optional[float] = None
+
+
+class PlaceOrderIn(BaseModel):
+    customerId: str = Field(max_length=32)
+    carrierId: str = Field(max_length=16)
+    miamiShipDate: str = Field(description="Formato MM/dd/yyyy")
+    printWmsLabels: bool = True
+    boxIds: list[PlaceOrderBox] = Field(min_length=1)
+
+
+class PlaceOrderResult(BaseModel):
+    raw_response: str
 ```
 
-### services/lag_client.py — OAuth2 + Track API de LAG
+### services/lag_client.py — OAuth2 + Track API de LAG + place_order (Posteo de Inventario)
 
 `backend/app/services/lag_client.py`
 ```python
@@ -2133,6 +2173,14 @@ LAG_SALES_BASE_URL = (
     if LAG_ENV == "prod"
     else "https://sandsalesapi1.logiztikalliance.com"
 )
+
+# Endpoint legacy "PlaceOrder/ordernew" (posteo de inventario). A diferencia
+# del resto de APIs de LAG, no tiene ambiente de pruebas: solo existe este
+# host de produccion, y token propio (distinto de LAG_TOKEN).
+LAG_PLACE_ORDER_BASE_URL = os.getenv(
+    "LAG_PLACE_ORDER_BASE_URL", "https://cloudus.logiztikalliance.com:5005/external/api"
+)
+LAG_PLACE_ORDER_TOKEN = os.getenv("LAG_PLACE_ORDER_TOKEN", "")
 
 
 async def _request(method: str, url: str, **kwargs) -> httpx.Response:
@@ -2260,6 +2308,37 @@ async def cancel_sales_order(id_order: int):
         headers={"apiKey": LAG_SALES_API_KEY},
     )
     return _json(response)
+
+
+async def place_order(customer_id: str, carrier_id: str, miami_ship_date: str,
+                       boxes: list[dict], print_wms_labels: bool = True) -> str:
+    """Posteo de inventario via el endpoint legacy PlaceOrder/ordernew.
+
+    boxes: [{"box_id": str, "stem_price": float | None}, ...]. Sin
+    documentacion oficial del formato de respuesta (texto/XML/JSON segun el
+    caso) -- se devuelve el texto crudo tal cual, sin asumir su forma.
+    """
+    if not LAG_PLACE_ORDER_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="LAG_PLACE_ORDER_TOKEN no configurado en el servidor.",
+        )
+
+    params = {
+        "token": LAG_PLACE_ORDER_TOKEN,
+        "customerId": customer_id,
+        "carrierId": carrier_id,
+        "miamiShipDate": miami_ship_date,
+        "printWmsLabels": "1" if print_wms_labels else "0",
+    }
+    for i, box in enumerate(boxes):
+        params[f"boxIds[{i}]"] = box["box_id"]
+        if box.get("stem_price") is not None:
+            params[f"stemPrice[{i}]"] = str(box["stem_price"])
+
+    url = f"{LAG_PLACE_ORDER_BASE_URL}/PlaceOrder/ordernew"
+    response = await _request("GET", url, params=params)
+    return response.text
 ```
 
 ### services/lag_xml_utils.py — construcción/parseo del XML de órdenes de compra
@@ -2482,6 +2561,8 @@ from app.schemas.inventario_lag import (
     InventoryResponse,
     PieceInInventory,
     PiezaDetalle,
+    PlaceOrderIn,
+    PlaceOrderResult,
     PurchaseOrderIn,
     PurchaseOrderResult,
     RackSummary,
@@ -2657,6 +2738,115 @@ async def crear_orden_venta(order: SalesOrderIn):
 @router.post("/sales-orders/cancel")
 async def cancelar_orden_venta(payload: SalesOrderCancelIn):
     return await lag_client.cancel_sales_order(payload.idOrder)
+
+
+@router.post("/posteo-inventario", response_model=PlaceOrderResult)
+async def posteo_inventario(payload: PlaceOrderIn) -> PlaceOrderResult:
+    """Endpoint legacy PlaceOrder/ordernew de LAG. Sin ambiente de pruebas:
+    cada llamada crea una orden real en el WMS de produccion."""
+    boxes = [{"box_id": b.boxId, "stem_price": b.stemPrice} for b in payload.boxIds]
+    raw = await lag_client.place_order(
+        customer_id=payload.customerId,
+        carrier_id=payload.carrierId,
+        miami_ship_date=payload.miamiShipDate,
+        boxes=boxes,
+        print_wms_labels=payload.printWmsLabels,
+    )
+    return PlaceOrderResult(raw_response=raw)
+```
+
+### schemas/truck_company.py — catálogo de carriers de Miami (Posteo de Inventario)
+
+`backend/app/schemas/truck_company.py`
+```python
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class TruckCompanyCreate(BaseModel):
+    carrier_name: str
+    sub_carrier_name: Optional[str] = None
+    country: Optional[str] = None
+    id_logistic_carrier: str
+
+
+class TruckCompanyUpdate(BaseModel):
+    carrier_name: Optional[str] = None
+    sub_carrier_name: Optional[str] = None
+    country: Optional[str] = None
+    id_logistic_carrier: Optional[str] = None
+    active: Optional[bool] = None
+```
+
+### api/truck_company.py — CRUD estándar, seed de 139 carriers reales desde 'ID clientes.xlsx' hoja Listado de Carriers-Miami
+
+`backend/app/api/truck_company.py`
+```python
+from fastapi import APIRouter, HTTPException
+from sqlalchemy import text
+
+from app.database.connection import engine
+from app.database.helpers import build_set_clause, jsonable_params
+from app.schemas.truck_company import TruckCompanyCreate, TruckCompanyUpdate
+
+router = APIRouter()
+
+
+@router.get("/truck-companies")
+def list_truck_companies():
+    with engine.connect() as conn:
+        return conn.execute(
+            text("SELECT * FROM truck_company WHERE active = true ORDER BY carrier_name, sub_carrier_name")
+        ).mappings().all()
+
+
+@router.post("/truck-companies", status_code=201)
+def create_truck_company(payload: TruckCompanyCreate):
+    with engine.begin() as conn:
+        return conn.execute(
+            text(
+                """
+                INSERT INTO truck_company (carrier_name, sub_carrier_name, country, id_logistic_carrier)
+                VALUES (:carrier_name, :sub_carrier_name, :country, :id_logistic_carrier)
+                RETURNING *
+                """
+            ),
+            payload.model_dump(),
+        ).mappings().first()
+
+
+@router.put("/truck-companies/{truck_company_id}")
+def update_truck_company(truck_company_id: str, payload: TruckCompanyUpdate):
+    data = jsonable_params(payload.model_dump(exclude_unset=True))
+    if not data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    set_clause = build_set_clause(data)
+    data["id"] = truck_company_id
+
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(f"UPDATE truck_company SET {set_clause}, updated_at = now() WHERE id = :id RETURNING *"),
+            data,
+        ).mappings().first()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Truck company not found")
+    return row
+
+
+@router.delete("/truck-companies/{truck_company_id}")
+def delete_truck_company(truck_company_id: str):
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("UPDATE truck_company SET active = false, updated_at = now() WHERE id = :id RETURNING *"),
+            {"id": truck_company_id},
+        ).mappings().first()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Truck company not found")
+    return row
 ```
 
 ---
@@ -5635,6 +5825,7 @@ initCatalogo().then(cargarHistorial);
       <button class="subtab" data-tab="envios">Envíos</button>
       <button class="subtab" data-tab="compras">Órdenes de compra</button>
       <button class="subtab" data-tab="ventas">Órdenes de venta</button>
+      <button class="subtab" data-tab="posteo">Posteo de Inventario</button>
     </nav>
 
     <!-- INVENTARIO -->
@@ -5861,6 +6052,51 @@ initCatalogo().then(cargarHistorial);
         <div id="res-cancelar" class="resultado"></div>
       </div>
     </section>
+
+    <section id="panel-posteo" class="subpanel">
+      <div class="import-card">
+        <h3>Posteo de Inventario</h3>
+        <div class="import-rule" style="background: #fef2f2; border-color: #fca5a5; color: #b91c1c;">
+          <i class="ph ph-warning"></i>
+          <span><strong>Sin ambiente de pruebas.</strong> Este endpoint (`PlaceOrder/ordernew`) solo existe en producción de LAG — cada envío crea una orden real en el WMS. Verifica los datos antes de enviar.</span>
+        </div>
+        <form id="form-posteo">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Cliente *</label>
+              <div class="combo-buscable" id="posteo-customer-combo">
+                <input type="text" id="posteo-customer-search" placeholder="Cargando clientes..." autocomplete="off" disabled />
+                <input type="hidden" name="customerId" id="posteo-customer-value" />
+                <div class="combo-opciones" id="posteo-customer-opciones"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Carrier *</label>
+              <div class="combo-buscable" id="posteo-carrier-combo">
+                <input type="text" id="posteo-carrier-search" placeholder="Cargando carriers..." autocomplete="off" disabled />
+                <input type="hidden" name="carrierId" id="posteo-carrier-value" />
+                <div class="combo-opciones" id="posteo-carrier-opciones"></div>
+              </div>
+            </div>
+            <div class="form-group"><label>Miami Ship Date *</label><input type="date" name="miamiShipDate" required /></div>
+            <div class="form-group">
+              <label>Imprimir etiquetas WMS</label>
+              <select name="printWmsLabels">
+                <option value="true" selected>Sí</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+          </div>
+          <fieldset style="border: none; padding: 0; margin: 0 0 1rem;">
+            <legend style="font-weight: 600; margin-bottom: .5rem;">Cajas</legend>
+            <div id="items-posteo"></div>
+            <button type="button" id="btn-add-box-posteo" class="btn btn-secondary">+ Agregar caja</button>
+          </fieldset>
+          <button type="submit" class="btn btn-danger">Postear inventario en LAG</button>
+        </form>
+        <div id="res-posteo" class="resultado"></div>
+      </div>
+    </section>
   </main>
 
   <script type="module" src="/js/layout.js"></script>
@@ -5884,6 +6120,7 @@ const api = {
   crearOrdenVenta: (payload) => apiPost("/inventario-lag/sales-orders", payload),
   cancelarOrdenVenta: (idOrder) =>
     apiPost("/inventario-lag/sales-orders/cancel", { idOrder: Number(idOrder) }),
+  postearInventario: (payload) => apiPost("/inventario-lag/posteo-inventario", payload),
 };
 
 // ---------- Utilidades ----------
@@ -6502,6 +6739,236 @@ $("#form-cancelar").addEventListener("submit", (e) => {
     }
   });
 });
+
+// ---------- Posteo de Inventario (PlaceOrder/ordernew, sin ambiente de pruebas) ----------
+
+const normalizarBusqueda = (s) =>
+  (s || "").toString().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+const escapeHtml = (s) =>
+  (s || "").toString().replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Combo buscable generico (input de texto + lista filtrada en vivo,
+// navegable con flechas/Enter) para catalogos largos donde un <select>
+// plano no se puede filtrar. Devuelve el estado (con .seleccionado) para
+// poder leerlo despues, p.ej. al armar el mensaje de confirmacion.
+function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, textoSeleccionado, etiquetaCarga }) {
+  const estado = { items: [], seleccionado: null, resaltado: -1 };
+  const input = document.getElementById(`${prefix}-search`);
+  const hidden = document.getElementById(`${prefix}-value`);
+  const cont = document.getElementById(`${prefix}-opciones`);
+  const combo = document.getElementById(`${prefix}-combo`);
+
+  async function cargarDatos() {
+    try {
+      const items = await cargar();
+      estado.items = filtro(items);
+      input.disabled = false;
+      input.placeholder = `Escribe para buscar (${estado.items.length} ${etiquetaCarga})...`;
+    } catch (err) {
+      input.placeholder = `Error cargando ${etiquetaCarga}: ${err.message}`;
+    }
+  }
+
+  function render(texto) {
+    const norm = normalizarBusqueda(texto);
+    const coincidencias = estado.items
+      .filter((it) => !norm || normalizarBusqueda(textoOpcion(it)).includes(norm))
+      .slice(0, 50);
+    estado.resaltado = -1;
+    cont.innerHTML = coincidencias.length
+      ? coincidencias.map((it, i) => `<div class="combo-opcion" data-index="${i}">${escapeHtml(textoOpcion(it))}</div>`).join("")
+      : `<div class="combo-vacio">Sin coincidencias</div>`;
+    cont._coincidencias = coincidencias;
+    cont.classList.add("abierto");
+  }
+
+  function seleccionar(item) {
+    estado.seleccionado = item;
+    input.value = textoSeleccionado(item);
+    hidden.value = valorOpcion(item);
+    cont.classList.remove("abierto");
+  }
+
+  input.addEventListener("input", () => {
+    estado.seleccionado = null;
+    hidden.value = "";
+    render(input.value);
+  });
+  input.addEventListener("focus", () => render(input.value));
+  cont.addEventListener("click", (e) => {
+    const fila = e.target.closest(".combo-opcion");
+    if (!fila) return;
+    const item = cont._coincidencias[Number(fila.dataset.index)];
+    if (item) seleccionar(item);
+  });
+  input.addEventListener("keydown", (e) => {
+    const filas = cont.querySelectorAll(".combo-opcion");
+    if (!filas.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      estado.resaltado = Math.min(estado.resaltado + 1, filas.length - 1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      estado.resaltado = Math.max(estado.resaltado - 1, 0);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (estado.resaltado >= 0) {
+        const item = cont._coincidencias[estado.resaltado];
+        if (item) seleccionar(item);
+      }
+      return;
+    } else {
+      return;
+    }
+    filas.forEach((f, i) => f.classList.toggle("resaltada", i === estado.resaltado));
+  });
+  document.addEventListener("click", (e) => {
+    if (!combo.contains(e.target)) cont.classList.remove("abierto");
+  });
+
+  cargarDatos();
+  return estado;
+}
+
+// El customerId de LAG viene de customers.customer_code_lag (verificado:
+// siempre igual a customer_code cuando existe, 1,409 de 1,703 clientes lo
+// tienen poblado). Solo se listan esos — postear con un customerId
+// inventado fallaria contra LAG.
+const comboCliente = crearComboBuscable({
+  prefix: "posteo-customer",
+  cargar: () => apiGet("/customers"),
+  filtro: (clientes) => clientes.filter((c) => c.customer_code_lag).sort((a, b) => a.customer_name.localeCompare(b.customer_name)),
+  textoOpcion: (c) => `${c.customer_name} (${c.customer_code_lag})`,
+  textoSeleccionado: (c) => `${c.customer_name} (${c.customer_code_lag})`,
+  valorOpcion: (c) => c.customer_code_lag,
+  etiquetaCarga: "clientes",
+});
+
+// El carrierId viene de truck_company.id_logistic_carrier (catalogo de
+// carriers de Miami, cargado desde "ID clientes.xlsx" hoja
+// "Listado de Carriers-Miami").
+const comboCarrier = crearComboBuscable({
+  prefix: "posteo-carrier",
+  cargar: () => apiGet("/truck-companies"),
+  filtro: (carriers) => carriers,
+  textoOpcion: (c) => c.sub_carrier_name && c.sub_carrier_name !== c.carrier_name
+    ? `${c.carrier_name} - ${c.sub_carrier_name} (${c.id_logistic_carrier})`
+    : `${c.carrier_name} (${c.id_logistic_carrier})`,
+  textoSeleccionado: (c) => `${c.carrier_name} (${c.id_logistic_carrier})`,
+  valorOpcion: (c) => c.id_logistic_carrier,
+  etiquetaCarga: "carriers",
+});
+
+// Box ID = barcode de una pieza disponible en bodega (misma fuente que la
+// pestana "Inventario", GET /inventario-lag/pieces). Se pide una sola vez
+// y se comparte entre todas las filas de caja (cada fila tiene su propio
+// combo, pero la lista de piezas es la misma).
+let piezasDisponiblesPromise = null;
+function obtenerPiezasDisponibles() {
+  if (!piezasDisponiblesPromise) {
+    piezasDisponiblesPromise = apiGet("/inventario-lag/pieces").then((r) => r.piezas || []);
+  }
+  return piezasDisponiblesPromise;
+}
+
+let contadorCajaPosteo = 0;
+
+function plantillaCajaPosteo() {
+  const idx = contadorCajaPosteo++;
+  const prefix = `posteo-box-${idx}`;
+  const div = document.createElement("div");
+  div.className = "item-row";
+  div.innerHTML = `
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Box ID (pieza en bodega) *</label>
+        <div class="combo-buscable" id="${prefix}-combo">
+          <input type="text" id="${prefix}-search" placeholder="Cargando piezas..." autocomplete="off" disabled />
+          <input type="hidden" name="boxId" id="${prefix}-value" />
+          <div class="combo-opciones" id="${prefix}-opciones"></div>
+        </div>
+      </div>
+      <div class="form-group"><label>Stem Price</label><input type="number" step="0.01" name="stemPrice" min="0" /></div>
+    </div>
+    <button type="button" class="btn btn-secondary btn-quitar">Quitar</button>`;
+  div.querySelector(".btn-quitar").addEventListener("click", () => div.remove());
+
+  crearComboBuscable({
+    prefix,
+    cargar: obtenerPiezasDisponibles,
+    filtro: (piezas) => piezas,
+    textoOpcion: (p) => `${p.barcode} (Rack: ${p.rack})`,
+    textoSeleccionado: (p) => `${p.barcode} (Rack: ${p.rack})`,
+    valorOpcion: (p) => p.barcode,
+    etiquetaCarga: "piezas",
+  });
+
+  return div;
+}
+
+$("#btn-add-box-posteo").addEventListener("click", () => $("#items-posteo").appendChild(plantillaCajaPosteo()));
+$("#items-posteo").appendChild(plantillaCajaPosteo());
+
+// LAG espera miamiShipDate en MM/dd/yyyy; el input type=date entrega yyyy-MM-dd.
+$("#form-posteo").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const form = e.target;
+
+  if (!form.elements.customerId.value) {
+    mostrarError("#res-posteo", "Selecciona un cliente de la lista.");
+    return;
+  }
+  if (!form.elements.carrierId.value) {
+    mostrarError("#res-posteo", "Selecciona un carrier de la lista.");
+    return;
+  }
+
+  const cajas = [...form.querySelectorAll("#items-posteo .item-row")];
+  if (cajas.length === 0) {
+    mostrarError("#res-posteo", "Agregue al menos una caja.");
+    return;
+  }
+
+  const boxIdsVacios = cajas.some((caja) => !caja.querySelector('[name="boxId"]').value.trim());
+  if (boxIdsVacios) {
+    mostrarError("#res-posteo", "Selecciona un Box ID (pieza en bodega) para cada caja.");
+    return;
+  }
+
+  const boxIds = cajas.map((caja) => {
+    const box = { boxId: caja.querySelector('[name="boxId"]').value.trim() };
+    const stemPrice = caja.querySelector('[name="stemPrice"]').value.trim();
+    if (stemPrice !== "") box.stemPrice = Number(stemPrice);
+    return box;
+  });
+
+  const payload = {
+    customerId: form.elements.customerId.value.trim(),
+    carrierId: form.elements.carrierId.value.trim(),
+    miamiShipDate: aFormatoLag(form.elements.miamiShipDate.value),
+    printWmsLabels: form.elements.printWmsLabels.value === "true",
+    boxIds,
+  };
+
+  const nombreCliente = comboCliente.seleccionado
+    ? `${comboCliente.seleccionado.customer_name} (${payload.customerId})`
+    : payload.customerId;
+  const nombreCarrier = comboCarrier.seleccionado
+    ? `${comboCarrier.seleccionado.carrier_name} (${payload.carrierId})`
+    : payload.carrierId;
+  const confirmado = window.confirm(
+    `Esto crea una orden REAL en el WMS de LAG (sin ambiente de pruebas).\n\n` +
+    `Cliente: ${nombreCliente}\nCarrier: ${nombreCarrier}\nFecha: ${payload.miamiShipDate}\n` +
+    `Cajas: ${boxIds.map((b) => b.boxId).join(", ")}\n\n¿Confirmas el envío?`
+  );
+  if (!confirmado) return;
+
+  ejecutar(form.querySelector('button[type="submit"]'), "#res-posteo", async () => {
+    const res = await api.postearInventario(payload);
+    mostrarMensaje("#res-posteo", `Respuesta de LAG:\n${res.raw_response}`);
+  });
+});
 ```
 
 ### pages/torre-control.html + .js (Fase 3)
@@ -7021,8 +7488,9 @@ UNIQUE (id_pedido, guia_madre, guia_hija, tipo_caja, especie)
 | `special_dispatches` | 73 | Auditoría de Etiquetas | despachos de clientes especiales generados desde `dartis_ventas` |
 | `special_dispatch_audits` | 0 | Auditoría de Etiquetas | auditorías registradas por el bot de Telegram |
 | `telegram_conversation_state` | 0 | Auditoría de Etiquetas | estado de conversación del bot (reemplaza CacheService de Apps Script) |
+| `truck_company` | 139 | Inventario LAG (Posteo) | catálogo de carriers de Miami, sembrado desde `ID clientes.xlsx` hoja "Listado de Carriers-Miami"; `id_logistic_carrier` es el valor real que se envía a LAG |
 
-Inventario LAG (Fase 2) no tiene tablas propias — es 100% proxy en vivo sobre las APIs de Logiztik Alliance Group.
+Inventario LAG (Fase 2) en sí no tiene tabla propia — es 100% proxy en vivo sobre las APIs de Logiztik Alliance Group. `truck_company` es la única excepción, agregada para la sub-pestaña "Posteo de Inventario".
 
 ---
 
@@ -7050,6 +7518,7 @@ Todas en `database/migrations/`, aplicadas directo en Supabase (no vía Alembic 
 | 017 | `courier_reconciliation.sql` | Tablas de Torre de Control + semilla de `courier_agency_mapping` (90 filas de confianza alta) |
 | 018 | `customers_cliente_especial.sql` | Agrega `es_cliente_especial` a `customers` (reemplaza tabla externa de Auditoria_LEsp) |
 | 019 | `auditoria_etiquetas.sql` | Tablas de Auditoría de Etiquetas (`special_dispatches`, `special_dispatch_audits`, `telegram_conversation_state`) |
+| 020 | `truck_company.sql` | Tabla `truck_company` (catálogo de carriers de Miami) + seed de 139 filas reales desde `ID clientes.xlsx`, para el campo Carrier de "Posteo de Inventario" |
 
 ---
 
@@ -7177,6 +7646,12 @@ Esta corrección fue la base que permitió que las Fases 1-4 (especialmente Torr
 ### Bug menor: columna mal escrita
 
 `special_dispatches.py` tenía `ORDER BY poscosecha` en dos consultas — la columna real es `postcosecha`. Encontrado y corregido en pruebas antes de desplegar.
+
+### Riesgo operativo: Posteo de Inventario no tiene ambiente de pruebas
+
+El endpoint legacy de LAG usado por "Posteo de Inventario" (`PlaceOrder/ordernew`, host `cloudus.logiztikalliance.com:5005`) **no tiene sandbox** — el token configurado en `LAG_PLACE_ORDER_TOKEN` es de producción real, sin excepción. Por eso el formulario en `inventario-lag.js` exige confirmación explícita (`window.confirm`) antes de cada envío, mostrando cliente/carrier/fecha/cajas.
+
+**Pendiente de seguridad**: el token real (`LoMi0-G6pR6sr8aFd`) fue pegado en texto plano durante esta sesión de trabajo — se recomienda **rotarlo** con Logiztik Alliance Group antes de considerar el posteo listo para uso diario, y configurar el nuevo valor únicamente en `backend/.env` / Render → Environment (nunca en el repo).
 
 ### Backend
 
