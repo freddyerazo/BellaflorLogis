@@ -21,6 +21,7 @@
       <button class="subtab" data-tab="envios">Envíos</button>
       <button class="subtab" data-tab="compras">Órdenes de compra</button>
       <button class="subtab" data-tab="ventas">Órdenes de venta</button>
+      <button class="subtab" data-tab="posteo">Posteo de Inventario</button>
     </nav>
 
     <!-- INVENTARIO -->
@@ -245,6 +246,37 @@
           <div class="form-group" style="align-self: end;"><button type="submit" class="btn btn-danger">Cancelar orden</button></div>
         </form>
         <div id="res-cancelar" class="resultado"></div>
+      </div>
+    </section>
+
+    <section id="panel-posteo" class="subpanel">
+      <div class="import-card">
+        <h3>Posteo de Inventario</h3>
+        <div class="import-rule" style="background: #fef2f2; border-color: #fca5a5; color: #b91c1c;">
+          <i class="ph ph-warning"></i>
+          <span><strong>Sin ambiente de pruebas.</strong> Este endpoint (`PlaceOrder/ordernew`) solo existe en producción de LAG — cada envío crea una orden real en el WMS. Verifica los datos antes de enviar.</span>
+        </div>
+        <form id="form-posteo">
+          <div class="form-grid">
+            <div class="form-group"><label>Customer ID *</label><input name="customerId" required maxlength="32" /></div>
+            <div class="form-group"><label>Carrier ID *</label><input name="carrierId" required maxlength="16" placeholder="PIK" /></div>
+            <div class="form-group"><label>Miami Ship Date *</label><input type="date" name="miamiShipDate" required /></div>
+            <div class="form-group">
+              <label>Imprimir etiquetas WMS</label>
+              <select name="printWmsLabels">
+                <option value="true" selected>Sí</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+          </div>
+          <fieldset style="border: none; padding: 0; margin: 0 0 1rem;">
+            <legend style="font-weight: 600; margin-bottom: .5rem;">Cajas</legend>
+            <div id="items-posteo"></div>
+            <button type="button" id="btn-add-box-posteo" class="btn btn-secondary">+ Agregar caja</button>
+          </fieldset>
+          <button type="submit" class="btn btn-danger">Postear inventario en LAG</button>
+        </form>
+        <div id="res-posteo" class="resultado"></div>
       </div>
     </section>
   </main>

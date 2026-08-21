@@ -11,6 +11,7 @@ const api = {
   crearOrdenVenta: (payload) => apiPost("/inventario-lag/sales-orders", payload),
   cancelarOrdenVenta: (idOrder) =>
     apiPost("/inventario-lag/sales-orders/cancel", { idOrder: Number(idOrder) }),
+  postearInventario: (payload) => apiPost("/inventario-lag/posteo-inventario", payload),
 };
 
 // ---------- Utilidades ----------
@@ -627,5 +628,61 @@ $("#form-cancelar").addEventListener("submit", (e) => {
     } else {
       mostrarError("#res-cancelar", detalle);
     }
+  });
+});
+
+// ---------- Posteo de Inventario (PlaceOrder/ordernew, sin ambiente de pruebas) ----------
+function plantillaCajaPosteo() {
+  const div = document.createElement("div");
+  div.className = "item-row";
+  div.innerHTML = `
+    <div class="form-grid">
+      <div class="form-group"><label>Box ID *</label><input name="boxId" required maxlength="16" /></div>
+      <div class="form-group"><label>Stem Price</label><input type="number" step="0.01" name="stemPrice" min="0" /></div>
+    </div>
+    <button type="button" class="btn btn-secondary btn-quitar">Quitar</button>`;
+  div.querySelector(".btn-quitar").addEventListener("click", () => div.remove());
+  return div;
+}
+
+$("#btn-add-box-posteo").addEventListener("click", () => $("#items-posteo").appendChild(plantillaCajaPosteo()));
+$("#items-posteo").appendChild(plantillaCajaPosteo());
+
+// LAG espera miamiShipDate en MM/dd/yyyy; el input type=date entrega yyyy-MM-dd.
+$("#form-posteo").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const form = e.target;
+
+  const cajas = [...form.querySelectorAll("#items-posteo .item-row")];
+  if (cajas.length === 0) {
+    mostrarError("#res-posteo", "Agregue al menos una caja.");
+    return;
+  }
+
+  const boxIds = cajas.map((caja) => {
+    const box = { boxId: caja.querySelector('[name="boxId"]').value.trim() };
+    const stemPrice = caja.querySelector('[name="stemPrice"]').value.trim();
+    if (stemPrice !== "") box.stemPrice = Number(stemPrice);
+    return box;
+  });
+
+  const payload = {
+    customerId: form.elements.customerId.value.trim(),
+    carrierId: form.elements.carrierId.value.trim(),
+    miamiShipDate: aFormatoLag(form.elements.miamiShipDate.value),
+    printWmsLabels: form.elements.printWmsLabels.value === "true",
+    boxIds,
+  };
+
+  const confirmado = window.confirm(
+    `Esto crea una orden REAL en el WMS de LAG (sin ambiente de pruebas).\n\n` +
+    `Customer: ${payload.customerId}\nCarrier: ${payload.carrierId}\nFecha: ${payload.miamiShipDate}\n` +
+    `Cajas: ${boxIds.map((b) => b.boxId).join(", ")}\n\n¿Confirmas el envío?`
+  );
+  if (!confirmado) return;
+
+  ejecutar(form.querySelector('button[type="submit"]'), "#res-posteo", async () => {
+    const res = await api.postearInventario(payload);
+    mostrarMensaje("#res-posteo", `Respuesta de LAG:\n${res.raw_response}`);
   });
 });

@@ -28,6 +28,14 @@ LAG_SALES_BASE_URL = (
     else "https://sandsalesapi1.logiztikalliance.com"
 )
 
+# Endpoint legacy "PlaceOrder/ordernew" (posteo de inventario). A diferencia
+# del resto de APIs de LAG, no tiene ambiente de pruebas: solo existe este
+# host de produccion, y token propio (distinto de LAG_TOKEN).
+LAG_PLACE_ORDER_BASE_URL = os.getenv(
+    "LAG_PLACE_ORDER_BASE_URL", "https://cloudus.logiztikalliance.com:5005/external/api"
+)
+LAG_PLACE_ORDER_TOKEN = os.getenv("LAG_PLACE_ORDER_TOKEN", "")
+
 
 async def _request(method: str, url: str, **kwargs) -> httpx.Response:
     try:
@@ -154,3 +162,34 @@ async def cancel_sales_order(id_order: int):
         headers={"apiKey": LAG_SALES_API_KEY},
     )
     return _json(response)
+
+
+async def place_order(customer_id: str, carrier_id: str, miami_ship_date: str,
+                       boxes: list[dict], print_wms_labels: bool = True) -> str:
+    """Posteo de inventario via el endpoint legacy PlaceOrder/ordernew.
+
+    boxes: [{"box_id": str, "stem_price": float | None}, ...]. Sin
+    documentacion oficial del formato de respuesta (texto/XML/JSON segun el
+    caso) -- se devuelve el texto crudo tal cual, sin asumir su forma.
+    """
+    if not LAG_PLACE_ORDER_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="LAG_PLACE_ORDER_TOKEN no configurado en el servidor.",
+        )
+
+    params = {
+        "token": LAG_PLACE_ORDER_TOKEN,
+        "customerId": customer_id,
+        "carrierId": carrier_id,
+        "miamiShipDate": miami_ship_date,
+        "printWmsLabels": "1" if print_wms_labels else "0",
+    }
+    for i, box in enumerate(boxes):
+        params[f"boxIds[{i}]"] = box["box_id"]
+        if box.get("stem_price") is not None:
+            params[f"stemPrice[{i}]"] = str(box["stem_price"])
+
+    url = f"{LAG_PLACE_ORDER_BASE_URL}/PlaceOrder/ordernew"
+    response = await _request("GET", url, params=params)
+    return response.text

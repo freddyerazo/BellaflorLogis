@@ -132,3 +132,25 @@ class SalesOrderIn(BaseModel):
 
 class SalesOrderCancelIn(BaseModel):
     idOrder: int
+
+
+# ---------------------------------------------------------------------------
+# Posteo de inventario (endpoint legacy PlaceOrder/ordernew)
+# ---------------------------------------------------------------------------
+
+
+class PlaceOrderBox(BaseModel):
+    boxId: str = Field(max_length=16)
+    stemPrice: Optional[float] = None
+
+
+class PlaceOrderIn(BaseModel):
+    customerId: str = Field(max_length=32)
+    carrierId: str = Field(max_length=16)
+    miamiShipDate: str = Field(description="Formato MM/dd/yyyy")
+    printWmsLabels: bool = True
+    boxIds: list[PlaceOrderBox] = Field(min_length=1)
+
+
+class PlaceOrderResult(BaseModel):
+    raw_response: str

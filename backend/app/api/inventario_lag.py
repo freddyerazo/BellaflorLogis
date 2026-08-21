@@ -22,6 +22,8 @@ from app.schemas.inventario_lag import (
     InventoryResponse,
     PieceInInventory,
     PiezaDetalle,
+    PlaceOrderIn,
+    PlaceOrderResult,
     PurchaseOrderIn,
     PurchaseOrderResult,
     RackSummary,
@@ -197,3 +199,18 @@ async def crear_orden_venta(order: SalesOrderIn):
 @router.post("/sales-orders/cancel")
 async def cancelar_orden_venta(payload: SalesOrderCancelIn):
     return await lag_client.cancel_sales_order(payload.idOrder)
+
+
+@router.post("/posteo-inventario", response_model=PlaceOrderResult)
+async def posteo_inventario(payload: PlaceOrderIn) -> PlaceOrderResult:
+    """Endpoint legacy PlaceOrder/ordernew de LAG. Sin ambiente de pruebas:
+    cada llamada crea una orden real en el WMS de produccion."""
+    boxes = [{"box_id": b.boxId, "stem_price": b.stemPrice} for b in payload.boxIds]
+    raw = await lag_client.place_order(
+        customer_id=payload.customerId,
+        carrier_id=payload.carrierId,
+        miami_ship_date=payload.miamiShipDate,
+        boxes=boxes,
+        print_wms_labels=payload.printWmsLabels,
+    )
+    return PlaceOrderResult(raw_response=raw)
