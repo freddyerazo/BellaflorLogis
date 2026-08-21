@@ -73,6 +73,7 @@ BLIS/
 | Agencias de carga | `/api/cargo-agencies` (`cargo_agencies`) | 34 |
 | Fincas | `/api/farms` (`farms` / `farm_postcosecha`) | 3 / 6 |
 | Tarifas aerolínea | `/api/airline-tariffs` | 8 |
+| Carriers Miami | `/api/truck-companies` (`truck_company`) | 139 — catálogo cargado desde "ID clientes.xlsx" hoja "Listado de Carriers-Miami"; usado como Carrier ID en Posteo de Inventario (Inventario LAG) |
 | Cotización (Costing Engine) | `/api/cotizacion` — wizard que combina especies, variedades, tarifas | funcional, `scenario_*` con datos de prueba |
 | Importación Dartis | `/api/dartis-import` (`dartis_ventas`, `import_species_varieties`) | 20,888 / 1,211 |
 | Ingresos locales | `/api/ingresos-locales` | — |
