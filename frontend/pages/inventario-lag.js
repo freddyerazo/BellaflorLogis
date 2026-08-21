@@ -751,16 +751,50 @@ const comboCarrier = crearComboBuscable({
   etiquetaCarga: "carriers",
 });
 
+// Box ID = barcode de una pieza disponible en bodega (misma fuente que la
+// pestana "Inventario", GET /inventario-lag/pieces). Se pide una sola vez
+// y se comparte entre todas las filas de caja (cada fila tiene su propio
+// combo, pero la lista de piezas es la misma).
+let piezasDisponiblesPromise = null;
+function obtenerPiezasDisponibles() {
+  if (!piezasDisponiblesPromise) {
+    piezasDisponiblesPromise = apiGet("/inventario-lag/pieces").then((r) => r.piezas || []);
+  }
+  return piezasDisponiblesPromise;
+}
+
+let contadorCajaPosteo = 0;
+
 function plantillaCajaPosteo() {
+  const idx = contadorCajaPosteo++;
+  const prefix = `posteo-box-${idx}`;
   const div = document.createElement("div");
   div.className = "item-row";
   div.innerHTML = `
     <div class="form-grid">
-      <div class="form-group"><label>Box ID *</label><input name="boxId" required maxlength="16" /></div>
+      <div class="form-group">
+        <label>Box ID (pieza en bodega) *</label>
+        <div class="combo-buscable" id="${prefix}-combo">
+          <input type="text" id="${prefix}-search" placeholder="Cargando piezas..." autocomplete="off" disabled />
+          <input type="hidden" name="boxId" id="${prefix}-value" />
+          <div class="combo-opciones" id="${prefix}-opciones"></div>
+        </div>
+      </div>
       <div class="form-group"><label>Stem Price</label><input type="number" step="0.01" name="stemPrice" min="0" /></div>
     </div>
     <button type="button" class="btn btn-secondary btn-quitar">Quitar</button>`;
   div.querySelector(".btn-quitar").addEventListener("click", () => div.remove());
+
+  crearComboBuscable({
+    prefix,
+    cargar: obtenerPiezasDisponibles,
+    filtro: (piezas) => piezas,
+    textoOpcion: (p) => `${p.barcode} (Rack: ${p.rack})`,
+    textoSeleccionado: (p) => `${p.barcode} (Rack: ${p.rack})`,
+    valorOpcion: (p) => p.barcode,
+    etiquetaCarga: "piezas",
+  });
+
   return div;
 }
 
@@ -784,6 +818,12 @@ $("#form-posteo").addEventListener("submit", (e) => {
   const cajas = [...form.querySelectorAll("#items-posteo .item-row")];
   if (cajas.length === 0) {
     mostrarError("#res-posteo", "Agregue al menos una caja.");
+    return;
+  }
+
+  const boxIdsVacios = cajas.some((caja) => !caja.querySelector('[name="boxId"]').value.trim());
+  if (boxIdsVacios) {
+    mostrarError("#res-posteo", "Selecciona un Box ID (pieza en bodega) para cada caja.");
     return;
   }
 
