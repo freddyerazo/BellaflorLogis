@@ -633,104 +633,122 @@ $("#form-cancelar").addEventListener("submit", (e) => {
 
 // ---------- Posteo de Inventario (PlaceOrder/ordernew, sin ambiente de pruebas) ----------
 
-// El customerId de LAG viene de customers.customer_code_lag (verificado:
-// siempre igual a customer_code cuando existe, 1,409 de 1,703 clientes lo
-// tienen poblado). Solo se listan esos — postear con un customerId
-// inventado fallaria contra LAG. Combo buscable en vez de <select> plano
-// porque son ~1,400 opciones.
-const comboCliente = {
-  clientes: [],
-  seleccionado: null,
-  resaltado: -1,
-};
-
 const normalizarBusqueda = (s) =>
   (s || "").toString().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-async function cargarClientesPosteo() {
-  const input = document.getElementById("posteo-customer-search");
-  try {
-    const clientes = await apiGet("/customers");
-    comboCliente.clientes = clientes
-      .filter((c) => c.customer_code_lag)
-      .sort((a, b) => a.customer_name.localeCompare(b.customer_name));
-    input.disabled = false;
-    input.placeholder = `Escribe para buscar (${comboCliente.clientes.length} clientes)...`;
-  } catch (err) {
-    input.placeholder = `Error cargando clientes: ${err.message}`;
-  }
-}
-cargarClientesPosteo();
+const escapeHtml = (s) =>
+  (s || "").toString().replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-function renderOpcionesCliente(filtro) {
-  const cont = document.getElementById("posteo-customer-opciones");
-  const norm = normalizarBusqueda(filtro);
-  const coincidencias = comboCliente.clientes
-    .filter((c) => !norm || normalizarBusqueda(c.customer_name).includes(norm) || normalizarBusqueda(c.customer_code_lag).includes(norm))
-    .slice(0, 50);
+// Combo buscable generico (input de texto + lista filtrada en vivo,
+// navegable con flechas/Enter) para catalogos largos donde un <select>
+// plano no se puede filtrar. Devuelve el estado (con .seleccionado) para
+// poder leerlo despues, p.ej. al armar el mensaje de confirmacion.
+function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, textoSeleccionado, etiquetaCarga }) {
+  const estado = { items: [], seleccionado: null, resaltado: -1 };
+  const input = document.getElementById(`${prefix}-search`);
+  const hidden = document.getElementById(`${prefix}-value`);
+  const cont = document.getElementById(`${prefix}-opciones`);
+  const combo = document.getElementById(`${prefix}-combo`);
 
-  comboCliente.resaltado = -1;
-  if (!coincidencias.length) {
-    cont.innerHTML = `<div class="combo-vacio">Sin coincidencias</div>`;
-  } else {
-    cont.innerHTML = coincidencias.map((c, i) =>
-      `<div class="combo-opcion" data-index="${i}" data-code="${c.customer_code_lag}">${c.customer_name} <span style="color:var(--text-muted,#64748b);">(${c.customer_code_lag})</span></div>`
-    ).join("");
-  }
-  cont._coincidencias = coincidencias;
-  cont.classList.add("abierto");
-}
-
-function seleccionarCliente(cliente) {
-  comboCliente.seleccionado = cliente;
-  document.getElementById("posteo-customer-search").value = `${cliente.customer_name} (${cliente.customer_code_lag})`;
-  document.getElementById("posteo-customer-value").value = cliente.customer_code_lag;
-  document.getElementById("posteo-customer-opciones").classList.remove("abierto");
-}
-
-const posteoSearch = document.getElementById("posteo-customer-search");
-posteoSearch.addEventListener("input", () => {
-  comboCliente.seleccionado = null;
-  document.getElementById("posteo-customer-value").value = "";
-  renderOpcionesCliente(posteoSearch.value);
-});
-posteoSearch.addEventListener("focus", () => renderOpcionesCliente(posteoSearch.value));
-
-document.getElementById("posteo-customer-opciones").addEventListener("click", (e) => {
-  const fila = e.target.closest(".combo-opcion");
-  if (!fila) return;
-  const cont = document.getElementById("posteo-customer-opciones");
-  const cliente = cont._coincidencias[Number(fila.dataset.index)];
-  if (cliente) seleccionarCliente(cliente);
-});
-
-posteoSearch.addEventListener("keydown", (e) => {
-  const cont = document.getElementById("posteo-customer-opciones");
-  const filas = cont.querySelectorAll(".combo-opcion");
-  if (!filas.length) return;
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    comboCliente.resaltado = Math.min(comboCliente.resaltado + 1, filas.length - 1);
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    comboCliente.resaltado = Math.max(comboCliente.resaltado - 1, 0);
-  } else if (e.key === "Enter") {
-    e.preventDefault();
-    if (comboCliente.resaltado >= 0) {
-      const cliente = cont._coincidencias[comboCliente.resaltado];
-      if (cliente) seleccionarCliente(cliente);
+  async function cargarDatos() {
+    try {
+      const items = await cargar();
+      estado.items = filtro(items);
+      input.disabled = false;
+      input.placeholder = `Escribe para buscar (${estado.items.length} ${etiquetaCarga})...`;
+    } catch (err) {
+      input.placeholder = `Error cargando ${etiquetaCarga}: ${err.message}`;
     }
-    return;
-  } else {
-    return;
   }
-  filas.forEach((f, i) => f.classList.toggle("resaltada", i === comboCliente.resaltado));
+
+  function render(texto) {
+    const norm = normalizarBusqueda(texto);
+    const coincidencias = estado.items
+      .filter((it) => !norm || normalizarBusqueda(textoOpcion(it)).includes(norm))
+      .slice(0, 50);
+    estado.resaltado = -1;
+    cont.innerHTML = coincidencias.length
+      ? coincidencias.map((it, i) => `<div class="combo-opcion" data-index="${i}">${escapeHtml(textoOpcion(it))}</div>`).join("")
+      : `<div class="combo-vacio">Sin coincidencias</div>`;
+    cont._coincidencias = coincidencias;
+    cont.classList.add("abierto");
+  }
+
+  function seleccionar(item) {
+    estado.seleccionado = item;
+    input.value = textoSeleccionado(item);
+    hidden.value = valorOpcion(item);
+    cont.classList.remove("abierto");
+  }
+
+  input.addEventListener("input", () => {
+    estado.seleccionado = null;
+    hidden.value = "";
+    render(input.value);
+  });
+  input.addEventListener("focus", () => render(input.value));
+  cont.addEventListener("click", (e) => {
+    const fila = e.target.closest(".combo-opcion");
+    if (!fila) return;
+    const item = cont._coincidencias[Number(fila.dataset.index)];
+    if (item) seleccionar(item);
+  });
+  input.addEventListener("keydown", (e) => {
+    const filas = cont.querySelectorAll(".combo-opcion");
+    if (!filas.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      estado.resaltado = Math.min(estado.resaltado + 1, filas.length - 1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      estado.resaltado = Math.max(estado.resaltado - 1, 0);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (estado.resaltado >= 0) {
+        const item = cont._coincidencias[estado.resaltado];
+        if (item) seleccionar(item);
+      }
+      return;
+    } else {
+      return;
+    }
+    filas.forEach((f, i) => f.classList.toggle("resaltada", i === estado.resaltado));
+  });
+  document.addEventListener("click", (e) => {
+    if (!combo.contains(e.target)) cont.classList.remove("abierto");
+  });
+
+  cargarDatos();
+  return estado;
+}
+
+// El customerId de LAG viene de customers.customer_code_lag (verificado:
+// siempre igual a customer_code cuando existe, 1,409 de 1,703 clientes lo
+// tienen poblado). Solo se listan esos — postear con un customerId
+// inventado fallaria contra LAG.
+const comboCliente = crearComboBuscable({
+  prefix: "posteo-customer",
+  cargar: () => apiGet("/customers"),
+  filtro: (clientes) => clientes.filter((c) => c.customer_code_lag).sort((a, b) => a.customer_name.localeCompare(b.customer_name)),
+  textoOpcion: (c) => `${c.customer_name} (${c.customer_code_lag})`,
+  textoSeleccionado: (c) => `${c.customer_name} (${c.customer_code_lag})`,
+  valorOpcion: (c) => c.customer_code_lag,
+  etiquetaCarga: "clientes",
 });
 
-document.addEventListener("click", (e) => {
-  if (!document.getElementById("posteo-customer-combo").contains(e.target)) {
-    document.getElementById("posteo-customer-opciones").classList.remove("abierto");
-  }
+// El carrierId viene de truck_company.id_logistic_carrier (catalogo de
+// carriers de Miami, cargado desde "ID clientes.xlsx" hoja
+// "Listado de Carriers-Miami").
+const comboCarrier = crearComboBuscable({
+  prefix: "posteo-carrier",
+  cargar: () => apiGet("/truck-companies"),
+  filtro: (carriers) => carriers,
+  textoOpcion: (c) => c.sub_carrier_name && c.sub_carrier_name !== c.carrier_name
+    ? `${c.carrier_name} - ${c.sub_carrier_name} (${c.id_logistic_carrier})`
+    : `${c.carrier_name} (${c.id_logistic_carrier})`,
+  textoSeleccionado: (c) => `${c.carrier_name} (${c.id_logistic_carrier})`,
+  valorOpcion: (c) => c.id_logistic_carrier,
+  etiquetaCarga: "carriers",
 });
 
 function plantillaCajaPosteo() {
@@ -758,6 +776,10 @@ $("#form-posteo").addEventListener("submit", (e) => {
     mostrarError("#res-posteo", "Selecciona un cliente de la lista.");
     return;
   }
+  if (!form.elements.carrierId.value) {
+    mostrarError("#res-posteo", "Selecciona un carrier de la lista.");
+    return;
+  }
 
   const cajas = [...form.querySelectorAll("#items-posteo .item-row")];
   if (cajas.length === 0) {
@@ -783,9 +805,12 @@ $("#form-posteo").addEventListener("submit", (e) => {
   const nombreCliente = comboCliente.seleccionado
     ? `${comboCliente.seleccionado.customer_name} (${payload.customerId})`
     : payload.customerId;
+  const nombreCarrier = comboCarrier.seleccionado
+    ? `${comboCarrier.seleccionado.carrier_name} (${payload.carrierId})`
+    : payload.carrierId;
   const confirmado = window.confirm(
     `Esto crea una orden REAL en el WMS de LAG (sin ambiente de pruebas).\n\n` +
-    `Cliente: ${nombreCliente}\nCarrier: ${payload.carrierId}\nFecha: ${payload.miamiShipDate}\n` +
+    `Cliente: ${nombreCliente}\nCarrier: ${nombreCarrier}\nFecha: ${payload.miamiShipDate}\n` +
     `Cajas: ${boxIds.map((b) => b.boxId).join(", ")}\n\n¿Confirmas el envío?`
   );
   if (!confirmado) return;
