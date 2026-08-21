@@ -632,6 +632,32 @@ $("#form-cancelar").addEventListener("submit", (e) => {
 });
 
 // ---------- Posteo de Inventario (PlaceOrder/ordernew, sin ambiente de pruebas) ----------
+
+// El customerId de LAG viene de customers.customer_code_lag (verificado:
+// siempre igual a customer_code cuando existe, 1,409 de 1,703 clientes lo
+// tienen poblado). Solo se listan esos — postear con un customerId
+// inventado fallaria contra LAG.
+async function cargarClientesPosteo() {
+  const select = document.getElementById("posteo-customer");
+  try {
+    const clientes = await apiGet("/customers");
+    const conCodigoLag = clientes
+      .filter((c) => c.customer_code_lag)
+      .sort((a, b) => a.customer_name.localeCompare(b.customer_name));
+
+    select.innerHTML = '<option value="">Selecciona un cliente...</option>';
+    conCodigoLag.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.customer_code_lag;
+      opt.textContent = `${c.customer_name} (${c.customer_code_lag})`;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    select.innerHTML = `<option value="">Error cargando clientes: ${err.message}</option>`;
+  }
+}
+cargarClientesPosteo();
+
 function plantillaCajaPosteo() {
   const div = document.createElement("div");
   div.className = "item-row";
