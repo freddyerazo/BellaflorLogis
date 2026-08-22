@@ -132,8 +132,8 @@ async function consultar() {
   try {
     const lista = await api.exportadores(params);
     ultimaLista = lista || [];
-    renderTabla(ultimaLista);
-    actualizarKpis(ultimaLista);
+    poblarPaises(ultimaLista);
+    aplicarFiltroPais();
   } catch (err) {
     mostrarMensaje(`Error: ${err.message}`, "msg-error");
   } finally {
@@ -141,9 +141,34 @@ async function consultar() {
   }
 }
 
+function poblarPaises(lista) {
+  const select = $("#filtro-pais");
+  const previo = select.value;
+  const paises = [...new Set(lista.map((p) => p.pais).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+  select.innerHTML = `<option value="">Todos</option>`;
+  paises.forEach((pais) => {
+    const opt = document.createElement("option");
+    opt.value = pais;
+    opt.textContent = pais;
+    select.appendChild(opt);
+  });
+  // Conservar el pais elegido si sigue presente en los nuevos resultados.
+  if (previo && paises.includes(previo)) select.value = previo;
+}
+
+function aplicarFiltroPais() {
+  const pais = $("#filtro-pais").value;
+  const visible = pais ? ultimaLista.filter((p) => p.pais === pais) : ultimaLista;
+  renderTabla(visible);
+  actualizarKpis(visible);
+}
+
 function init() {
   cargarCategorias();
   $("#btn-consultar").addEventListener("click", consultar);
+  $("#filtro-pais").addEventListener("change", aplicarFiltroPais);
   [$("#filtro-exportador"), $("#filtro-producto")].forEach((el) =>
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter") consultar();
