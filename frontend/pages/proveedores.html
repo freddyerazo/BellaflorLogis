@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLIS · Proveedores</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-page="proveedores">
+  <div id="sidebar" class="sidebar"></div>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-handshake"></i> Proveedores</h1>
+      <p class="page-subtitle">Catálogo de exportadores (proveedores) de Bellaflor — en vivo desde Logiztik Alliance.</p>
+    </div>
+
+    <div class="import-card">
+      <h3>Buscar proveedores por mercancía</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Categoría de mercancía</label>
+          <select id="filtro-categoria"><option value="">Cargando…</option></select>
+        </div>
+        <div class="form-group">
+          <label>Nombre del proveedor</label>
+          <input id="filtro-exportador" type="search" placeholder="Ej. Alexandra Farms" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>Producto</label>
+          <input id="filtro-producto" type="search" placeholder="Ej. Rosas" autocomplete="off" />
+        </div>
+        <div class="form-group" style="align-self: end; display: flex; gap: .5rem;">
+          <button id="btn-consultar" class="btn btn-primary"><i class="ph ph-magnifying-glass"></i> Consultar</button>
+          <button id="btn-exportar" class="btn btn-secondary" disabled><i class="ph ph-download-simple"></i> Exportar CSV</button>
+        </div>
+      </div>
+
+      <div id="tarjetas" class="card-grid hidden" style="margin-top: 1.25rem;">
+        <div class="summary-card">
+          <span class="summary-card-value" id="kpi-proveedores">0</span>
+          <span class="summary-card-label">Proveedores</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-card-value" id="kpi-paises">0</span>
+          <span class="summary-card-label">Países</span>
+        </div>
+      </div>
+
+      <div id="resultado" class="resultado"></div>
+    </div>
+  </main>
+
+  <script type="module" src="/js/layout.js"></script>
+  <script type="module" src="/pages/proveedores.js"></script>
+</body>
+</html>

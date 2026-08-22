@@ -30,6 +30,7 @@ from app.api.inventario_lag import router as inventario_lag_router
 from app.api.torre_control import router as torre_control_router
 from app.api.auditoria_etiquetas import router as auditoria_etiquetas_router
 from app.api.truck_company import router as truck_company_router
+from app.api.proveedores import router as proveedores_router
 from app.services import courier_reconciliation
 
 app = FastAPI(
@@ -68,6 +69,7 @@ app.include_router(inventario_lag_router, prefix="/api")
 app.include_router(torre_control_router, prefix="/api")
 app.include_router(auditoria_etiquetas_router, prefix="/api")
 app.include_router(truck_company_router, prefix="/api")
+app.include_router(proveedores_router, prefix="/api")
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
