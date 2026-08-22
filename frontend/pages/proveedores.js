@@ -134,35 +134,16 @@ async function consultar() {
     ultimaLista = lista || [];
     renderTabla(ultimaLista);
     actualizarKpis(ultimaLista);
-    $("#btn-exportar").disabled = ultimaLista.length === 0;
   } catch (err) {
     mostrarMensaje(`Error: ${err.message}`, "msg-error");
-    $("#btn-exportar").disabled = true;
   } finally {
     $("#btn-consultar").disabled = false;
   }
 }
 
-function exportarCsv() {
-  if (!ultimaLista.length) return;
-  const cols = ["nombre", "pais", "contacto", "telefono", "productos", "paginaWeb"];
-  const cabecera = ["Proveedor", "Pais", "Contacto", "Telefono", "Productos", "Web"];
-  const escapar = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const filas = ultimaLista.map((p) => cols.map((c) => escapar(p[c])).join(","));
-  const csv = [cabecera.join(","), ...filas].join("\r\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "proveedores.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function init() {
   cargarCategorias();
   $("#btn-consultar").addEventListener("click", consultar);
-  $("#btn-exportar").addEventListener("click", exportarCsv);
   [$("#filtro-exportador"), $("#filtro-producto")].forEach((el) =>
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter") consultar();
