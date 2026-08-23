@@ -6,18 +6,37 @@ const api = {
 };
 
 const $ = (sel) => document.querySelector(sel);
+const PAGE_SIZE = 50;
 
-let ultimaLista = [];
+let ultimaLista = []; // resultado crudo de la consulta al gateway
+let filtradas = []; // tras aplicar país + búsqueda en vivo
+let pagina = 1;
 
+// ---------- utilidades ----------
 function mostrarMensaje(mensaje, clase = "msg-info") {
-  const div = $("#resultado");
-  div.innerHTML = "";
+  $("#resultado").innerHTML = "";
   const p = document.createElement("p");
   p.className = clase;
   p.textContent = mensaje;
-  div.appendChild(p);
+  $("#resultado").appendChild(p);
 }
 
+function banderaDe(codigo) {
+  if (!codigo || codigo.length !== 2) return "";
+  const base = 0x1f1e6;
+  const cc = codigo.toUpperCase();
+  return String.fromCodePoint(base + (cc.charCodeAt(0) - 65)) +
+    String.fromCodePoint(base + (cc.charCodeAt(1) - 65));
+}
+
+function listaProductos(str) {
+  return (str || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+// ---------- carga de categorías ----------
 async function cargarCategorias() {
   const select = $("#filtro-categoria");
   try {
@@ -41,61 +60,126 @@ async function cargarCategorias() {
   }
 }
 
-function renderTabla(lista) {
+function poblarPaises(lista) {
+  const select = $("#filtro-pais");
+  const previo = select.value;
+  const paises = [...new Set(lista.map((p) => p.pais).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+  select.innerHTML = `<option value="">Todos</option>`;
+  paises.forEach((pais) => {
+    const opt = document.createElement("option");
+    opt.value = pais;
+    opt.textContent = pais;
+    select.appendChild(opt);
+  });
+  if (previo && paises.includes(previo)) select.value = previo;
+}
+
+// ---------- render de tabla + paginación ----------
+function totalPaginas() {
+  return Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
+}
+
+function renderPagina() {
   const div = $("#resultado");
   div.innerHTML = "";
 
-  if (!Array.isArray(lista) || lista.length === 0) {
+  if (filtradas.length === 0) {
     mostrarMensaje("Sin proveedores para esta búsqueda.", "msg-info");
+    $("#pag-info").textContent = "";
+    $("#pag-prev").disabled = true;
+    $("#pag-next").disabled = true;
     return;
   }
 
-  const conteo = document.createElement("p");
-  conteo.className = "conteo";
-  conteo.textContent = `${lista.length} proveedor(es)`;
-  div.appendChild(conteo);
+  const inicio = (pagina - 1) * PAGE_SIZE;
+  const pageItems = filtradas.slice(inicio, inicio + PAGE_SIZE);
+
+  const cont = document.createElement("div");
+  cont.className = "prov-tabla-scroll";
 
   const tabla = document.createElement("table");
   tabla.className = "data-table";
 
-  const columnas = ["Proveedor", "País", "Contacto", "Teléfono", "Web"];
   const thead = tabla.createTHead().insertRow();
-  columnas.forEach((c) => {
+  ["Proveedor", "País", "Contacto", "Web"].forEach((c) => {
     const th = document.createElement("th");
     th.textContent = c;
     thead.appendChild(th);
   });
 
   const tbody = tabla.createTBody();
-  lista.forEach((p) => {
+  pageItems.forEach((p, idx) => {
     const tr = tbody.insertRow();
-    tr.insertCell().textContent = p.nombre || "";
-    tr.insertCell().textContent = p.pais || "";
+    tr.className = "fila-prov";
 
+    // Proveedor (con caret + nombre)
+    const cNombre = tr.insertCell();
+    cNombre.innerHTML = `<span class="prov-nombre"><i class="ph ph-caret-right prov-caret"></i>${
+      (p.nombre || "").replace(/</g, "&lt;")
+    }</span>`;
+
+    // País (bandera + nombre)
+    const cPais = tr.insertCell();
+    const flag = banderaDe(p.codigoPais);
+    cPais.innerHTML = `${flag ? `<span class="prov-flag">${flag}</span> ` : ""}${
+      (p.pais || "").replace(/</g, "&lt;")
+    }`;
+
+    // Contacto (botones correo / teléfono)
     const cContacto = tr.insertCell();
-    if (p.contacto && p.contacto.includes("@")) {
-      const a = document.createElement("a");
-      a.href = `mailto:${p.contacto}`;
-      a.textContent = p.contacto;
-      cContacto.appendChild(a);
-    } else {
-      cContacto.textContent = p.contacto || "";
-    }
+    const acc = document.createElement("span");
+    acc.className = "contacto-acciones";
+    const correo = p.contacto && p.contacto.includes("@") ? p.contacto : null;
+    const tel = (p.telefono || "").trim();
+    acc.innerHTML =
+      (correo
+        ? `<a class="btn-icono" href="mailto:${correo}" title="${correo}" onclick="event.stopPropagation()"><i class="ph ph-envelope-simple"></i></a>`
+        : `<span class="btn-icono disabled"><i class="ph ph-envelope-simple"></i></span>`) +
+      (tel
+        ? `<a class="btn-icono" href="tel:${tel.replace(/\s+/g, "")}" title="${tel}" onclick="event.stopPropagation()"><i class="ph ph-phone"></i></a>`
+        : `<span class="btn-icono disabled"><i class="ph ph-phone"></i></span>`);
+    cContacto.appendChild(acc);
 
-    tr.insertCell().textContent = p.telefono || "";
-
+    // Web
     const cWeb = tr.insertCell();
     if (p.paginaWeb) {
-      const a = document.createElement("a");
-      a.href = p.paginaWeb.startsWith("http") ? p.paginaWeb : `https://${p.paginaWeb}`;
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.textContent = "Sitio";
-      cWeb.appendChild(a);
+      const url = p.paginaWeb.startsWith("http") ? p.paginaWeb : `https://${p.paginaWeb}`;
+      cWeb.innerHTML = `<a class="btn-icono" href="${url}" target="_blank" rel="noopener" title="${url}" onclick="event.stopPropagation()"><i class="ph ph-globe"></i></a>`;
     }
+
+    // Fila de detalle (productos), oculta hasta hacer clic
+    const trDet = tbody.insertRow();
+    trDet.className = "detalle-prov";
+    trDet.style.display = "none";
+    const celda = trDet.insertCell();
+    celda.colSpan = 4;
+    const prods = listaProductos(p.productos);
+    if (prods.length) {
+      celda.innerHTML =
+        `<div class="productos-chips">` +
+        prods.map((x) => `<span class="producto-chip">${x.replace(/</g, "&lt;")}</span>`).join("") +
+        `</div>`;
+    } else {
+      celda.innerHTML = `<span class="detalle-vacio">Sin productos registrados.</span>`;
+    }
+
+    tr.addEventListener("click", () => {
+      const abierto = trDet.style.display !== "none";
+      trDet.style.display = abierto ? "none" : "";
+      tr.classList.toggle("abierta", !abierto);
+    });
   });
 
-  div.appendChild(tabla);
+  cont.appendChild(tabla);
+  div.appendChild(cont);
+
+  // info + botones de paginación
+  const fin = Math.min(inicio + PAGE_SIZE, filtradas.length);
+  $("#pag-info").textContent = `${inicio + 1}–${fin} de ${filtradas.length}`;
+  $("#pag-prev").disabled = pagina <= 1;
+  $("#pag-next").disabled = pagina >= totalPaginas();
 }
 
 function actualizarKpis(lista) {
@@ -110,6 +194,25 @@ function actualizarKpis(lista) {
   tarjetas.classList.remove("hidden");
 }
 
+// ---------- aplicar filtros de país + búsqueda en vivo ----------
+function aplicarVista() {
+  const pais = $("#filtro-pais").value;
+  const q = $("#buscar-vivo").value.trim().toLowerCase();
+
+  filtradas = ultimaLista.filter((p) => {
+    if (pais && p.pais !== pais) return false;
+    if (!q) return true;
+    const blob = `${p.nombre || ""} ${p.pais || ""} ${p.contacto || ""} ${p.telefono || ""} ${p.productos || ""}`.toLowerCase();
+    return blob.includes(q);
+  });
+
+  pagina = 1;
+  actualizarKpis(filtradas);
+  $("#toolbar").classList.toggle("hidden", ultimaLista.length === 0);
+  renderPagina();
+}
+
+// ---------- consulta al gateway ----------
 async function consultar() {
   const categoria = $("#filtro-categoria").value;
   if (!categoria) {
@@ -128,42 +231,38 @@ async function consultar() {
     const lista = await api.exportadores(params);
     ultimaLista = lista || [];
     poblarPaises(ultimaLista);
-    aplicarFiltroPais();
+    aplicarVista();
   } catch (err) {
+    ultimaLista = [];
+    $("#toolbar").classList.add("hidden");
     mostrarMensaje(`Error: ${err.message}`, "msg-error");
   } finally {
     $("#btn-consultar").disabled = false;
   }
 }
 
-function poblarPaises(lista) {
-  const select = $("#filtro-pais");
-  const previo = select.value;
-  const paises = [...new Set(lista.map((p) => p.pais).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b)
-  );
-  select.innerHTML = `<option value="">Todos</option>`;
-  paises.forEach((pais) => {
-    const opt = document.createElement("option");
-    opt.value = pais;
-    opt.textContent = pais;
-    select.appendChild(opt);
-  });
-  // Conservar el pais elegido si sigue presente en los nuevos resultados.
-  if (previo && paises.includes(previo)) select.value = previo;
-}
-
-function aplicarFiltroPais() {
-  const pais = $("#filtro-pais").value;
-  const visible = pais ? ultimaLista.filter((p) => p.pais === pais) : ultimaLista;
-  renderTabla(visible);
-  actualizarKpis(visible);
-}
-
+// ---------- init ----------
+let debounce;
 function init() {
   cargarCategorias();
   $("#btn-consultar").addEventListener("click", consultar);
-  $("#filtro-pais").addEventListener("change", aplicarFiltroPais);
+  $("#filtro-pais").addEventListener("change", aplicarVista);
+  $("#buscar-vivo").addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(aplicarVista, 180);
+  });
+  $("#pag-prev").addEventListener("click", () => {
+    if (pagina > 1) {
+      pagina--;
+      renderPagina();
+    }
+  });
+  $("#pag-next").addEventListener("click", () => {
+    if (pagina < totalPaginas()) {
+      pagina++;
+      renderPagina();
+    }
+  });
   [$("#filtro-exportador"), $("#filtro-producto")].forEach((el) =>
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter") consultar();

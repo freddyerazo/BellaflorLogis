@@ -5,6 +5,62 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BLIS · Proveedores</title>
   <link rel="stylesheet" href="/css/styles.css" />
+  <style>
+    .prov-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+      margin: 1.25rem 0 .5rem;
+    }
+    .prov-toolbar .buscar-vivo { flex: 1 1 260px; max-width: 380px; }
+    .prov-paginacion { display: flex; align-items: center; gap: .5rem; }
+    .prov-paginacion .pag-info { color: var(--text-muted, #64748b); font-size: .85rem; white-space: nowrap; }
+    .prov-tabla-scroll {
+      max-height: 62vh;
+      overflow: auto;
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 10px;
+    }
+    .prov-tabla-scroll table { width: 100%; border-collapse: collapse; }
+    .prov-tabla-scroll thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--surface-2, #f1f5f9);
+      text-align: left;
+      padding: .6rem .85rem;
+      font-size: .78rem;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      color: var(--text-muted, #475569);
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .prov-tabla-scroll tbody td { padding: .55rem .85rem; border-bottom: 1px solid var(--border, #eef2f7); vertical-align: middle; }
+    .prov-tabla-scroll tbody tr.fila-prov { cursor: pointer; }
+    .prov-tabla-scroll tbody tr.fila-prov:hover { background: var(--surface-2, #f8fafc); }
+    .prov-nombre { display: flex; align-items: center; gap: .5rem; font-weight: 600; }
+    .prov-caret { color: var(--text-muted, #94a3b8); transition: transform .15s ease; font-size: .8rem; }
+    tr.fila-prov.abierta .prov-caret { transform: rotate(90deg); }
+    .prov-flag { font-size: 1.1rem; line-height: 1; }
+    .contacto-acciones { display: inline-flex; gap: .4rem; }
+    .btn-icono {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 8px;
+      border: 1px solid var(--border, #e2e8f0); color: var(--primary, #166534);
+      text-decoration: none; background: #fff;
+    }
+    .btn-icono:hover { background: var(--surface-2, #f0fdf4); }
+    .btn-icono.disabled { color: #cbd5e1; pointer-events: none; border-style: dashed; }
+    tr.detalle-prov td { background: var(--surface-2, #f8fafc); padding: .5rem .85rem 1rem; }
+    .productos-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .producto-chip {
+      background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;
+      border-radius: 999px; padding: .15rem .6rem; font-size: .78rem;
+    }
+    .detalle-vacio { color: var(--text-muted, #94a3b8); font-size: .85rem; }
+  </style>
 </head>
 <body data-page="proveedores">
   <div id="sidebar" class="sidebar"></div>
@@ -46,6 +102,17 @@
         <div class="summary-card">
           <span class="summary-card-value" id="kpi-paises">0</span>
           <span class="summary-card-label">Países</span>
+        </div>
+      </div>
+
+      <div id="toolbar" class="prov-toolbar hidden">
+        <div class="form-group buscar-vivo" style="margin: 0;">
+          <input id="buscar-vivo" type="search" placeholder="Filtrar en la lista (nombre, país, producto, correo)…" autocomplete="off" />
+        </div>
+        <div class="prov-paginacion">
+          <span class="pag-info" id="pag-info"></span>
+          <button id="pag-prev" class="btn btn-secondary" type="button"><i class="ph ph-caret-left"></i></button>
+          <button id="pag-next" class="btn btn-secondary" type="button"><i class="ph ph-caret-right"></i></button>
         </div>
       </div>
 
