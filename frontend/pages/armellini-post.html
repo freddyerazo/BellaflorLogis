@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLIS · Armellini Post</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-page="armellini-post">
+  <div id="sidebar" class="sidebar"></div>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-truck-trailer"></i> Armellini Post</h1>
+      <p class="page-subtitle">Genera el XML AelisShipperEDI para Armellini desde el XML de operaciones de Expoflor. En el WMS de LAG el carrier figura como «ARMELLINI NO EDI», por eso el archivo se arma aquí.</p>
+    </div>
+
+    <nav class="subtabs">
+      <button class="subtab active" data-tab="importar">1 · Importar operaciones</button>
+      <button class="subtab" data-tab="generar">2 · Generar XML</button>
+      <button class="subtab" data-tab="historial">Historial</button>
+      <button class="subtab" data-tab="consignees">Consignees</button>
+    </nav>
+
+    <!-- ── IMPORTAR ────────────────────────────────────────────── -->
+    <section id="panel-importar" class="subpanel active">
+      <div class="import-card">
+        <div class="import-rule">
+          <i class="ph ph-info"></i>
+          <span>Sube el <strong>XML de operaciones de Expoflor</strong> (<code>XMLOperaciones…_EXPOFL.xml</code>). Cada caja se identifica por su código de barra: reimportar el mismo archivo <strong>actualiza, no duplica</strong>.</span>
+        </div>
+
+        <div class="file-field">
+          <label for="file_ops">
+            <i class="ph ph-file-code"></i> XML de operaciones
+            <span class="file-hint">Trae barcode, dimensiones, código de producto, PO, factura y el camión de Miami</span>
+          </label>
+          <div class="file-drop" id="drop_ops" data-target="file_ops">
+            <i class="ph ph-upload-simple"></i>
+            <span id="label_ops">Arrastra el archivo o haz clic para seleccionar</span>
+            <input type="file" id="file_ops" accept=".xml" />
+          </div>
+        </div>
+
+        <div class="import-actions">
+          <button id="btnImportar" class="btn btn-primary" disabled>
+            <i class="ph ph-database"></i> Importar
+          </button>
+        </div>
+
+        <div id="impProgress" class="hidden">
+          <div class="progress-bar"><div id="impFill" class="progress-fill"></div></div>
+          <p id="impMsg" class="progress-msg">Procesando…</p>
+        </div>
+
+        <div id="impResultado" class="hidden"></div>
+      </div>
+    </section>
+
+    <!-- ── GENERAR ─────────────────────────────────────────────── -->
+    <section id="panel-generar" class="subpanel">
+      <div class="import-card">
+        <h3>Cajas que salen con Armellini</h3>
+        <p class="page-subtitle">Se seleccionan por <strong>destino con código de consignee cargado</strong>, no por código de carrier: en el XML de operaciones las cajas de Heinen’s vienen como <code>HEB</code> («ARMELLINI NO EDI») y no como <code>ARM</code>.</p>
+        <div class="form-grid" style="margin-top: 1rem;">
+          <div class="form-group">
+            <label for="genFecha">Fecha de salida desde Miami</label>
+            <input type="date" id="genFecha" />
+            <span class="field-note">Viene del XML de operaciones, campo <code>caja_fecha_transportador</code>. Alimenta el <code>&lt;Shipdate&gt;</code> del XML.</span>
+          </div>
+          <div class="form-group">
+            <label>Shipper</label>
+            <div class="derived-row"><strong id="genShipper">MA00114</strong></div>
+            <span class="field-note">Código fijo de Bellaflor ante Armellini. No se modifica.</span>
+          </div>
+        </div>
+
+        <div class="import-actions" style="justify-content: flex-start; gap: .75rem;">
+          <button id="btnBuscar" class="btn btn-primary"><i class="ph ph-magnifying-glass"></i> Buscar cajas</button>
+          <button id="btnGenerar" class="btn btn-success" disabled><i class="ph ph-file-xml"></i> Generar XML</button>
+          <span id="genConteo" class="page-subtitle"></span>
+        </div>
+
+        <div id="genAvisos"></div>
+
+        <div class="table-wrapper" style="margin-top: 1rem;">
+          <table class="data-table" id="genTabla">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="chkTodos" checked /></th>
+                <th>Barcode</th><th>AWB</th><th>Destinatario</th><th>Consignee</th>
+                <th>Producto</th><th>Medidas (in)</th><th>Factura</th><th>PO</th>
+              </tr>
+            </thead>
+            <tbody id="genCuerpo">
+              <tr><td colspan="10" class="il-empty">Busca las cajas de una fecha para empezar.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="genResultado" class="hidden"></div>
+      </div>
+    </section>
+
+    <!-- ── HISTORIAL ───────────────────────────────────────────── -->
+    <section id="panel-historial" class="subpanel">
+      <div class="import-card">
+        <h3>XML generados</h3>
+        <p class="page-subtitle">Cada archivo queda guardado: sirve para reenviarlo y para detectar cajas mandadas dos veces.</p>
+        <div class="table-wrapper" style="margin-top: 1rem;">
+          <table class="data-table">
+            <thead>
+              <tr><th>Fecha</th><th>Archivo</th><th>Shipdate</th><th>Cajas</th><th>AWBs</th><th></th></tr>
+            </thead>
+            <tbody id="histCuerpo">
+              <tr><td colspan="6" class="il-empty">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CONSIGNEES ──────────────────────────────────────────── -->
+    <section id="panel-consignees" class="subpanel">
+      <div class="import-card">
+        <h3>Códigos de consignee de Armellini</h3>
+        <div class="import-rule">
+          <i class="ph ph-warning"></i>
+          <span>Es el <strong>único dato que no viene en ninguna fuente</strong>: ni en el XML de operaciones ni en Ventas. Armellini enruta la caja por este código, así que sin él no se genera el XML.</span>
+        </div>
+
+        <div class="form-grid" style="margin-top: 1rem;">
+          <div class="form-group">
+            <label for="conDest">Destinatario</label>
+            <input type="text" id="conDest" placeholder="Tal como aparece en el XML, ej. Heinen's" />
+          </div>
+          <div class="form-group">
+            <label for="conCode">Código Armellini</label>
+            <input type="text" id="conCode" placeholder="Ej. FA00140" />
+          </div>
+          <div class="form-group">
+            <label for="conDesc">Nota</label>
+            <input type="text" id="conDesc" placeholder="Opcional" />
+          </div>
+        </div>
+
+        <div class="import-actions" style="justify-content: flex-start;">
+          <button id="btnConsignee" class="btn btn-primary"><i class="ph ph-plus"></i> Guardar</button>
+        </div>
+
+        <div class="table-wrapper" style="margin-top: 1rem;">
+          <table class="data-table">
+            <thead><tr><th>Destinatario</th><th>Código</th><th>Nota</th></tr></thead>
+            <tbody id="conCuerpo"><tr><td colspan="3" class="il-empty">Cargando…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/layout.js"></script>
+  <script type="module" src="/pages/armellini-post.js"></script>
+</body>
+</html>
