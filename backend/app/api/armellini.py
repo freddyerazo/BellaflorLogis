@@ -201,12 +201,8 @@ def enviar_correo(export_id: int, payload: CorreoIn):
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except mailer.CorreoNoConfigurado as exc:
+        # Faltan credenciales, o Google las rechazo (refresh token revocado o
+        # caducado): es un problema de configuracion del servidor, no del envio.
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
-    except OSError as exc:
-        # smtplib.SMTPException hereda de OSError, igual que los timeouts y
-        # los errores de conexion (que es como se manifiesta el bloqueo de
-        # puertos SMTP del plan gratuito de Render).
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"No se pudo enviar el correo: {exc}",
-        )
+    except mailer.CorreoNoEnviado as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
