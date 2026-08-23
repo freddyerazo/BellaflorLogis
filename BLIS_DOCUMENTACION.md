@@ -27,6 +27,7 @@
 20. [Desarrollo local — paso a paso](#20-desarrollo-local--paso-a-paso)
 21. [GitHub](#21-github)
 22. [Troubleshooting](#22-troubleshooting)
+23. [Módulo Proveedores (catálogo de exportadores Logiztik)](#23-módulo-proveedores-catálogo-de-exportadores-logiztik)
 
 ---
 
@@ -169,6 +170,12 @@ TELEGRAM_WEBHOOK_SECRET=
 GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON=
 GOOGLE_DRIVE_FOLDER_ID=
 
+# Proveedores — gateway movil de Logiztik Alliance (app AllianceApp)
+LOGIZTIK_MOBILE_BASE_URL=https://apigwtmb.logiztikalliance.com
+LOGIZTIK_USER=
+LOGIZTIK_PASS=
+LOGIZTIK_ENTITY_ID=
+
 ```
 
 | Variable | Módulo | Descripción |
@@ -187,6 +194,9 @@ GOOGLE_DRIVE_FOLDER_ID=
 | `TELEGRAM_BOT_TOKEN` | Auditoría de Etiquetas | Token del bot (se reutiliza el del proyecto original) |
 | `TELEGRAM_WEBHOOK_SECRET` | Auditoría de Etiquetas | Valida `X-Telegram-Bot-Api-Secret-Token` en el webhook |
 | `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DRIVE_FOLDER_ID` | Auditoría de Etiquetas | Cuenta de servicio con acceso de escritura a la carpeta de fotos |
+| `LOGIZTIK_MOBILE_BASE_URL` | Proveedores | Base del gateway móvil de Logiztik (default `https://apigwtmb.logiztikalliance.com`) |
+| `LOGIZTIK_USER`, `LOGIZTIK_PASS` | Proveedores | Credenciales SSO de Bellaflor para `POST /apisso/Account/Login` |
+| `LOGIZTIK_ENTITY_ID` | Proveedores | Id de entidad/cliente (`idEntidad`, p.ej. `CLI013575`); si el login devuelve `entityId` se usa ese |
 
 > ⚠️ Nunca compartir el valor de estas variables en el chat ni en el código. Las 4 fases nuevas quedaron implementadas y probadas en `DEMO_MODE`/sin credenciales reales — activar cada integración real es un paso de configuración pendiente, no de código.
 
@@ -7684,3 +7694,58 @@ El endpoint legacy de LAG usado por "Posteo de Inventario" (`PlaceOrder/ordernew
 | Spin-down en free tier | Actualizar a Starter ($7/mes) o aceptar 50s de cold start |
 | Módulo nuevo responde con datos vacíos/demo | Faltan variables de entorno del módulo (ver §4) — no es un bug, es config pendiente |
 
+
+---
+
+## 23. Módulo Proveedores (catálogo de exportadores Logiztik)
+
+Pestaña **Proveedores**: catálogo de exportadores ("proveedores" de Bellaflor,
+que es importadora) consultado **en vivo** desde el gateway móvil de Logiztik
+Alliance — el mismo que usa la app *AllianceApp*. No persiste nada en Supabase.
+
+### Origen
+Endpoints y parámetros descubiertos analizando la APK de Logiztik Alliance
+(React Native / motor Hermes, `com.logiztikalliance.allianceapp`) y validados
+con captura de tráfico. Es un gateway **distinto** del WMS de Inventario LAG
+(`cloudWS`): aquí la base es `apigwtmb.logiztikalliance.com`.
+
+### Backend
+- `backend/app/services/proveedores_client.py`
+  - `_login()` → `POST /apisso/Account/Login` con `{usuario, clave, minutosExpiracion}`
+    → JWT en `objetoADeserializar.token`. Token **cacheado en memoria** con expiración.
+  - `get_categorias()` → `GET /apimobile/exportadores/CategoriaMercaderias`
+    (FLORES FRESCAS `CME011`, FRUTAS, MARISCOS, VEGETALES, …). Header
+    `Accept-Language: es-US` para recibir los nombres en español.
+  - `get_proveedores(id_categoria, busqueda_exportador, busqueda_producto, id_pais)`
+    → `POST /apimobile/exportadores/ObtenerExportadoresConMercanciaPaisAppMovil`
+    con `{idEntidad, IdCategoriaMercancia, busquedaNombreExportador,
+    busquedaNombreProducto, idPais}`. La respuesta viene agrupada por producto;
+    el cliente **aplana y deduplica por exportador**, agregando sus productos.
+- `backend/app/api/proveedores.py` — router `/proveedores`:
+  - `GET /api/proveedores/health`
+  - `GET /api/proveedores/categorias`
+  - `GET /api/proveedores/exportadores?categoria=CME011&exportador=&producto=&pais=`
+- Registrado en `main.py` (`proveedores_router`, prefix `/api`).
+
+### Campos de cada proveedor
+`id` (idExportador), `nombre`, `pais`, `codigoPais`, `contacto` (email),
+`telefono`, `paginaWeb`, `productos` (lista separada por comas).
+
+### Frontend — `pages/proveedores.html` + `pages/proveedores.js`
+- Filtros de consulta (server-side): **Categoría de mercancía, Producto,
+  Nombre del proveedor**.
+- Filtro **País** (client-side, se llena con los países del resultado).
+- **Búsqueda en vivo** sobre la lista cargada (nombre, país, producto, correo).
+- **Paginación** de 50 por página con encabezado fijo y scroll.
+- Tabla: **bandera** del país (desde `codigoPais`), **botones de contacto**
+  (correo `mailto:` / teléfono `tel:`) y enlace **web**.
+- **Productos ocultos**: se despliegan como *chips* al hacer clic en la fila.
+- Pestaña agregada al `components/sidebar.html` (entre Inventario LAG y Torre de Control).
+
+### Configuración
+Variables `LOGIZTIK_MOBILE_BASE_URL`, `LOGIZTIK_USER`, `LOGIZTIK_PASS`,
+`LOGIZTIK_ENTITY_ID` en `backend/.env` (local) y en Render → Environment (producción).
+Sin ellas, `/api/proveedores/categorias` responde 503 pidiendo credenciales.
+
+> ⚠️ Seguridad: `LOGIZTIK_PASS` es la contraseña real de la cuenta de Bellaflor
+> en Logiztik. Nunca commitear el `.env`; rotar la clave si se expone.
