@@ -68,6 +68,8 @@ class ConsigneeIn(BaseModel):
     destinatario: str = Field(min_length=1, max_length=128)
     consignee_code: str = Field(min_length=1, max_length=32)
     descripcion: Optional[str] = None
+    emails: list[str] = []          # avisos de despacho para este destino
+    dias_entrega: int = Field(default=3, ge=0, le=60)  # Miami Date + N = fecha DD del correo
 
 
 class ConsigneeOut(BaseModel):
@@ -75,6 +77,8 @@ class ConsigneeOut(BaseModel):
     destinatario: str
     consignee_code: str
     descripcion: Optional[str] = None
+    emails: list[str] = []
+    dias_entrega: int = 3
     active: bool = True
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -92,8 +96,44 @@ class ExportResumen(BaseModel):
     pos: list[str] = []
     avisos: list[str] = []
     created_at: datetime
+    correo_enviado_at: Optional[datetime] = None
+    correo_destinatarios: list[str] = []
 
 
 class ExportDetalle(ExportResumen):
     barcodes: list[str] = []
     xml_content: str
+
+
+# --- Correo -----------------------------------------------------------------
+
+
+class DestinoCorreo(BaseModel):
+    nombre_cliente: str
+    cajas: int
+    consignee_code: Optional[str] = None
+    emails: list[str] = []
+
+
+class CorreoPreview(BaseModel):
+    asunto: str
+    texto: str
+    html: str
+    destinatarios: list[str] = []
+    destinos: list[DestinoCorreo] = []
+    destinos_sin_correo: list[str] = []
+    configurado: bool
+    remitente: Optional[str] = None
+
+
+class CorreoIn(BaseModel):
+    """destinatarios sobrescribe los configurados por destino."""
+
+    destinatarios: Optional[list[str]] = None
+
+
+class CorreoOut(BaseModel):
+    export_id: int
+    asunto: str
+    destinatarios: list[str]
+    enviado_at: datetime

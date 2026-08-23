@@ -18,6 +18,9 @@ from app.database.connection import engine
 from app.schemas.armellini import (
     ConsigneeIn,
     ConsigneeOut,
+    CorreoIn,
+    CorreoOut,
+    CorreoPreview,
     ExportDetalle,
     ExportResumen,
     GenerarIn,
@@ -25,7 +28,9 @@ from app.schemas.armellini import (
     PreviewOut,
     ResumenImportacion,
 )
+from app.services import armellini_correo as correo
 from app.services import armellini_xml as ax
+from app.services import mailer
 from app.services import expoflor_operaciones as ops
 
 router = APIRouter(prefix="/armellini-post", tags=["Armellini Post"])
@@ -132,7 +137,8 @@ def generar(payload: GenerarIn):
 def historial(limite: int = Query(default=30, le=200)):
     with engine.connect() as conn:
         return conn.execute(text("""
-            SELECT id, filename, shipdate, shipper_code, total_cajas, awbs, pos, avisos, created_at
+            SELECT id, filename, shipdate, shipper_code, total_cajas, awbs, pos, avisos, created_at,
+                   correo_enviado_at, correo_destinatarios
             FROM armellini_exports ORDER BY created_at DESC LIMIT :limite
         """), {"limite": limite}).mappings().all()
 
@@ -161,11 +167,46 @@ def listar_consignees():
 def crear_consignee(payload: ConsigneeIn):
     with engine.begin() as conn:
         return conn.execute(text("""
-            INSERT INTO armellini_consignees (destinatario, consignee_code, descripcion)
-            VALUES (:destinatario, :consignee_code, :descripcion)
+            INSERT INTO armellini_consignees (destinatario, consignee_code, descripcion, emails, dias_entrega)
+            VALUES (:destinatario, :consignee_code, :descripcion, :emails, :dias_entrega)
             ON CONFLICT (destinatario) DO UPDATE SET
                 consignee_code = EXCLUDED.consignee_code,
                 descripcion    = EXCLUDED.descripcion,
+                emails         = EXCLUDED.emails,
+                dias_entrega   = EXCLUDED.dias_entrega,
                 updated_at     = now()
             RETURNING *
-        """), payload.model_dump()).mappings().first()
+        """), {**payload.model_dump(), "emails": mailer.normalizar(payload.emails)}).mappings().first()
+
+
+# --- Correo -----------------------------------------------------------------
+
+
+@router.get("/exports/{export_id}/correo", response_model=CorreoPreview)
+def previsualizar_correo(export_id: int):
+    """Lo que se enviaria, sin enviarlo."""
+    previa = correo.vista_previa(export_id)
+    if previa is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export no encontrado")
+    return previa
+
+
+@router.post("/exports/{export_id}/correo", response_model=CorreoOut)
+def enviar_correo(export_id: int, payload: CorreoIn):
+    """Manda el aviso de despacho y lo registra en armellini_exports."""
+    try:
+        return correo.enviar(export_id, payload.destinatarios)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except mailer.CorreoNoConfigurado as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+    except OSError as exc:
+        # smtplib.SMTPException hereda de OSError, igual que los timeouts y
+        # los errores de conexion (que es como se manifiesta el bloqueo de
+        # puertos SMTP del plan gratuito de Render).
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"No se pudo enviar el correo: {exc}",
+        )
