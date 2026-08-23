@@ -2,7 +2,7 @@
 
 Sistema interno de Bellaflor Group para análisis, simulación y gestión de costos logísticos de exportación de flores. Centraliza datos de Dartis (ventas), Google Apps Script (ingresos locales) y Supabase en una interfaz única.
 
-Desde agosto de 2026, BLIS también centraliza 4 herramientas que antes vivían como proyectos externos independientes: consulta de requisitos fitosanitarios (**Agrocalidad**), inventario en la bodega de Miami (**Inventario LAG**), conciliación de cajas contra UPS/FedEx (**Torre de Control**) y auditoría de despachos de clientes especiales vía bot de Telegram (**Auditoría de Etiquetas**).
+Desde agosto de 2026, BLIS también centraliza 4 herramientas que antes vivían como proyectos externos independientes: consulta de requisitos fitosanitarios (**Agrocalidad**), inventario en la bodega de Miami (**Inventario LAG**), conciliación de cajas contra UPS/FedEx (**Torre de Control**), auditoría de despachos de clientes especiales vía bot de Telegram (**Auditoría de Etiquetas**) y la generación del EDI para el carrier Armellini (**Armellini Post**).
 
 **Producción:** https://blis-hxu1.onrender.com
 **Documentación técnica completa (con código fuente):** [`BLIS_DOCUMENTACION.md`](BLIS_DOCUMENTACION.md)
