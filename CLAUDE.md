@@ -119,13 +119,13 @@ Peso Facturable  = MAX(Peso Real, Peso Volumétrico)
 - Sin tests automatizados en `backend/tests/`
 - `models/` vacío — toda la lógica de negocio vive directo en `api/*.py`/`services/*.py` con SQL embebido
 - `requirements.txt` duplicado entre raíz y `backend/`
-- Dos entornos virtuales locales (`.venv`, `.venv-1`) — ambos ignorados en git, revisar cuál es el vigente
+- Los dos entornos virtuales locales (`.venv`, `.venv-1`) están **rotos**: apuntan a un `python.exe` bajo `AppData\Local\Programs\Python\Python313\` que ya no existe. Ambos están ignorados en git. Hay que borrarlos y recrear uno solo
 - 4 módulos nuevos (Agrocalidad, Inventario LAG, Torre de Control, Auditoría de Etiquetas) corren sin credenciales reales configuradas en `.env`/Render — ver la tabla de rutas arriba para la lista exacta por módulo
 - Fase 3b (bot RPA de tracking en Dartis) y el corte del webhook de Telegram a producción (Fase 4) quedaron deliberadamente pendientes — ver plan
 - Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — sincronizada por última vez el 2026-08-21 (incluye Posteo de Inventario/`truck_company`), pero mantenerlas al día requiere disciplina en cada cambio futuro
-- Los dos entornos virtuales locales (`.venv`, `.venv-1`) apuntan a un Python que ya no existe: ambos están rotos, hay que recrearlos
 - El XML de operaciones de Expoflor trae `valortotal` y `precio` **inflados** (en el archivo del 2026-08-18: $3.470.872,46 contra $40.635,37 en `dartis_ventas`, y 747 de 751 cajas no cuadran contra tallos×precio). Se guardan en `precio_xml`/`valortotal_xml` solo para auditoría: para dinero se usa `dartis_ventas.total_dolares`
 - `expoflor_operaciones_cajas.po` tiene cobertura parcial (~92%): viene vacío en cuentas mayoristas, así que el módulo permite digitarlo
+- **OneDrive rompe git en este repo.** El proyecto vive dentro de `OneDrive - Universidad Nacional de Chimborazo`, y OneDrive deshidrata los archivos de `.git` («Archivos a petición»): los packs quedan como `ReparsePoint` y git falla con `fatal: mmap failed: Invalid argument` al hacer `push`. `git fetch` sí funciona — el problema es leer los packs locales. `attrib +P -U` sobre `.git` **no** lo resuelve: los fija pero siguen siendo reparse points. Workaround usado el 2026-08-23: copiar `.git` fuera de OneDrive y empujar con `git --git-dir=<copia> push origin main`. Arreglo de fondo: mover el repositorio fuera de OneDrive, o excluir la carpeta de la sincronización
 - **Seguridad pendiente**: el token real de `LAG_PLACE_ORDER_TOKEN` fue pegado en texto plano durante la sesión donde se construyó Posteo de Inventario — rotarlo con Logiztik Alliance Group antes de dar por confiable ese flujo en producción
 
 ## Convenciones de código
