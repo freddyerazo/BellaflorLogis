@@ -17,6 +17,9 @@ from sqlalchemy import text
 from app.database.connection import engine
 from app.schemas.armellini import (
     ConsigneeIn,
+    ConsigneeOut,
+    ExportDetalle,
+    ExportResumen,
     GenerarIn,
     GenerarOut,
     PreviewOut,
@@ -125,7 +128,7 @@ def generar(payload: GenerarIn):
     )
 
 
-@router.get("/exports")
+@router.get("/exports", response_model=list[ExportResumen])
 def historial(limite: int = Query(default=30, le=200)):
     with engine.connect() as conn:
         return conn.execute(text("""
@@ -134,7 +137,7 @@ def historial(limite: int = Query(default=30, le=200)):
         """), {"limite": limite}).mappings().all()
 
 
-@router.get("/exports/{export_id}")
+@router.get("/exports/{export_id}", response_model=ExportDetalle)
 def ver_export(export_id: int):
     with engine.connect() as conn:
         fila = conn.execute(
@@ -146,7 +149,7 @@ def ver_export(export_id: int):
     return fila
 
 
-@router.get("/consignees")
+@router.get("/consignees", response_model=list[ConsigneeOut])
 def listar_consignees():
     with engine.connect() as conn:
         return conn.execute(text(
@@ -154,7 +157,7 @@ def listar_consignees():
         )).mappings().all()
 
 
-@router.post("/consignees", status_code=status.HTTP_201_CREATED)
+@router.post("/consignees", response_model=ConsigneeOut, status_code=status.HTTP_201_CREATED)
 def crear_consignee(payload: ConsigneeIn):
     with engine.begin() as conn:
         return conn.execute(text("""

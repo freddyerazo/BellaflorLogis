@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -68,3 +68,32 @@ class ConsigneeIn(BaseModel):
     destinatario: str = Field(min_length=1, max_length=128)
     consignee_code: str = Field(min_length=1, max_length=32)
     descripcion: Optional[str] = None
+
+
+class ConsigneeOut(BaseModel):
+    id: int
+    destinatario: str
+    consignee_code: str
+    descripcion: Optional[str] = None
+    active: bool = True
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ExportResumen(BaseModel):
+    """Fila del historial. Sin xml_content: el archivo completo se pide aparte."""
+
+    id: int
+    filename: str
+    shipdate: str
+    shipper_code: str
+    total_cajas: int
+    awbs: list[str] = []
+    pos: list[str] = []
+    avisos: list[str] = []
+    created_at: datetime
+
+
+class ExportDetalle(ExportResumen):
+    barcodes: list[str] = []
+    xml_content: str
