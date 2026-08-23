@@ -58,7 +58,7 @@ function renderTabla(lista) {
   const tabla = document.createElement("table");
   tabla.className = "data-table";
 
-  const columnas = ["Proveedor", "País", "Contacto", "Teléfono", "Productos", "Web"];
+  const columnas = ["Proveedor", "País", "Contacto", "Teléfono", "Web"];
   const thead = tabla.createTHead().insertRow();
   columnas.forEach((c) => {
     const th = document.createElement("th");
@@ -83,11 +83,6 @@ function renderTabla(lista) {
     }
 
     tr.insertCell().textContent = p.telefono || "";
-
-    const cProd = tr.insertCell();
-    cProd.textContent = p.productos || "";
-    cProd.title = p.productos || "";
-    cProd.className = "celda-productos";
 
     const cWeb = tr.insertCell();
     if (p.paginaWeb) {
