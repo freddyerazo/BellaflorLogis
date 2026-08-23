@@ -84,9 +84,14 @@ CREATE INDEX IF NOT EXISTS idx_exp_ops_carrier ON expoflor_operaciones_cajas (ca
 
 
 -- ------------------------------------------------------------
--- Nombre legal de la finca, tal como lo espera Armellini en <FarmName>.
--- Ni el XML ni dartis_ventas lo traen: ambos dicen "EXPOFLOR CIA. LTDA.",
--- pero Armellini recibe "EXPORTADORA DE FLORES EXPOFLOR CIA. LTDA.".
+-- Razon social larga de la finca. Es la que llevaban los 5 XML enviados a
+-- mano hasta 2026-08 ("EXPORTADORA DE FLORES EXPOFLOR CIA. LTDA."); ni el
+-- XML de operaciones ni dartis_ventas la traen -- ambos dicen "EXPOFLOR
+-- CIA. LTDA.".
+--
+-- El modulo NO la usa: por decision del usuario <FarmName> sale de
+-- farms.name (el nombre corto). La columna se conserva a proposito, como
+-- registro del nombre legal y por si otro modulo lo necesita.
 -- ------------------------------------------------------------
 ALTER TABLE farms ADD COLUMN IF NOT EXISTS legal_name TEXT;
 
