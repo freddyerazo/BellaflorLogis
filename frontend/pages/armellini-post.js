@@ -202,12 +202,16 @@ document.getElementById("btnGenerar").addEventListener("click", async () => {
         <h3><i class="ph ph-check-circle"></i> XML generado</h3>
         <p><strong>${esc(d.filename)}</strong> · ${d.total_cajas} caja(s) · registro #${d.export_id}</p>
         ${avisosHtml(d.avisos)}
-        <div class="import-actions" style="justify-content:flex-start">
+        <div class="import-actions" style="justify-content:flex-start; gap:.75rem">
           <a class="btn btn-primary" href="${url}" download="${esc(d.filename)}"><i class="ph ph-download-simple"></i> Descargar</a>
+          <button class="btn btn-secondary" id="btnCorreoGen" data-correo="${d.export_id}"><i class="ph ph-envelope-simple"></i> Enviar aviso por correo</button>
         </div>
         <pre style="max-height:18rem;overflow:auto;font-size:.78rem">${esc(d.xml.slice(0, 4000))}</pre>
       </div>`;
     res.classList.remove("hidden");
+
+    const btnCorreo = document.getElementById("btnCorreoGen");
+    btnCorreo.addEventListener("click", () => enviarCorreo(btnCorreo.dataset.correo, btnCorreo));
   } catch (err) {
     res.innerHTML = `<div class="result-box error"><h3><i class="ph ph-x-circle"></i> No se generó</h3><p>${esc(err.message)}</p></div>`;
     res.classList.remove("hidden");
@@ -226,20 +230,61 @@ async function cargarHistorial() {
           <td>${esc(f.shipdate)}</td>
           <td>${f.total_cajas}</td>
           <td>${(f.awbs || []).map((a) => esc(a)).join("<br>")}</td>
-          <td><button class="btn btn-link" data-id="${f.id}">Descargar</button></td>
+          <td>${f.correo_enviado_at
+            ? `<span class="badge badge-green" title="${esc((f.correo_destinatarios || []).join(", "))}">enviado</span>`
+            : '<span class="badge badge-gray">no enviado</span>'}</td>
+          <td>
+            <button class="btn btn-link" data-descargar="${f.id}">Descargar</button>
+            <button class="btn btn-link" data-correo="${f.id}">${f.correo_enviado_at ? "Reenviar" : "Enviar correo"}</button>
+          </td>
         </tr>`).join("")
-      : `<tr><td colspan="6" class="il-empty">Todavía no se ha generado ningún XML.</td></tr>`;
+      : `<tr><td colspan="7" class="il-empty">Todavía no se ha generado ningún XML.</td></tr>`;
 
-    cuerpo.querySelectorAll("button[data-id]").forEach((b) =>
+    cuerpo.querySelectorAll("button[data-descargar]").forEach((b) =>
       b.addEventListener("click", async () => {
-        const d = await apiGet(`${API}/exports/${b.dataset.id}`);
+        const d = await apiGet(`${API}/exports/${b.dataset.descargar}`);
         const a = document.createElement("a");
         a.href = URL.createObjectURL(new Blob([d.xml_content], { type: "application/xml" }));
         a.download = d.filename;
         a.click();
       }));
+
+    cuerpo.querySelectorAll("button[data-correo]").forEach((b) =>
+      b.addEventListener("click", () => enviarCorreo(b.dataset.correo, b)));
   } catch (err) {
-    cuerpo.innerHTML = `<tr><td colspan="6" class="il-empty">${esc(err.message)}</td></tr>`;
+    cuerpo.innerHTML = `<tr><td colspan="7" class="il-empty">${esc(err.message)}</td></tr>`;
+  }
+}
+
+// Enviar es una accion hacia afuera: primero se muestra a quien va y que
+// dice, y no se manda hasta que la persona lo confirma.
+async function enviarCorreo(exportId, boton) {
+  boton.disabled = true;
+  try {
+    const p = await apiGet(`${API}/exports/${exportId}/correo`);
+
+    if (!p.configurado) {
+      alert("El servidor no tiene configurada la cuenta de Gmail (GMAIL_USER y GMAIL_APP_PASSWORD).");
+      return;
+    }
+    if (!p.destinatarios.length) {
+      alert(`Sin correos configurados para: ${p.destinos_sin_correo.join(", ")}.\n\n` +
+            "Agrégalos en la pestaña Consignees.");
+      return;
+    }
+
+    const ok = confirm(
+      `Se enviará desde ${p.remitente} a:\n\n${p.destinatarios.join("\n")}\n\n` +
+      `Asunto: ${p.asunto}\n\n¿Enviar?`);
+    if (!ok) return;
+
+    const r = await apiPost(`${API}/exports/${exportId}/correo`, {});
+    alert(`Correo enviado a ${r.destinatarios.length} destinatario(s).`);
+    cargarHistorial();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    boton.disabled = false;
   }
 }
 
@@ -249,10 +294,15 @@ async function cargarConsignees() {
   try {
     const filas = await apiGet(`${API}/consignees`);
     cuerpo.innerHTML = filas.length
-      ? filas.map((f) => `<tr><td>${esc(f.destinatario)}</td><td><strong>${esc(f.consignee_code)}</strong></td><td>${esc(f.descripcion ?? "")}</td></tr>`).join("")
-      : `<tr><td colspan="3" class="il-empty">Sin códigos cargados.</td></tr>`;
+      ? filas.map((f) => `<tr><td>${esc(f.destinatario)}</td><td><strong>${esc(f.consignee_code)}</strong></td>
+          <td>${f.emails?.length
+            ? f.emails.map((e) => esc(e)).join("<br>")
+            : '<span class="badge badge-orange">sin correos</span>'}</td>
+          <td style="text-align:right">${f.dias_entrega}</td>
+          <td>${esc(f.descripcion ?? "")}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="il-empty">Sin códigos cargados.</td></tr>`;
   } catch (err) {
-    cuerpo.innerHTML = `<tr><td colspan="3" class="il-empty">${esc(err.message)}</td></tr>`;
+    cuerpo.innerHTML = `<tr><td colspan="5" class="il-empty">${esc(err.message)}</td></tr>`;
   }
 }
 
@@ -270,10 +320,14 @@ document.getElementById("btnConsignee").addEventListener("click", async () => {
       destinatario,
       consignee_code,
       descripcion: document.getElementById("conDesc").value.trim() || null,
+      emails: document.getElementById("conMails").value
+        .split(",").map((v) => v.trim()).filter(Boolean),
+      dias_entrega: Number(document.getElementById("conDias").value) || 0,
     });
     document.getElementById("conDest").value = "";
     document.getElementById("conCode").value = "";
     document.getElementById("conDesc").value = "";
+    document.getElementById("conMails").value = "";
     cargarConsignees();
   } catch (err) {
     alert(err.message);

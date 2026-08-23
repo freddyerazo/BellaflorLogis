@@ -110,10 +110,10 @@
         <div class="table-wrapper" style="margin-top: 1rem;">
           <table class="data-table">
             <thead>
-              <tr><th>Fecha</th><th>Archivo</th><th>Shipdate</th><th>Cajas</th><th>AWBs</th><th></th></tr>
+              <tr><th>Fecha</th><th>Archivo</th><th>Shipdate</th><th>Cajas</th><th>AWBs</th><th>Correo</th><th></th></tr>
             </thead>
             <tbody id="histCuerpo">
-              <tr><td colspan="6" class="il-empty">Cargando…</td></tr>
+              <tr><td colspan="7" class="il-empty">Cargando…</td></tr>
             </tbody>
           </table>
         </div>
@@ -139,6 +139,16 @@
             <input type="text" id="conCode" placeholder="Ej. FA00140" />
           </div>
           <div class="form-group">
+            <label for="conMails">Correos de aviso</label>
+            <input type="text" id="conMails" placeholder="uno@correo.com, otro@correo.com" />
+            <span class="field-note">Separados por coma. Reciben el aviso de despacho de este destino.</span>
+          </div>
+          <div class="form-group">
+            <label for="conDias">Días hasta la entrega</label>
+            <input type="number" id="conDias" value="3" min="0" max="60" />
+            <span class="field-note">El correo anuncia la entrega como <em>Miami Date + N días</em>.</span>
+          </div>
+          <div class="form-group">
             <label for="conDesc">Nota</label>
             <input type="text" id="conDesc" placeholder="Opcional" />
           </div>
@@ -150,8 +160,8 @@
 
         <div class="table-wrapper" style="margin-top: 1rem;">
           <table class="data-table">
-            <thead><tr><th>Destinatario</th><th>Código</th><th>Nota</th></tr></thead>
-            <tbody id="conCuerpo"><tr><td colspan="3" class="il-empty">Cargando…</td></tr></tbody>
+            <thead><tr><th>Destinatario</th><th>Código</th><th>Correos de aviso</th><th>Días entrega</th><th>Nota</th></tr></thead>
+            <tbody id="conCuerpo"><tr><td colspan="5" class="il-empty">Cargando…</td></tr></tbody>
           </table>
         </div>
       </div>
