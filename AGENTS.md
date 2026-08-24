@@ -23,7 +23,7 @@ Sistema de apoyo logístico y comercial para Bellaflor Group (exportadora de flo
 BLIS/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          ← 23 módulos activos, montados en main.py bajo /api
+│   │   ├── api/          ← 24 módulos activos, montados en main.py bajo /api
 │   │   ├── database/     ← connection.py (SQLAlchemy), helpers.py
 │   │   ├── schemas/      ← modelos Pydantic (cubre la mayoría de módulos)
 │   │   ├── models/       ← vacío, no se usa (lógica vive en api/*.py con SQL crudo)
@@ -42,10 +42,10 @@ BLIS/
 │   │   ├── api.js        ← apiGet/apiPost/apiPut/apiDelete (fetch wrapper)
 │   │   ├── crud-page.js  ← lógica CRUD reutilizable
 │   │   └── layout.js     ← carga sidebar y header
-│   ├── pages/            ← 19 páginas, un .html + un .js por módulo
+│   ├── pages/            ← 21 páginas, un .html + un .js por módulo
 │   └── index.html
 ├── database/
-│   ├── migrations/       ← 002 a 019 (cargo agencies, farms, customers, Dartis ventas, módulos clonados)
+│   ├── migrations/       ← 002 a 023 (cargo agencies, farms, customers, Dartis ventas, módulos clonados, Armellini Post)
 │   ├── schema/           ← schema_v1.sql
 │   ├── seeds/            ← seeds_v1.sql
 │   └── views/            ← views_v1.sql
@@ -84,12 +84,17 @@ BLIS/
 | Inventario LAG | `/api/inventario-lag` | sin BD propia — proxy en vivo sobre las APIs del WMS de Logiztik Alliance Group (bodega Miami); clon de "InventarioApiLag". Requiere `LAG_ENV`/`LAG_CUSTOMER_CODE`/`LAG_TOKEN`/`LAG_SALES_API_KEY` en `.env` (pendiente de configurar). Incluye "Posteo de Inventario" (`POST /posteo-inventario`, endpoint legacy `PlaceOrder/ordernew`) — **sin ambiente de pruebas**, cada llamada crea una orden real; requiere `LAG_PLACE_ORDER_TOKEN` (distinto de `LAG_TOKEN`) |
 | Torre de Control | `/api/torre-control` (`courier_reconciliation`, `courier_ups_manifest`, `courier_fedex_envios`, `courier_agency_mapping`) | conciliación de cajas: `dartis_ventas` agrupada por `id_pedido` vs manifiestos UPS/FedEx vs tracking en vivo vs entregas de agencias locales; clon de "REPORTEUPSFEDEX". Scheduler propio (`apscheduler`, `REFRESH_SECONDS`). Requiere `UPS_CLIENT_ID/SECRET`, `FEDEX_CLIENT_ID/SECRET`, `DUOPLANE_API_KEY/PASSWORD` en `.env` para datos reales (por defecto `DEMO_MODE=true`) |
 | Auditoría de Etiquetas | `/api/auditoria-etiquetas` (`special_dispatches`, `special_dispatch_audits`, `telegram_conversation_state`) | despachos de `customers.es_cliente_especial` generados directo desde `dartis_ventas` (sin subir Excel), auditados vía bot de Telegram; clon de "Auditoria_LEsp". Requiere `TELEGRAM_BOT_TOKEN`/`TELEGRAM_WEBHOOK_SECRET`/`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`/`GOOGLE_DRIVE_FOLDER_ID` en `.env`. **El webhook real de Telegram todavía no se registró** — Apps Script del proyecto original sigue operando hasta que se confirme el corte |
+| Armellini Post | `/api/armellini-post` (`expoflor_operaciones_cajas`, `armellini_consignees`, `armellini_product_overrides`, `armellini_exports`) | genera el XML `AelisShipperEDI` de Armellini (carrier de Miami) desde el XML de operaciones de Expoflor (`ReservasExportadores`); clon de "ArmelliniFormat". En el WMS de LAG el carrier figura como "ARMELLINI NO EDI", por eso el archivo se arma aparte. Sin credenciales externas para generar/descargar el XML. El filtro de cajas es por **destino con consignee configurado**, no por código de carrier: las cajas de Heinen's (destinatario de los 5 XML históricos) vienen como `HEB` = "ARMELLINI NO EDI" y no como `ARM`, así que filtrar por carrier las habría omitido — `HEB` faltaba en `truck_company` y se agregó. **`armellini_consignees` se siembra a mano** (el código de consignee no existe en ninguna fuente) y ahí mismo vive `dias_entrega` por destino. `<Invoice>` del XML sale de `dartis_ventas.id_comercializadora` (no del campo `factura` del XML, que lleva el pedido). Incluye la **pre-alerta de despacho por correo** (destinatarios configurables + días de entrega por destino) vía **API de Gmail sobre HTTPS** — no SMTP, que Render bloquea en el plan gratuito: requiere `GMAIL_CLIENT_ID`/`GMAIL_CLIENT_SECRET`/`GMAIL_REFRESH_TOKEN`/`GMAIL_USER`, obtenidos con `backend/scripts/gmail_autorizar.py` |
+| Proveedores | `/api/proveedores` (`/categorias`, `/exportadores`) | sin BD propia — proxy en vivo sobre el **gateway móvil** de Logiztik Alliance (`apigwtmb.logiztikalliance.com`, el mismo de la app AllianceApp; distinto del WMS de Inventario LAG). Login SSO `POST /apisso/Account/Login` (usuario/clave → JWT, token cacheado en memoria) y catálogo de exportadores (= "proveedores" de Bellaflor) `POST /apimobile/exportadores/ObtenerExportadoresConMercanciaPaisAppMovil` + categorías `GET /apimobile/exportadores/CategoriaMercaderias`. Requiere `LOGIZTIK_USER`/`LOGIZTIK_PASS`/`LOGIZTIK_ENTITY_ID`/`LOGIZTIK_MOBILE_BASE_URL` en `.env` (y en Render). Endpoints/params obtenidos por análisis de la APK (React Native/Hermes) + captura de tráfico. Frontend `pages/proveedores.*`: filtros categoría/producto/proveedor/país, búsqueda en vivo, paginación, banderas, botones de contacto y productos expandibles por fila |
 
 ## Módulos externos clonados a BLIS (una pestaña por proyecto) — ✅ completo
+Plan completo (con detalles de cada fase) en `C:\Users\Coordinación\.claude\plans\rustling-beaming-heron.md`.
 1. ✅ **Agrocalidad Consulta** → `/api/agrocalidad`
 2. ✅ **InventarioApiLag** → `/api/inventario-lag`
-3. ✅ **REPORTEUPSFEDEX** → `/api/torre-control` (el bot RPA de tracking en Dartis queda pendiente como Fase 3b)
-4. ✅ **Auditoria_LEsp** → `/api/auditoria-etiquetas` (corte del webhook de Telegram a producción pendiente de confirmación)
+3. ✅ **REPORTEUPSFEDEX** → `/api/torre-control` (el bot RPA de tracking en Dartis queda pendiente como Fase 3b, ver plan)
+4. ✅ **Auditoria_LEsp** → `/api/auditoria-etiquetas` (corte del webhook de Telegram a producción pendiente de confirmación, ver plan)
+
+5. ✅ **ArmelliniFormat** → `/api/armellini-post` (agosto 2026)
 
 ## Módulos con datos en Supabase pero SIN API todavía
 - `markets`, `currencies`, `exchange_rates`
@@ -114,10 +119,13 @@ Peso Facturable  = MAX(Peso Real, Peso Volumétrico)
 - Sin tests automatizados en `backend/tests/`
 - `models/` vacío — toda la lógica de negocio vive directo en `api/*.py`/`services/*.py` con SQL embebido
 - `requirements.txt` duplicado entre raíz y `backend/`
-- Dos entornos virtuales locales (`.venv`, `.venv-1`) — ambos ignorados en git, revisar cuál es el vigente
+- Los dos entornos virtuales locales (`.venv`, `.venv-1`) están **rotos**: apuntan a un `python.exe` bajo `AppData\Local\Programs\Python\Python313\` que ya no existe. Ambos están ignorados en git. Hay que borrarlos y recrear uno solo
 - 4 módulos nuevos (Agrocalidad, Inventario LAG, Torre de Control, Auditoría de Etiquetas) corren sin credenciales reales configuradas en `.env`/Render — ver la tabla de rutas arriba para la lista exacta por módulo
-- Fase 3b (bot RPA de tracking en Dartis) y el corte del webhook de Telegram a producción (Fase 4) quedaron deliberadamente pendientes
-- Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — sincronizada por última vez el 2026-08-21 (incluye Posteo de Inventario/`truck_company`), pero mantenerlas al día requiere disciplina en cada cambio futuro
+- Fase 3b (bot RPA de tracking en Dartis) y el corte del webhook de Telegram a producción (Fase 4) quedaron deliberadamente pendientes — ver plan
+- Documentación repartida entre `CLAUDE.md`, `BLIS_DOCUMENTACION.md`, `PRODUCT.md`, `AGENTS.md`, `README.md` — `CLAUDE.md`/`AGENTS.md` están al día; **`BLIS_DOCUMENTACION.md` quedó desactualizado**: cubre Proveedores pero no Armellini Post (agregado el 2026-08-23, un día después de la última regeneración del 2026-08-22) — falta regenerarlo
+- El XML de operaciones de Expoflor trae `valortotal` y `precio` **inflados** (en el archivo del 2026-08-18: $3.470.872,46 contra $40.635,37 en `dartis_ventas`, y 747 de 751 cajas no cuadran contra tallos×precio). Se guardan en `precio_xml`/`valortotal_xml` solo para auditoría: para dinero se usa `dartis_ventas.total_dolares`
+- `expoflor_operaciones_cajas.po` tiene cobertura parcial (~92%): viene vacío en cuentas mayoristas, así que el módulo permite digitarlo
+- **OneDrive rompe git en este repo.** El proyecto vive dentro de `OneDrive - Universidad Nacional de Chimborazo`, y OneDrive deshidrata los archivos de `.git` («Archivos a petición»): los packs quedan como `ReparsePoint` y git falla con `fatal: mmap failed: Invalid argument` al hacer `push`. `git fetch` sí funciona — el problema es leer los packs locales. `attrib +P -U` sobre `.git` **no** lo resuelve: los fija pero siguen siendo reparse points. Workaround usado el 2026-08-23: copiar `.git` fuera de OneDrive y empujar con `git --git-dir=<copia> push origin main`. Arreglo de fondo: mover el repositorio fuera de OneDrive, o excluir la carpeta de la sincronización
 - **Seguridad pendiente**: el token real de `LAG_PLACE_ORDER_TOKEN` fue pegado en texto plano durante la sesión donde se construyó Posteo de Inventario — rotarlo con Logiztik Alliance Group antes de dar por confiable ese flujo en producción
 
 ## Convenciones de código
