@@ -38,15 +38,22 @@ def _normalizar_courier(courier_raw: str) -> str:
 
 def _obtener_base_dartis() -> list[dict]:
     """dartis_ventas agrupado por id_pedido — reemplaza al Excel Dartis
-    del proyecto original (ver hallazgo del plan de la Fase 3)."""
+    del proyecto original (ver hallazgo del plan de la Fase 3).
+
+    Se agrupa SOLO por id_pedido: courier_reconciliation tiene UNIQUE(factura),
+    y un mismo id_pedido puede traer especies en filas con algun campo distinto
+    (ej. fecha) -- agruparlas tambien por esos campos partia un pedido en dos
+    filas con la misma factura, violando el UNIQUE y tumbando el refresco
+    completo (y el arranque del servidor, que lo dispara una vez al iniciar)."""
     with engine.connect() as conn:
         rows = conn.execute(text("""
-            SELECT id_pedido AS factura, agencia_carga AS courier_raw, empresa, cliente,
-                   destinatario, vendedor AS vendedor_cliente, fecha AS fecha_dartis,
+            SELECT id_pedido AS factura, MAX(agencia_carga) AS courier_raw, MAX(empresa) AS empresa,
+                   MAX(cliente) AS cliente, MAX(destinatario) AS destinatario,
+                   MAX(vendedor) AS vendedor_cliente, MAX(fecha) AS fecha_dartis,
                    SUM(total_piezas) AS cajas_dartis
             FROM dartis_ventas
             WHERE agencia_carga IS NOT NULL
-            GROUP BY id_pedido, agencia_carga, empresa, cliente, destinatario, vendedor, fecha
+            GROUP BY id_pedido
         """)).mappings().all()
 
     base = []
