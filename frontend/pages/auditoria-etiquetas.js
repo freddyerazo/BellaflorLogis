@@ -2,6 +2,7 @@ import { apiGet, apiPost } from "/js/api.js";
 
 const $ = (sel) => document.querySelector(sel);
 
+let despachosCargados = [];
 let auditoriasCargadas = [];
 
 function badgeSiNo(v) {
@@ -32,9 +33,10 @@ async function cargar() {
     apiGet(`/auditoria-etiquetas/despachos?desde=${desde}&hasta=${hasta}`),
     apiGet(`/auditoria-etiquetas/auditorias?desde=${desde}&hasta=${hasta}`),
   ]);
+  despachosCargados = despachos;
   auditoriasCargadas = auditorias;
   renderKpis(despachos, auditorias);
-  renderDespachos(despachos);
+  renderDespachos();
   renderAuditorias();
   $("#actualizado").textContent = `Actualizado ${new Date().toLocaleString("es-EC")}`;
 }
@@ -49,10 +51,18 @@ function renderKpis(despachos, auditorias) {
   $("#kpi-problemas").textContent = problemas;
 }
 
-function renderDespachos(despachos) {
+function renderDespachos() {
   const tbody = $("#tablaDespachos");
+  const soloGuiasCompletas = $("#filtroGuiasCompletas").checked;
+  const despachos = soloGuiasCompletas
+    ? despachosCargados.filter((d) => d.guia_madre && d.guia_hija)
+    : despachosCargados;
+
   if (!despachos.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty">Sin despachos para este rango. Usa "Generar despachos del día" o espera a que el bot los cree con /lista.</td></tr>`;
+    const mensaje = soloGuiasCompletas
+      ? "Ningún despacho de este rango tiene guía madre y guía hija."
+      : "Sin despachos para este rango. Usa \"Generar despachos del día\" o espera a que el bot los cree con /lista.";
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">${mensaje}</td></tr>`;
     return;
   }
   const ordenados = [...despachos].sort((a, b) => {
@@ -133,6 +143,7 @@ $("#filtroDesde").value = fechaHoyLocal();
 $("#filtroHasta").value = fechaHoyLocal();
 $("#filtroDesde").addEventListener("change", cargar);
 $("#filtroHasta").addEventListener("change", cargar);
+$("#filtroGuiasCompletas").addEventListener("change", renderDespachos);
 $("#filtroSoloProblemas").addEventListener("change", renderAuditorias);
 $("#btnExportar").addEventListener("click", exportarCsv);
 
