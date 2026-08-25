@@ -66,12 +66,15 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
 
 
 def despachos_pendientes(poscosecha: Optional[str] = None) -> list[dict]:
+    """Solo del dia de hoy: el bot no muestra la fecha en el mensaje de cada
+    despacho, asi que mezclar dias distintos en la misma lista numerada podia
+    llevar al auditor a auditar algo que todavia no ha salido fisicamente."""
     with engine.connect() as conn:
         filtro = "AND postcosecha = :pos" if poscosecha else ""
         params = {"pos": poscosecha} if poscosecha else {}
         rows = conn.execute(text(f"""
             SELECT * FROM special_dispatches
-            WHERE estado = 'PENDIENTE' AND fecha >= CURRENT_DATE {filtro}
+            WHERE estado = 'PENDIENTE' AND fecha = CURRENT_DATE {filtro}
             ORDER BY postcosecha, cliente
         """), params).mappings().all()
     return [dict(r) for r in rows]
@@ -81,7 +84,7 @@ def poscosechas_pendientes() -> list[str]:
     with engine.connect() as conn:
         rows = conn.execute(text("""
             SELECT DISTINCT postcosecha FROM special_dispatches
-            WHERE estado = 'PENDIENTE' AND fecha >= CURRENT_DATE
+            WHERE estado = 'PENDIENTE' AND fecha = CURRENT_DATE
             ORDER BY postcosecha
         """)).all()
     return [r[0] for r in rows if r[0]]
