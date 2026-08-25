@@ -11,7 +11,7 @@ redeploy de Render a media auditoria.
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy import text
@@ -20,6 +20,7 @@ from app.database.connection import engine
 from app.services import google_drive, special_dispatches
 
 UTC = timezone.utc
+ECUADOR = timezone(timedelta(hours=-5))  # sin horario de verano, offset fijo todo el ano
 
 
 def _token() -> str:
@@ -160,7 +161,11 @@ async def procesar_update(update: dict) -> None:
         estado["cajas"] = cajas
         estado["paso"] = "piezas"
         _guardar_estado(chat_id, estado)
-        await _enviar(chat_id, "\U0001F339 Cuantas <b>piezas</b> (tallos) se estan despachando?")
+        pregunta = "\U0001F339 Cuantas <b>piezas</b> (tallos) se estan despachando?"
+        esperado = estado["despacho"].get("cajas")
+        if esperado is not None and cajas != float(esperado):
+            pregunta = f"⚠️ Ojo: la venta dice {esperado} cajas y declaraste {cajas}.\n\n" + pregunta
+        await _enviar(chat_id, pregunta)
         return
 
     if paso == "piezas":
@@ -191,8 +196,15 @@ async def procesar_update(update: dict) -> None:
             await _enviar(chat_id, "⚠️ Necesito una foto. Envia la imagen del despacho.")
             return
         url_foto = await _guardar_foto(fotos, estado)
-        await _registrar_auditoria(chat_id, estado, url_foto)
+        guardado = await _registrar_auditoria(chat_id, estado, url_foto)
         _borrar_estado(chat_id)
+        if not guardado:
+            await _enviar(
+                chat_id,
+                "⚠️ Este despacho ya fue auditado por otra persona mientras llenabas el formulario. "
+                "Tus respuestas no se guardaron.\n\nEscribe /lista para elegir otro despacho.",
+            )
+            return
         await _enviar(
             chat_id,
             f"✅ <b>Auditoria registrada</b>\n\U0001F4E6 {estado['despacho']['cliente']}\n"
@@ -322,15 +334,27 @@ async def _guardar_foto(fotos: list, estado: dict) -> str:
         contenido = (await client.get(f"https://api.telegram.org/file/bot{_token()}/{file_path}")).content
 
     d = estado["despacho"]
-    hoy = datetime.now(UTC).strftime("%Y-%m-%d")
+    hoy = datetime.now(ECUADOR).strftime("%Y-%m-%d")
     cliente_slug = "".join(c if c.isalnum() else "_" for c in d["cliente"])
     nombre = f"{hoy}_{d['postcosecha']}_{cliente_slug}_{d['guia_hija']}.jpg"
     return google_drive.subir_foto(contenido, nombre, subcarpeta=hoy)
 
 
-async def _registrar_auditoria(chat_id: str, estado: dict, url_foto: str) -> None:
+async def _registrar_auditoria(chat_id: str, estado: dict, url_foto: str) -> bool:
+    """Devuelve False si el despacho ya no estaba PENDIENTE (otro auditor lo
+    tomo mientras este formulario estaba en curso) — evita que dos personas
+    terminen auditando el mismo despacho por una carrera entre /lista y foto."""
     d = estado["despacho"]
     with engine.begin() as conn:
+        tomado = conn.execute(text("""
+            UPDATE special_dispatches
+            SET estado = 'AUDITADO', auditado_por = :auditor, fecha_auditoria = now()
+            WHERE id = :id AND estado = 'PENDIENTE'
+            RETURNING id
+        """), {"auditor": estado.get("auditor"), "id": d["id"]}).first()
+        if not tomado:
+            return False
+
         conn.execute(text("""
             INSERT INTO special_dispatch_audits
                 (dispatch_id, auditor, cajas_despachadas, piezas_despachadas,
@@ -344,8 +368,4 @@ async def _registrar_auditoria(chat_id: str, estado: dict, url_foto: str) -> Non
             "etiqueta_ok": estado.get("etiquetaOK"), "observaciones": estado.get("observaciones"),
             "foto_url": url_foto, "chat_id": chat_id,
         })
-        conn.execute(text("""
-            UPDATE special_dispatches
-            SET estado = 'AUDITADO', auditado_por = :auditor, fecha_auditoria = now()
-            WHERE id = :id
-        """), {"auditor": estado.get("auditor"), "id": d["id"]})
+    return True

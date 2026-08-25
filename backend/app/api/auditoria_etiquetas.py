@@ -4,6 +4,7 @@ que el original); este router expone el webhook y un dashboard de
 solo lectura para supervision.
 """
 
+import logging
 import os
 from datetime import date as date_type
 from typing import Optional
@@ -16,6 +17,7 @@ from app.services import special_dispatches
 from app.services import telegram_bot
 
 router = APIRouter(prefix="/auditoria-etiquetas", tags=["Auditoria de Etiquetas"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/telegram/webhook")
@@ -31,7 +33,9 @@ async def telegram_webhook(
     try:
         await telegram_bot.procesar_update(update)
     except Exception:
-        pass  # Telegram reintenta si no responde 200; nunca dejar que un error rompa el webhook
+        # Telegram reintenta si no responde 200; nunca dejar que un error rompa el webhook,
+        # pero sí queda logueado para poder diagnosticar fallas del bot en produccion.
+        logger.exception("Error procesando update de Telegram: %s", update)
     return {"ok": True}
 
 
