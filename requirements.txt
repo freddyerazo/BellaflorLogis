@@ -11,5 +11,3 @@ python-multipart
 httpx
 pdfplumber
 apscheduler
-google-auth
-requests
