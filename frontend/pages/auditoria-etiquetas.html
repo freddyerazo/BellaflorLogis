@@ -26,8 +26,12 @@
     <div class="import-card" style="margin-top: 1.5rem;">
       <div class="form-grid">
         <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="filtroFecha" />
+          <label>Desde</label>
+          <input type="date" id="filtroDesde" disabled />
+        </div>
+        <div class="form-group">
+          <label>Hasta</label>
+          <input type="date" id="filtroHasta" />
         </div>
         <div class="form-group form-group-checkbox" style="align-self: end;">
           <label><input type="checkbox" id="filtroSoloProblemas" /> Solo auditorías con algún problema</label>
@@ -46,9 +50,9 @@
       <h3>Despachos</h3>
       <table class="data-table">
         <thead>
-          <tr><th>Poscosecha</th><th>ID Pedido</th><th>Destinatario</th><th>Guía madre</th><th>Guía hija</th><th>Cliente</th><th>Cajas</th><th>Tipo caja</th><th>Estado</th></tr>
+          <tr><th>Fecha</th><th>Poscosecha</th><th>ID Pedido</th><th>Destinatario</th><th>Guía madre</th><th>Guía hija</th><th>Cliente</th><th>Cajas</th><th>Tipo caja</th><th>Estado</th></tr>
         </thead>
-        <tbody id="tablaDespachos"><tr><td colspan="9" class="loading">Cargando...</td></tr></tbody>
+        <tbody id="tablaDespachos"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
       </table>
     </div>
 

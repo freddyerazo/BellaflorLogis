@@ -45,34 +45,28 @@ def generar_despachos(fecha: Optional[date_type] = None):
 
 
 @router.get("/despachos")
-def listar_despachos(fecha: Optional[date_type] = None):
+def listar_despachos(desde: Optional[date_type] = None, hasta: Optional[date_type] = None):
+    # El rango nunca mira hacia atras: desde nunca es anterior a hoy, sin importar
+    # lo que mande el cliente -- la unica ventana valida es "de hoy en adelante".
+    desde = max(desde, date_type.today()) if desde else date_type.today()
+    hasta = max(hasta, desde) if hasta else desde
     with engine.connect() as conn:
-        if fecha:
-            rows = conn.execute(text(
-                "SELECT * FROM special_dispatches WHERE fecha = :f ORDER BY postcosecha, cliente"
-            ), {"f": fecha}).mappings().all()
-        else:
-            rows = conn.execute(text(
-                "SELECT * FROM special_dispatches WHERE fecha = CURRENT_DATE ORDER BY postcosecha, cliente"
-            )).mappings().all()
+        rows = conn.execute(text(
+            "SELECT * FROM special_dispatches WHERE fecha BETWEEN :desde AND :hasta "
+            "ORDER BY fecha, postcosecha, cliente"
+        ), {"desde": desde, "hasta": hasta}).mappings().all()
     return rows
 
 
 @router.get("/auditorias")
-def listar_auditorias(fecha: Optional[date_type] = None):
+def listar_auditorias(desde: Optional[date_type] = None, hasta: Optional[date_type] = None):
+    desde = max(desde, date_type.today()) if desde else date_type.today()
+    hasta = max(hasta, desde) if hasta else desde
     with engine.connect() as conn:
-        if fecha:
-            rows = conn.execute(text("""
-                SELECT a.*, d.cliente, d.postcosecha, d.guia_madre, d.guia_hija, d.tipo_caja
-                FROM special_dispatch_audits a
-                JOIN special_dispatches d ON d.id = a.dispatch_id
-                WHERE d.fecha = :f ORDER BY a.fecha_hora DESC
-            """), {"f": fecha}).mappings().all()
-        else:
-            rows = conn.execute(text("""
-                SELECT a.*, d.cliente, d.postcosecha, d.guia_madre, d.guia_hija, d.tipo_caja
-                FROM special_dispatch_audits a
-                JOIN special_dispatches d ON d.id = a.dispatch_id
-                WHERE d.fecha = CURRENT_DATE ORDER BY a.fecha_hora DESC
-            """)).mappings().all()
+        rows = conn.execute(text("""
+            SELECT a.*, d.cliente, d.postcosecha, d.guia_madre, d.guia_hija, d.tipo_caja
+            FROM special_dispatch_audits a
+            JOIN special_dispatches d ON d.id = a.dispatch_id
+            WHERE d.fecha BETWEEN :desde AND :hasta ORDER BY a.fecha_hora DESC
+        """), {"desde": desde, "hasta": hasta}).mappings().all()
     return rows

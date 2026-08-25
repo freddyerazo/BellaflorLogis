@@ -21,10 +21,14 @@ function fechaHoyLocal() {
 }
 
 async function cargar() {
-  const fecha = $("#filtroFecha").value || fechaHoyLocal();
+  const desde = fechaHoyLocal();
+  $("#filtroDesde").value = desde;
+  $("#filtroHasta").min = desde;
+  const hasta = $("#filtroHasta").value && $("#filtroHasta").value >= desde ? $("#filtroHasta").value : desde;
+  $("#filtroHasta").value = hasta;
   const [despachos, auditorias] = await Promise.all([
-    apiGet(`/auditoria-etiquetas/despachos?fecha=${fecha}`),
-    apiGet(`/auditoria-etiquetas/auditorias?fecha=${fecha}`),
+    apiGet(`/auditoria-etiquetas/despachos?desde=${desde}&hasta=${hasta}`),
+    apiGet(`/auditoria-etiquetas/auditorias?desde=${desde}&hasta=${hasta}`),
   ]);
   auditoriasCargadas = auditorias;
   renderKpis(despachos, auditorias);
@@ -46,16 +50,17 @@ function renderKpis(despachos, auditorias) {
 function renderDespachos(despachos) {
   const tbody = $("#tablaDespachos");
   if (!despachos.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="empty">Sin despachos para esta fecha. Usa "Generar despachos del día" o espera a que el bot los cree con /lista.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">Sin despachos para este rango. Usa "Generar despachos del día" o espera a que el bot los cree con /lista.</td></tr>`;
     return;
   }
   const ordenados = [...despachos].sort((a, b) => {
-    const claveA = `${a.postcosecha || ""}|${a.id_pedido ?? ""}|${a.destinatario || ""}|${a.guia_madre || ""}|${a.guia_hija || ""}`;
-    const claveB = `${b.postcosecha || ""}|${b.id_pedido ?? ""}|${b.destinatario || ""}|${b.guia_madre || ""}|${b.guia_hija || ""}`;
+    const claveA = `${a.fecha || ""}|${a.postcosecha || ""}|${a.id_pedido ?? ""}|${a.destinatario || ""}|${a.guia_madre || ""}|${a.guia_hija || ""}`;
+    const claveB = `${b.fecha || ""}|${b.postcosecha || ""}|${b.id_pedido ?? ""}|${b.destinatario || ""}|${b.guia_madre || ""}|${b.guia_hija || ""}`;
     return claveA.localeCompare(claveB);
   });
   tbody.innerHTML = ordenados.map((d) => `
     <tr>
+      <td>${d.fecha || ""}</td>
       <td>${d.postcosecha || ""}</td>
       <td>${d.id_pedido ?? ""}</td>
       <td>${d.destinatario || ""}</td>
@@ -75,7 +80,7 @@ function renderAuditorias() {
   const auditorias = soloProblemas ? auditoriasCargadas.filter(tieneProblema) : auditoriasCargadas;
 
   if (!auditorias.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty">${soloProblemas ? "Sin auditorías con problemas para esta fecha." : "Sin auditorías registradas para esta fecha."}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">${soloProblemas ? "Sin auditorías con problemas para este rango." : "Sin auditorías registradas para este rango."}</td></tr>`;
     return;
   }
   tbody.innerHTML = auditorias.map((a) => `
@@ -117,13 +122,12 @@ function exportarCsv() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `auditorias_etiquetas_${$("#filtroFecha").value || fechaHoyLocal()}.csv`;
+  a.download = `auditorias_etiquetas_${$("#filtroDesde").value}_a_${$("#filtroHasta").value}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-$("#filtroFecha").value = fechaHoyLocal();
-$("#filtroFecha").addEventListener("change", cargar);
+$("#filtroHasta").addEventListener("change", cargar);
 $("#filtroSoloProblemas").addEventListener("change", renderAuditorias);
 $("#btnExportar").addEventListener("click", exportarCsv);
 
@@ -143,8 +147,7 @@ $("#btnGenerar").addEventListener("click", async () => {
   btn.disabled = true;
   $("#resultado").innerHTML = `<p class="msg-info">Generando despachos desde dartis_ventas...</p>`;
   try {
-    const fecha = $("#filtroFecha").value || fechaHoyLocal();
-    const r = await apiPost(`/auditoria-etiquetas/despachos/generar?fecha=${fecha}`, {});
+    const r = await apiPost(`/auditoria-etiquetas/despachos/generar?fecha=${fechaHoyLocal()}`, {});
     $("#resultado").innerHTML = `<p class="msg-ok">${r.encontrados} facturas de clientes especiales encontradas, ${r.insertados} despachos nuevos creados.</p>`;
     await cargar();
   } catch (err) {
