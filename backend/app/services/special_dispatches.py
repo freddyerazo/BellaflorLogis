@@ -25,12 +25,21 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
         filtro_fecha = "dv.fecha = :fecha" if fecha else "dv.fecha = CURRENT_DATE"
         params = {"fecha": fecha} if fecha else {}
 
+        # Cuando customers.destinatario esta poblado (varios clientes especiales
+        # comparten el mismo dartis_name, ej. 7 destinatarios de TRADEWINDS INTL LLC,
+        # o Montse que es destinatario de Easyflowers S.A), tambien se exige que
+        # coincida con dv.destinatario -- si no, cualquiera de esos clientes
+        # calzaria con cualquier venta de ese comprador sin distinguir a quien iba.
         filas = conn.execute(text(f"""
             SELECT dv.fecha, dv.postcosecha, c.id AS customer_id, dv.cliente, dv.destinatario,
                    dv.guia_madre, dv.guia_hija, dv.tipo_caja, c.customer_name AS etiqueta,
                    SUM(dv.total_piezas) AS cajas
             FROM dartis_ventas dv
             JOIN customers c ON LOWER(TRIM(c.dartis_name)) = LOWER(TRIM(dv.cliente))
+                AND (
+                    c.destinatario IS NULL OR TRIM(c.destinatario) = ''
+                    OR LOWER(TRIM(c.destinatario)) = LOWER(TRIM(dv.destinatario))
+                )
             WHERE c.es_cliente_especial = true AND {filtro_fecha}
             GROUP BY dv.fecha, dv.postcosecha, c.id, dv.cliente, dv.destinatario,
                      dv.guia_madre, dv.guia_hija, dv.tipo_caja, c.customer_name
