@@ -69,7 +69,7 @@ BLIS/
 | Aeropuertos | `/api/aeropuertos` | 37 |
 | Aerolíneas | `/api/aerolineas` | 8 |
 | Países | `/api/paises` | 255 |
-| Clientes | `/api/clientes` | 1,703 — incluye `es_cliente_especial` (62 marcados) |
+| Clientes | `/api/clientes` | 1,703 — incluye `es_cliente_especial` (64 marcados) |
 | Agencias de carga | `/api/cargo-agencies` (`cargo_agencies`) | 34 |
 | Fincas | `/api/farms` (`farms` / `farm_postcosecha`) | 3 / 6 |
 | Tarifas aerolínea | `/api/airline-tariffs` | 8 |
