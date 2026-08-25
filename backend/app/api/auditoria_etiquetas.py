@@ -46,9 +46,10 @@ def generar_despachos(fecha: Optional[date_type] = None):
 
 @router.get("/despachos")
 def listar_despachos(desde: Optional[date_type] = None, hasta: Optional[date_type] = None):
-    # El rango nunca mira hacia atras: desde nunca es anterior a hoy, sin importar
-    # lo que mande el cliente -- la unica ventana valida es "de hoy en adelante".
-    desde = max(desde, date_type.today()) if desde else date_type.today()
+    # El rango es de solo lectura para consulta -- ver fechas pasadas es valido
+    # (historial), lo unico restringido a "hoy en adelante" es la accion de
+    # generar despachos (endpoint /despachos/generar, que siempre usa hoy).
+    desde = desde or date_type.today()
     hasta = max(hasta, desde) if hasta else desde
     with engine.connect() as conn:
         rows = conn.execute(text(
@@ -60,7 +61,7 @@ def listar_despachos(desde: Optional[date_type] = None, hasta: Optional[date_typ
 
 @router.get("/auditorias")
 def listar_auditorias(desde: Optional[date_type] = None, hasta: Optional[date_type] = None):
-    desde = max(desde, date_type.today()) if desde else date_type.today()
+    desde = desde or date_type.today()
     hasta = max(hasta, desde) if hasta else desde
     with engine.connect() as conn:
         rows = conn.execute(text("""

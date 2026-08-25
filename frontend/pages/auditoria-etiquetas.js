@@ -21,9 +21,11 @@ function fechaHoyLocal() {
 }
 
 async function cargar() {
-  const desde = fechaHoyLocal();
-  $("#filtroDesde").value = desde;
-  $("#filtroHasta").min = desde;
+  // El rango es de solo lectura para consulta -- se puede ver historial hacia
+  // atras libremente. Lo unico que siempre mira solo hacia adelante es la
+  // accion de generar despachos (botón "Generar despachos del día", que usa
+  // fechaHoyLocal() directo sin importar este filtro).
+  const desde = $("#filtroDesde").value || fechaHoyLocal();
   const hasta = $("#filtroHasta").value && $("#filtroHasta").value >= desde ? $("#filtroHasta").value : desde;
   $("#filtroHasta").value = hasta;
   const [despachos, auditorias] = await Promise.all([
@@ -127,6 +129,9 @@ function exportarCsv() {
   URL.revokeObjectURL(url);
 }
 
+$("#filtroDesde").value = fechaHoyLocal();
+$("#filtroHasta").value = fechaHoyLocal();
+$("#filtroDesde").addEventListener("change", cargar);
 $("#filtroHasta").addEventListener("change", cargar);
 $("#filtroSoloProblemas").addEventListener("change", renderAuditorias);
 $("#btnExportar").addEventListener("click", exportarCsv);
