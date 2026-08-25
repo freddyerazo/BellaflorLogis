@@ -17,20 +17,33 @@
 
     <div class="import-card">
       <div class="import-actions" style="justify-content: flex-start; gap: .75rem;">
-        <button id="btnGenerar" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> Generar despachos de hoy</button>
+        <button id="btnGenerar" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> Generar despachos del día</button>
         <span id="actualizado" class="page-subtitle"></span>
       </div>
       <div id="resultado" class="resultado"></div>
     </div>
 
+    <div class="import-card" style="margin-top: 1.5rem;">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="filtroFecha" />
+        </div>
+        <div class="form-group form-group-checkbox" style="align-self: end;">
+          <label><input type="checkbox" id="filtroSoloProblemas" /> Solo auditorías con algún problema</label>
+        </div>
+      </div>
+    </div>
+
     <div class="card-grid" id="kpis" style="margin-top: 1.5rem;">
-      <div class="summary-card"><span class="summary-card-value" id="kpi-total">0</span><span class="summary-card-label">Despachos hoy</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-total">0</span><span class="summary-card-label">Despachos</span></div>
       <div class="summary-card"><span class="summary-card-value" id="kpi-auditados">0</span><span class="summary-card-label">Auditados</span></div>
       <div class="summary-card"><span class="summary-card-value" id="kpi-pendientes">0</span><span class="summary-card-label">Pendientes</span></div>
+      <div class="summary-card"><span class="summary-card-value" id="kpi-problemas">0</span><span class="summary-card-label">Con problemas</span></div>
     </div>
 
     <div class="import-card" style="margin-top: 1.5rem;">
-      <h3>Despachos de hoy</h3>
+      <h3>Despachos</h3>
       <table class="data-table">
         <thead>
           <tr><th>Poscosecha</th><th>Cliente</th><th>Guía madre</th><th>Guía hija</th><th>Cajas</th><th>Tipo caja</th><th>Estado</th></tr>
@@ -40,7 +53,10 @@
     </div>
 
     <div class="import-card" style="margin-top: 1.5rem;">
-      <h3>Auditorías registradas hoy</h3>
+      <div class="import-actions" style="justify-content: space-between;">
+        <h3 style="margin: 0;">Auditorías registradas</h3>
+        <button id="btnExportar" class="btn btn-secondary"><i class="ph ph-download-simple"></i> Exportar CSV</button>
+      </div>
       <table class="data-table">
         <thead>
           <tr><th>Hora</th><th>Auditor</th><th>Cliente</th><th>Cajas</th><th>Piezas</th><th>Tipo caja OK</th><th>Especie OK</th><th>Etiqueta OK</th><th>Observaciones</th><th>Foto</th></tr>
@@ -49,6 +65,10 @@
       </table>
     </div>
   </main>
+
+  <div id="lightboxFoto" class="lightbox-foto" hidden>
+    <img id="lightboxFotoImg" src="" alt="Foto de respaldo" />
+  </div>
 
   <script type="module" src="/js/layout.js"></script>
   <script type="module" src="/pages/auditoria-etiquetas.js"></script>

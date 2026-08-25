@@ -1631,3 +1631,32 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   background: var(--bg);
 }
 .il-copiado { font-size: 12px; color: var(--primary); display: none; text-align: center; }
+
+/* Auditoria de Etiquetas: fila de alerta, miniatura de foto, lightbox */
+.fila-alerta { background: #fef2f2; }
+.fila-alerta:hover { background: #fee2e2; }
+.foto-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.lightbox-foto {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  cursor: zoom-out;
+}
+.lightbox-foto[hidden] { display: none; }
+.lightbox-foto img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
