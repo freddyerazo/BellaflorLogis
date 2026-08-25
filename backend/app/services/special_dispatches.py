@@ -30,10 +30,15 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
         # o Montse que es destinatario de Easyflowers S.A), tambien se exige que
         # coincida con dv.destinatario -- si no, cualquiera de esos clientes
         # calzaria con cualquier venta de ese comprador sin distinguir a quien iba.
+        #
+        # Se agrupa por id_pedido (no por guia_madre/guia_hija): en los datos
+        # recientes de Dartis las guias llegan vacias, y como NULL != NULL en el
+        # UNIQUE de la tabla, agrupar por guia dejaba la deduplicacion sin efecto.
+        # id_pedido si viene siempre poblado (mismo campo que usa Torre de Control).
         filas = conn.execute(text(f"""
             SELECT dv.fecha, dv.postcosecha, c.id AS customer_id, dv.cliente, dv.destinatario,
-                   dv.guia_madre, dv.guia_hija, dv.tipo_caja, c.customer_name AS etiqueta,
-                   SUM(dv.total_piezas) AS cajas
+                   dv.id_pedido, MAX(dv.guia_madre) AS guia_madre, MAX(dv.guia_hija) AS guia_hija,
+                   dv.tipo_caja, c.customer_name AS etiqueta, SUM(dv.total_piezas) AS cajas
             FROM dartis_ventas dv
             JOIN customers c ON LOWER(TRIM(c.dartis_name)) = LOWER(TRIM(dv.cliente))
                 AND (
@@ -42,18 +47,18 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
                 )
             WHERE c.es_cliente_especial = true AND {filtro_fecha}
             GROUP BY dv.fecha, dv.postcosecha, c.id, dv.cliente, dv.destinatario,
-                     dv.guia_madre, dv.guia_hija, dv.tipo_caja, c.customer_name
+                     dv.id_pedido, dv.tipo_caja, c.customer_name
         """), params).mappings().all()
 
         insertados = 0
         for f in filas:
             r = conn.execute(text("""
                 INSERT INTO special_dispatches
-                    (fecha, postcosecha, customer_id, cliente, destinatario, guia_madre, guia_hija,
+                    (fecha, postcosecha, customer_id, cliente, destinatario, id_pedido, guia_madre, guia_hija,
                      cajas, tipo_caja, etiqueta)
-                VALUES (:fecha, :postcosecha, :customer_id, :cliente, :destinatario, :guia_madre, :guia_hija,
+                VALUES (:fecha, :postcosecha, :customer_id, :cliente, :destinatario, :id_pedido, :guia_madre, :guia_hija,
                         :cajas, :tipo_caja, :etiqueta)
-                ON CONFLICT (fecha, guia_madre, guia_hija, tipo_caja) DO NOTHING
+                ON CONFLICT (fecha, id_pedido, tipo_caja) DO NOTHING
             """), dict(f))
             insertados += r.rowcount
 

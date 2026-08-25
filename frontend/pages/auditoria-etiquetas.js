@@ -46,15 +46,22 @@ function renderKpis(despachos, auditorias) {
 function renderDespachos(despachos) {
   const tbody = $("#tablaDespachos");
   if (!despachos.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">Sin despachos para esta fecha. Usa "Generar despachos del día" o espera a que el bot los cree con /lista.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty">Sin despachos para esta fecha. Usa "Generar despachos del día" o espera a que el bot los cree con /lista.</td></tr>`;
     return;
   }
-  tbody.innerHTML = despachos.map((d) => `
+  const ordenados = [...despachos].sort((a, b) => {
+    const claveA = `${a.postcosecha || ""}|${a.id_pedido ?? ""}|${a.destinatario || ""}|${a.guia_madre || ""}|${a.guia_hija || ""}`;
+    const claveB = `${b.postcosecha || ""}|${b.id_pedido ?? ""}|${b.destinatario || ""}|${b.guia_madre || ""}|${b.guia_hija || ""}`;
+    return claveA.localeCompare(claveB);
+  });
+  tbody.innerHTML = ordenados.map((d) => `
     <tr>
       <td>${d.postcosecha || ""}</td>
-      <td>${d.cliente || ""}</td>
+      <td>${d.id_pedido ?? ""}</td>
+      <td>${d.destinatario || ""}</td>
       <td>${d.guia_madre || ""}</td>
       <td>${d.guia_hija || ""}</td>
+      <td>${d.cliente || ""}</td>
       <td>${d.cajas ?? ""}</td>
       <td>${d.tipo_caja || ""}</td>
       <td><span class="badge ${d.estado === "AUDITADO" ? "badge-green" : "badge-gray"}">${d.estado}</span></td>
