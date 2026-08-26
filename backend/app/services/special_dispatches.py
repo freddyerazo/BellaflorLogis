@@ -19,12 +19,14 @@ from app.database.connection import engine
 
 def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
     """Idempotente: se puede llamar en cada /lista del bot sin duplicar
-    filas (UNIQUE en fecha+id_pedido+tipo_caja+postcosecha -- un mismo
-    id_pedido puede tener lineas en mas de una poscosecha). Si un despacho
-    ya existia y sigue PENDIENTE, se actualiza con los datos mas recientes
-    de dartis_ventas (Dartis puede reimportarse con cantidades corregidas
-    o completadas despues de la primera vez) -- si ya quedo AUDITADO no se
-    toca, para no pisar un resultado de auditoria ya registrado."""
+    filas (indice unico en fecha+id_pedido+tipo_caja+postcosecha+guia_hija
+    -- un mismo id_pedido puede tener lineas en mas de una poscosecha, y
+    dentro de una poscosecha repartirse en mas de una guia hija, cada una
+    su propio despacho fisico). Si un despacho ya existia y sigue
+    PENDIENTE, se actualiza con los datos mas recientes de dartis_ventas
+    (Dartis puede reimportarse con cantidades corregidas o completadas
+    despues de la primera vez) -- si ya quedo AUDITADO no se toca, para no
+    pisar un resultado de auditoria ya registrado."""
     with engine.begin() as conn:
         filtro_fecha = "dv.fecha = :fecha" if fecha else "dv.fecha = CURRENT_DATE"
         params = {"fecha": fecha} if fecha else {}
@@ -35,13 +37,19 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
         # coincida con dv.destinatario -- si no, cualquiera de esos clientes
         # calzaria con cualquier venta de ese comprador sin distinguir a quien iba.
         #
-        # Se agrupa por id_pedido (no por guia_madre/guia_hija): en los datos
-        # recientes de Dartis las guias llegan vacias, y como NULL != NULL en el
-        # UNIQUE de la tabla, agrupar por guia dejaba la deduplicacion sin efecto.
-        # id_pedido si viene siempre poblado (mismo campo que usa Torre de Control).
+        # Se agrupa por id_pedido (no por guia_madre): en los datos recientes de
+        # Dartis las guias llegan vacias, y como NULL != NULL en un UNIQUE comun,
+        # agrupar por guia dejaba la deduplicacion sin efecto. id_pedido si viene
+        # siempre poblado (mismo campo que usa Torre de Control). guia_hija SI se
+        # incluye en el agrupamiento (piezas unidas por destinatario, separadas
+        # por guia hija): un mismo pedido puede repartirse en varios paquetes
+        # fisicos distintos, cada uno su propio despacho para el auditor. Las
+        # lineas sin guia hija (NULL) se agrupan entre si como un solo despacho,
+        # via el comportamiento nativo de GROUP BY (a diferencia de un UNIQUE,
+        # aqui SI junta todos los NULL en un mismo grupo).
         filas = conn.execute(text(f"""
             SELECT dv.fecha, dv.postcosecha, c.id AS customer_id, dv.cliente, dv.destinatario,
-                   dv.id_pedido, MAX(dv.guia_madre) AS guia_madre, MAX(dv.guia_hija) AS guia_hija,
+                   dv.id_pedido, MAX(dv.guia_madre) AS guia_madre, dv.guia_hija,
                    dv.tipo_caja, c.customer_name AS etiqueta, SUM(dv.total_piezas) AS cajas
             FROM dartis_ventas dv
             JOIN customers c ON LOWER(TRIM(c.dartis_name)) = LOWER(TRIM(dv.cliente))
@@ -51,7 +59,7 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
                 )
             WHERE c.es_cliente_especial = true AND dv.active = true AND {filtro_fecha}
             GROUP BY dv.fecha, dv.postcosecha, c.id, dv.cliente, dv.destinatario,
-                     dv.id_pedido, dv.tipo_caja, c.customer_name
+                     dv.id_pedido, dv.tipo_caja, c.customer_name, dv.guia_hija
         """), params).mappings().all()
 
         insertados = 0
@@ -63,7 +71,7 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
                      cajas, tipo_caja, etiqueta)
                 VALUES (:fecha, :postcosecha, :customer_id, :cliente, :destinatario, :id_pedido, :guia_madre, :guia_hija,
                         :cajas, :tipo_caja, :etiqueta)
-                ON CONFLICT (fecha, id_pedido, tipo_caja, postcosecha) DO UPDATE SET
+                ON CONFLICT (fecha, id_pedido, tipo_caja, postcosecha, (COALESCE(guia_hija, ''))) DO UPDATE SET
                     cajas = EXCLUDED.cajas, guia_madre = EXCLUDED.guia_madre, guia_hija = EXCLUDED.guia_hija,
                     destinatario = EXCLUDED.destinatario, etiqueta = EXCLUDED.etiqueta
                 WHERE special_dispatches.estado = 'PENDIENTE'
