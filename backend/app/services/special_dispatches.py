@@ -19,8 +19,11 @@ from app.database.connection import engine
 
 def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
     """Idempotente: se puede llamar en cada /lista del bot sin duplicar
-    filas (UNIQUE en fecha+guia_madre+guia_hija+tipo_caja) ni pisar
-    despachos que ya estan en curso o auditados."""
+    filas (UNIQUE en fecha+id_pedido+tipo_caja). Si un despacho ya existia
+    y sigue PENDIENTE, se actualiza con los datos mas recientes de
+    dartis_ventas (Dartis puede reimportarse con cantidades corregidas o
+    completadas despues de la primera vez) -- si ya quedo AUDITADO no se
+    toca, para no pisar un resultado de auditoria ya registrado."""
     with engine.begin() as conn:
         filtro_fecha = "dv.fecha = :fecha" if fecha else "dv.fecha = CURRENT_DATE"
         params = {"fecha": fecha} if fecha else {}
@@ -51,6 +54,7 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
         """), params).mappings().all()
 
         insertados = 0
+        actualizados = 0
         for f in filas:
             r = conn.execute(text("""
                 INSERT INTO special_dispatches
@@ -58,11 +62,20 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
                      cajas, tipo_caja, etiqueta)
                 VALUES (:fecha, :postcosecha, :customer_id, :cliente, :destinatario, :id_pedido, :guia_madre, :guia_hija,
                         :cajas, :tipo_caja, :etiqueta)
-                ON CONFLICT (fecha, id_pedido, tipo_caja) DO NOTHING
+                ON CONFLICT (fecha, id_pedido, tipo_caja) DO UPDATE SET
+                    cajas = EXCLUDED.cajas, guia_madre = EXCLUDED.guia_madre, guia_hija = EXCLUDED.guia_hija,
+                    destinatario = EXCLUDED.destinatario, etiqueta = EXCLUDED.etiqueta
+                WHERE special_dispatches.estado = 'PENDIENTE'
+                RETURNING (xmax = 0) AS es_insercion
             """), dict(f))
-            insertados += r.rowcount
+            fila = r.first()
+            if fila is not None:
+                if fila[0]:
+                    insertados += 1
+                else:
+                    actualizados += 1
 
-    return {"encontrados": len(filas), "insertados": insertados}
+    return {"encontrados": len(filas), "insertados": insertados, "actualizados": actualizados}
 
 
 def despachos_pendientes(poscosecha: Optional[str] = None) -> list[dict]:
