@@ -108,6 +108,19 @@ function renderAuditorias() {
   `).join("");
 }
 
+function descargarCsv(encabezados, filas, nombreArchivo) {
+  const csv = [encabezados, ...filas]
+    .map((fila) => fila.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombreArchivo;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function exportarCsv() {
   const soloProblemas = $("#filtroSoloProblemas").checked;
   const auditorias = soloProblemas ? auditoriasCargadas.filter(tieneProblema) : auditoriasCargadas;
@@ -118,19 +131,31 @@ function exportarCsv() {
     a.cliente || "",
     a.cajas_despachadas ?? "",
     a.confirmado === true ? "SI" : a.confirmado === false ? "NO" : "",
-    (a.observaciones || "").replace(/"/g, '""'),
+    a.observaciones || "",
     (a.foto_urls || []).join(" | "),
   ]);
-  const csv = [encabezados, ...filas]
-    .map((fila) => fila.map((v) => `"${v}"`).join(","))
-    .join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `auditorias_etiquetas_${$("#filtroDesde").value}_a_${$("#filtroHasta").value}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  descargarCsv(encabezados, filas, `auditorias_etiquetas_${$("#filtroDesde").value}_a_${$("#filtroHasta").value}.csv`);
+}
+
+function exportarDespachosExcel() {
+  const soloGuiasCompletas = $("#filtroGuiasCompletas").checked;
+  const despachos = soloGuiasCompletas
+    ? despachosCargados.filter((d) => d.guia_madre && d.guia_hija)
+    : despachosCargados;
+  const encabezados = ["Fecha", "Poscosecha", "ID Pedido", "Destinatario", "Guía madre", "Guía hija", "Cliente", "Cajas", "Tipo caja", "Estado"];
+  const filas = despachos.map((d) => [
+    d.fecha || "",
+    d.postcosecha || "",
+    d.id_pedido ?? "",
+    d.destinatario || "",
+    d.guia_madre || "",
+    d.guia_hija || "",
+    d.cliente || "",
+    d.cajas ?? "",
+    d.tipo_caja || "",
+    d.estado || "",
+  ]);
+  descargarCsv(encabezados, filas, `despachos_etiquetas_${$("#filtroDesde").value}_a_${$("#filtroHasta").value}.csv`);
 }
 
 $("#filtroDesde").value = fechaHoyLocal();
@@ -140,6 +165,7 @@ $("#filtroHasta").addEventListener("change", cargar);
 $("#filtroGuiasCompletas").addEventListener("change", renderDespachos);
 $("#filtroSoloProblemas").addEventListener("change", renderAuditorias);
 $("#btnExportar").addEventListener("click", exportarCsv);
+$("#btnExportarDespachos").addEventListener("click", exportarDespachosExcel);
 
 $("#tablaAuditorias").addEventListener("click", (ev) => {
   const img = ev.target.closest(".foto-thumb");
