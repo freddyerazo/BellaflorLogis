@@ -124,6 +124,33 @@ def _import_recetas(ws, conn) -> dict:
     ]
 
     raw = conn.connection.cursor()
+
+    # Dartis a veces exporta una linea sin guia (todavia no asignada) y luego,
+    # en una reimportacion posterior, la misma linea ya con guia. Como la guia
+    # es parte de la clave unica, ON CONFLICT no reconoce esa fila como la
+    # misma -- se duplicaria. Se completa la guia en la fila vieja ANTES del
+    # upsert principal, para que el ON CONFLICT de mas abajo si la reconozca.
+    con_guia = [p for p in params if p["guia_madre"] or p["guia_hija"]]
+    if con_guia:
+        raw.execute("""
+            CREATE TEMP TABLE tmp_recetas_guias (
+                id_pedido INTEGER, tipo_caja TEXT, especie TEXT, fecha DATE,
+                guia_madre TEXT, guia_hija TEXT
+            ) ON COMMIT DROP
+        """)
+        execute_values(raw, "INSERT INTO tmp_recetas_guias VALUES %s", [
+            (p["id_pedido"], p["tipo_caja"], p["especie"], p["fecha"], p["guia_madre"], p["guia_hija"])
+            for p in con_guia
+        ], page_size=2000)
+        raw.execute("""
+            UPDATE dartis_ventas dv
+            SET    guia_madre = t.guia_madre, guia_hija = t.guia_hija
+            FROM   tmp_recetas_guias t
+            WHERE  dv.id_pedido = t.id_pedido AND dv.tipo_caja = t.tipo_caja
+              AND  dv.especie = t.especie AND dv.fecha = t.fecha
+              AND  dv.guia_madre IS NULL AND dv.guia_hija IS NULL
+        """)
+
     execute_values(raw, """
         INSERT INTO dartis_ventas (
             fecha, dae, id_comercializadora, id_pedido,

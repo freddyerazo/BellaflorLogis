@@ -19,10 +19,11 @@ from app.database.connection import engine
 
 def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
     """Idempotente: se puede llamar en cada /lista del bot sin duplicar
-    filas (UNIQUE en fecha+id_pedido+tipo_caja). Si un despacho ya existia
-    y sigue PENDIENTE, se actualiza con los datos mas recientes de
-    dartis_ventas (Dartis puede reimportarse con cantidades corregidas o
-    completadas despues de la primera vez) -- si ya quedo AUDITADO no se
+    filas (UNIQUE en fecha+id_pedido+tipo_caja+postcosecha -- un mismo
+    id_pedido puede tener lineas en mas de una poscosecha). Si un despacho
+    ya existia y sigue PENDIENTE, se actualiza con los datos mas recientes
+    de dartis_ventas (Dartis puede reimportarse con cantidades corregidas
+    o completadas despues de la primera vez) -- si ya quedo AUDITADO no se
     toca, para no pisar un resultado de auditoria ya registrado."""
     with engine.begin() as conn:
         filtro_fecha = "dv.fecha = :fecha" if fecha else "dv.fecha = CURRENT_DATE"
@@ -62,7 +63,7 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
                      cajas, tipo_caja, etiqueta)
                 VALUES (:fecha, :postcosecha, :customer_id, :cliente, :destinatario, :id_pedido, :guia_madre, :guia_hija,
                         :cajas, :tipo_caja, :etiqueta)
-                ON CONFLICT (fecha, id_pedido, tipo_caja) DO UPDATE SET
+                ON CONFLICT (fecha, id_pedido, tipo_caja, postcosecha) DO UPDATE SET
                     cajas = EXCLUDED.cajas, guia_madre = EXCLUDED.guia_madre, guia_hija = EXCLUDED.guia_hija,
                     destinatario = EXCLUDED.destinatario, etiqueta = EXCLUDED.etiqueta
                 WHERE special_dispatches.estado = 'PENDIENTE'
