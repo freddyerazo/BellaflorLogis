@@ -150,13 +150,40 @@ def _import_recetas(ws, conn) -> dict:
             (p["id_pedido"], p["tipo_caja"], p["especie"], p["fecha"], p["guia_madre"], p["guia_hija"])
             for p in con_guia
         ], page_size=2000)
+        # dv.id = (subquery LIMIT 1), no un UPDATE...FROM directo: si existen
+        # DOS lineas viejas sin guia para la misma clave (dos lotes separados
+        # del mismo producto que Dartis aun no distinguia), un UPDATE...FROM
+        # les pondria a AMBAS la misma guia nueva -- duplicando la clave unica.
+        # Con la subquery solo se completa una fila por cada linea del archivo
+        # nuevo; la otra queda para una importacion futura que si la distinga.
+        #
+        # El NOT EXISTS es necesario porque la tabla tiene ADEMAS un indice
+        # unico "dartis_ventas_clave_linea" con NULLS NOT DISTINCT (no creado
+        # por este codigo) -- si la guia nueva ya pertenece a otra fila
+        # existente, completar la fila sin guia con esa misma guia duplicaria
+        # esa clave y tumbaba la importacion entera (visto en produccion:
+        # pedido 201520/LYSIMACHIA). En ese caso se deja la fila sin guia
+        # -- el upsert principal de mas abajo la vuelve a intentar con sus
+        # valores reales, y como esos SI son valores no nulos, ON CONFLICT
+        # la reconoce y actualiza en vez de duplicar.
         raw.execute("""
             UPDATE dartis_ventas dv
             SET    guia_madre = t.guia_madre, guia_hija = t.guia_hija
             FROM   tmp_recetas_guias t
-            WHERE  dv.id_pedido = t.id_pedido AND dv.tipo_caja = t.tipo_caja
-              AND  dv.especie = t.especie AND dv.fecha = t.fecha
-              AND  dv.guia_madre IS NULL AND dv.guia_hija IS NULL
+            WHERE  dv.id = (
+                SELECT dv2.id FROM dartis_ventas dv2
+                WHERE dv2.id_pedido = t.id_pedido AND dv2.tipo_caja = t.tipo_caja
+                  AND dv2.especie = t.especie AND dv2.fecha = t.fecha
+                  AND dv2.guia_madre IS NULL AND dv2.guia_hija IS NULL
+                ORDER BY dv2.id
+                LIMIT 1
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM dartis_ventas dv3
+                WHERE dv3.id_pedido = t.id_pedido AND dv3.tipo_caja = t.tipo_caja
+                  AND dv3.especie = t.especie
+                  AND dv3.guia_madre = t.guia_madre AND dv3.guia_hija = t.guia_hija
+            )
         """)
 
     execute_values(raw, """
