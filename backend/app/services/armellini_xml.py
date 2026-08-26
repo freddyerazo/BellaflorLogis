@@ -63,7 +63,7 @@ _CONSULTA = """
     LEFT JOIN farms f  ON f.name = o.nombre_cultivo
     LEFT JOIN armellini_consignees ac ON ac.destinatario = o.nombre_cliente
     LEFT JOIN armellini_product_overrides ov ON ov.codigo_producto = o.codigo_producto
-    LEFT JOIN (SELECT DISTINCT id_pedido, id_comercializadora FROM dartis_ventas) dv
+    LEFT JOIN (SELECT DISTINCT id_pedido, id_comercializadora FROM dartis_ventas WHERE active = true) dv
            ON dv.id_pedido = o.factura
     WHERE {filtro}
     ORDER BY o.awb, o.codigo_pieza

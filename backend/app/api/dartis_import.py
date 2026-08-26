@@ -125,6 +125,12 @@ def _import_recetas(ws, conn) -> dict:
 
     raw = conn.connection.cursor()
 
+    # Marca de tiempo ANTES de tocar nada: cualquier fila que no se toque en
+    # este import (ni se inserte ni se actualice) se queda con un
+    # importado_at anterior a esta marca -- eso es lo que distingue "ya no
+    # esta en el archivo nuevo" de "sigue igual".
+    inicio = conn.execute(text("SELECT now()")).scalar()
+
     # Dartis a veces exporta una linea sin guia (todavia no asignada) y luego,
     # en una reimportacion posterior, la misma linea ya con guia. Como la guia
     # es parte de la clave unica, ON CONFLICT no reconoce esa fila como la
@@ -156,7 +162,7 @@ def _import_recetas(ws, conn) -> dict:
             fecha, dae, id_comercializadora, id_pedido,
             empresa, cliente, destinatario, postcosecha, especie,
             guia_madre, guia_hija, tipo_caja,
-            total_piezas, total_tallos, total_dolares
+            total_piezas, total_tallos, total_dolares, active
         ) VALUES %s
         ON CONFLICT (id_pedido, guia_madre, guia_hija, tipo_caja, especie) DO UPDATE SET
             fecha               = EXCLUDED.fecha,
@@ -170,13 +176,30 @@ def _import_recetas(ws, conn) -> dict:
             total_piezas        = EXCLUDED.total_piezas,
             total_tallos        = EXCLUDED.total_tallos,
             total_dolares       = EXCLUDED.total_dolares,
+            active              = true,
             importado_at        = now()
-    """, tuples, page_size=1000)
+    """, [t + (True,) for t in tuples], page_size=1000)
+
+    # Reconciliacion: cualquier fila de dartis_ventas cuya fecha caiga dentro
+    # de las fechas de este archivo, pero que este import no toco (sigue con
+    # importado_at anterior al inicio de esta corrida), ya no esta en la
+    # fuente -- se inactiva en vez de dejarla viva para siempre (caso real:
+    # pedido 200546, huerfano hasta que se borro a mano).
+    fechas_archivo = sorted({p["fecha"] for p in params if p["fecha"]})
+    inactivados = 0
+    if fechas_archivo:
+        r = conn.execute(text("""
+            UPDATE dartis_ventas
+            SET active = false
+            WHERE fecha = ANY(:fechas) AND importado_at < :inicio AND active = true
+        """), {"fechas": fechas_archivo, "inicio": inicio})
+        inactivados = r.rowcount
 
     sin_finca = _sync_postcosechas(conn, postcosechas)
     clientes_result = _sync_customers(conn, {p["cliente"] for p in params if p.get("cliente")})
 
     return {
+        "inactivados": inactivados,
         "insertados_o_actualizados": len(tuples),
         "errores": errores,
         "postcosechas_sin_finca": sin_finca,

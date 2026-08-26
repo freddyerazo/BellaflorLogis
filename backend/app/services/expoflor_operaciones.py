@@ -233,7 +233,7 @@ def conciliar_con_ventas(facturas: list[int]) -> list[dict]:
                        sum(total_dolares) AS dolares_dartis,
                        min(cliente) AS cliente, min(destinatario) AS destinatario
                 FROM dartis_ventas
-                WHERE id_pedido = ANY(:facturas)
+                WHERE id_pedido = ANY(:facturas) AND active = true
                 GROUP BY id_pedido
             )
             SELECT o.factura, o.cajas_xml, o.tallos_xml, o.destinatario_xml,

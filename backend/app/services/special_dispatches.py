@@ -49,7 +49,7 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
                     c.destinatario IS NULL OR TRIM(c.destinatario) = ''
                     OR LOWER(TRIM(c.destinatario)) = LOWER(TRIM(dv.destinatario))
                 )
-            WHERE c.es_cliente_especial = true AND {filtro_fecha}
+            WHERE c.es_cliente_especial = true AND dv.active = true AND {filtro_fecha}
             GROUP BY dv.fecha, dv.postcosecha, c.id, dv.cliente, dv.destinatario,
                      dv.id_pedido, dv.tipo_caja, c.customer_name
         """), params).mappings().all()

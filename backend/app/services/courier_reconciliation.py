@@ -52,7 +52,7 @@ def _obtener_base_dartis() -> list[dict]:
                    MAX(vendedor) AS vendedor_cliente, MAX(fecha) AS fecha_dartis,
                    SUM(total_piezas) AS cajas_dartis
             FROM dartis_ventas
-            WHERE agencia_carga IS NOT NULL
+            WHERE agencia_carga IS NOT NULL AND active = true
             GROUP BY id_pedido
         """)).mappings().all()
 

@@ -106,6 +106,7 @@ function showResult(data) {
           <p><span class="badge badge-green">${r.insertados_o_actualizados}</span> registros importados</p>
           <p><span class="badge badge-blue">${r.clientes_vinculados}</span> clientes vinculados</p>
           ${r.clientes_nuevos ? `<p><span class="badge badge-orange">${r.clientes_nuevos}</span> clientes nuevos creados</p>` : ""}
+          ${r.inactivados ? `<p><span class="badge badge-orange">${r.inactivados}</span> registros inactivados (ya no están en el archivo)</p>` : ""}
           ${r.errores ? `<p><span class="badge badge-red">${r.errores}</span> errores</p>` : ""}
         </div>
         <div class="result-col">
