@@ -10,6 +10,7 @@ Regla: se suben los dos archivos juntos. Primero se procesa Recetas
 """
 
 import asyncio
+import logging
 import tempfile
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from sqlalchemy import text
 from app.database.connection import engine
 
 router = APIRouter(prefix="/dartis", tags=["Dartis Import"])
+logger = logging.getLogger(__name__)
 
 RECETAS_DATA_START = 7
 VENTAS_DATA_START  = 7
@@ -388,9 +390,18 @@ async def upload_dartis(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error leyendo archivos: {e}")
 
-        with engine.begin() as conn:
-            resultado_recetas = _import_recetas(wb_recetas.active, conn)
-            resultado_ventas  = _enrich_ventas(wb_ventas.active, conn)
+        try:
+            with engine.begin() as conn:
+                resultado_recetas = _import_recetas(wb_recetas.active, conn)
+                resultado_ventas  = _enrich_ventas(wb_ventas.active, conn)
+        except Exception as e:
+            # Antes esto se perdia como un 500 generico (Cloudflare/Render lo
+            # muestra como pagina HTML, no JSON, asi que el frontend terminaba
+            # mostrando el mensaje de respaldo "Error en el servidor" sin
+            # ninguna pista de la causa real). Ahora queda logueado en el
+            # servidor y el detalle real llega al frontend.
+            logger.exception("Error importando Dartis (recetas=%s, ventas=%s)", nombre_recetas, nombre_ventas)
+            raise HTTPException(status_code=500, detail=f"Error importando: {type(e).__name__}: {e}")
 
         return {
             "recetas": {"archivo": nombre_recetas, **resultado_recetas},
