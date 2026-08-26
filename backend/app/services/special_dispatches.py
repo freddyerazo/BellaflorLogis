@@ -12,6 +12,7 @@ guia_madre+guia_hija+tipo_caja (total = SUM(total_piezas)).
 from datetime import date as date_type
 from typing import Optional
 
+from psycopg2.extras import execute_values
 from sqlalchemy import text
 
 from app.database.connection import engine
@@ -36,6 +37,14 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
         # o Montse que es destinatario de Easyflowers S.A), tambien se exige que
         # coincida con dv.destinatario -- si no, cualquiera de esos clientes
         # calzaria con cualquier venta de ese comprador sin distinguir a quien iba.
+        # Un mismo dv puede calzar con el cliente "padre" (destinatario NULL,
+        # matchea cualquier venta de ese comprador) Y con un destinatario
+        # especifico a la vez -- ROW_NUMBER se queda solo con el mas especifico
+        # por fila de venta, para no generar la misma clave de despacho dos
+        # veces bajo dos clientes distintos (eso rompia el insert masivo de
+        # abajo con "ON CONFLICT DO UPDATE command cannot affect row a second
+        # time", y en el insert fila por fila anterior quedaba en silencio con
+        # el ultimo que ganara la carrera).
         #
         # Se agrupa por id_pedido (no por guia_madre): en los datos recientes de
         # Dartis las guias llegan vacias, y como NULL != NULL en un UNIQUE comun,
@@ -48,41 +57,55 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
         # via el comportamiento nativo de GROUP BY (a diferencia de un UNIQUE,
         # aqui SI junta todos los NULL en un mismo grupo).
         filas = conn.execute(text(f"""
-            SELECT dv.fecha, dv.postcosecha, c.id AS customer_id, dv.cliente, dv.destinatario,
-                   dv.id_pedido, MAX(dv.guia_madre) AS guia_madre, dv.guia_hija,
-                   dv.tipo_caja, c.customer_name AS etiqueta, SUM(dv.total_piezas) AS cajas
-            FROM dartis_ventas dv
-            JOIN customers c ON LOWER(TRIM(c.dartis_name)) = LOWER(TRIM(dv.cliente))
-                AND (
-                    c.destinatario IS NULL OR TRIM(c.destinatario) = ''
-                    OR LOWER(TRIM(c.destinatario)) = LOWER(TRIM(dv.destinatario))
-                )
-            WHERE c.es_cliente_especial = true AND dv.active = true AND {filtro_fecha}
-            GROUP BY dv.fecha, dv.postcosecha, c.id, dv.cliente, dv.destinatario,
-                     dv.id_pedido, dv.tipo_caja, c.customer_name, dv.guia_hija
+            WITH match_unico AS (
+                SELECT dv.*, c.id AS matched_customer_id, c.customer_name,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY dv.id
+                           ORDER BY (c.destinatario IS NOT NULL AND TRIM(c.destinatario) != '') DESC
+                       ) AS rn
+                FROM dartis_ventas dv
+                JOIN customers c ON LOWER(TRIM(c.dartis_name)) = LOWER(TRIM(dv.cliente))
+                    AND (
+                        c.destinatario IS NULL OR TRIM(c.destinatario) = ''
+                        OR LOWER(TRIM(c.destinatario)) = LOWER(TRIM(dv.destinatario))
+                    )
+                WHERE c.es_cliente_especial = true AND dv.active = true AND {filtro_fecha}
+            )
+            SELECT fecha, postcosecha, matched_customer_id AS customer_id, cliente, destinatario,
+                   id_pedido, MAX(guia_madre) AS guia_madre, guia_hija,
+                   tipo_caja, MAX(customer_name) AS etiqueta, SUM(total_piezas) AS cajas
+            FROM match_unico
+            WHERE rn = 1
+            GROUP BY fecha, postcosecha, matched_customer_id, cliente, destinatario,
+                     id_pedido, tipo_caja, guia_hija
         """), params).mappings().all()
 
-        insertados = 0
-        actualizados = 0
-        for f in filas:
-            r = conn.execute(text("""
+        # Insercion masiva via execute_values (mismo patron que dartis_import.py
+        # y courier_reconciliation.py): con decenas de despachos, hacer un
+        # INSERT por fila tardaba ~200ms/round-trip a Supabase cada uno -- en
+        # /lista eso se traducia en 10-15s de espera para el auditor en cada
+        # comando. En un solo lote es menos de 1s.
+        tuples = [
+            (f["fecha"], f["postcosecha"], f["customer_id"], f["cliente"], f["destinatario"],
+             f["id_pedido"], f["guia_madre"], f["guia_hija"], f["cajas"], f["tipo_caja"], f["etiqueta"])
+            for f in filas
+        ]
+        insertados = actualizados = 0
+        if tuples:
+            raw = conn.connection.cursor()
+            resultados = execute_values(raw, """
                 INSERT INTO special_dispatches
                     (fecha, postcosecha, customer_id, cliente, destinatario, id_pedido, guia_madre, guia_hija,
                      cajas, tipo_caja, etiqueta)
-                VALUES (:fecha, :postcosecha, :customer_id, :cliente, :destinatario, :id_pedido, :guia_madre, :guia_hija,
-                        :cajas, :tipo_caja, :etiqueta)
+                VALUES %s
                 ON CONFLICT (fecha, id_pedido, tipo_caja, postcosecha, (COALESCE(guia_hija, ''))) DO UPDATE SET
                     cajas = EXCLUDED.cajas, guia_madre = EXCLUDED.guia_madre, guia_hija = EXCLUDED.guia_hija,
                     destinatario = EXCLUDED.destinatario, etiqueta = EXCLUDED.etiqueta
                 WHERE special_dispatches.estado = 'PENDIENTE'
                 RETURNING (xmax = 0) AS es_insercion
-            """), dict(f))
-            fila = r.first()
-            if fila is not None:
-                if fila[0]:
-                    insertados += 1
-                else:
-                    actualizados += 1
+            """, tuples, page_size=1000, fetch=True)
+            insertados = sum(1 for r in resultados if r[0])
+            actualizados = sum(1 for r in resultados if not r[0])
 
     return {"encontrados": len(filas), "insertados": insertados, "actualizados": actualizados}
 
