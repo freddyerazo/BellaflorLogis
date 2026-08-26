@@ -269,10 +269,18 @@ def _entero(valor) -> int:
 
 
 def _nombre_desde_perfil(perfil: dict) -> str:
+    """Nombre + @usuario de Telegram cuando estan disponibles: el nombre
+    puede repetirse entre auditores, pero el @usuario es unico y estable,
+    asi que se incluye siempre que exista (no solo como respaldo)."""
     nombre = " ".join(p for p in [perfil.get("first_name"), perfil.get("last_name")] if p).strip()
-    if not nombre:
-        nombre = perfil.get("username") or str(perfil.get("id") or "desconocido")
-    return nombre
+    usuario = perfil.get("username")
+    if nombre and usuario:
+        return f"{nombre} (@{usuario})"
+    if nombre:
+        return nombre
+    if usuario:
+        return f"@{usuario}"
+    return str(perfil.get("id") or "desconocido")
 
 
 def _texto_resumen(d: dict) -> str:
