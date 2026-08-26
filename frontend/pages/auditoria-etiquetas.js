@@ -5,14 +5,14 @@ const $ = (sel) => document.querySelector(sel);
 let despachosCargados = [];
 let auditoriasCargadas = [];
 
-function badgeSiNo(v) {
-  if (v === true) return `<span class="badge badge-green">Sí</span>`;
-  if (v === false) return `<span class="badge badge-red">No</span>`;
+function badgeConfirmado(v) {
+  if (v === true) return `<span class="badge badge-green">Confirmado</span>`;
+  if (v === false) return `<span class="badge badge-red">No confirmado</span>`;
   return "-";
 }
 
 function tieneProblema(a) {
-  return a.tipo_caja_ok === false || a.especie_ok === false || a.etiqueta_ok === false;
+  return a.confirmado === false;
 }
 
 function fechaHoyLocal() {
@@ -92,7 +92,7 @@ function renderAuditorias() {
   const auditorias = soloProblemas ? auditoriasCargadas.filter(tieneProblema) : auditoriasCargadas;
 
   if (!auditorias.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty">${soloProblemas ? "Sin auditorías con problemas para este rango." : "Sin auditorías registradas para este rango."}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">${soloProblemas ? "Sin auditorías con problemas para este rango." : "Sin auditorías registradas para este rango."}</td></tr>`;
     return;
   }
   tbody.innerHTML = auditorias.map((a) => `
@@ -101,12 +101,9 @@ function renderAuditorias() {
       <td>${a.auditor || ""}</td>
       <td>${a.cliente || ""}</td>
       <td>${a.cajas_despachadas ?? ""}</td>
-      <td>${a.piezas_despachadas ?? ""}</td>
-      <td>${badgeSiNo(a.tipo_caja_ok)}</td>
-      <td>${badgeSiNo(a.especie_ok)}</td>
-      <td>${badgeSiNo(a.etiqueta_ok)}</td>
+      <td>${badgeConfirmado(a.confirmado)}</td>
       <td>${a.observaciones || ""}</td>
-      <td>${a.foto_url ? `<img class="foto-thumb" src="${a.foto_url}" alt="Foto de respaldo" loading="lazy" />` : "-"}</td>
+      <td>${(a.foto_urls || []).map((url) => `<img class="foto-thumb" src="${url}" alt="Foto de respaldo" loading="lazy" />`).join("") || "-"}</td>
     </tr>
   `).join("");
 }
@@ -114,18 +111,15 @@ function renderAuditorias() {
 function exportarCsv() {
   const soloProblemas = $("#filtroSoloProblemas").checked;
   const auditorias = soloProblemas ? auditoriasCargadas.filter(tieneProblema) : auditoriasCargadas;
-  const encabezados = ["Hora", "Auditor", "Cliente", "Cajas", "Piezas", "TipoCajaOK", "EspecieOK", "EtiquetaOK", "Observaciones", "FotoURL"];
+  const encabezados = ["Hora", "Auditor", "Cliente", "Cajas", "Confirmado", "Observaciones", "FotoURLs"];
   const filas = auditorias.map((a) => [
     new Date(a.fecha_hora).toLocaleTimeString("es-EC"),
     a.auditor || "",
     a.cliente || "",
     a.cajas_despachadas ?? "",
-    a.piezas_despachadas ?? "",
-    a.tipo_caja_ok === true ? "SI" : a.tipo_caja_ok === false ? "NO" : "",
-    a.especie_ok === true ? "SI" : a.especie_ok === false ? "NO" : "",
-    a.etiqueta_ok === true ? "SI" : a.etiqueta_ok === false ? "NO" : "",
+    a.confirmado === true ? "SI" : a.confirmado === false ? "NO" : "",
     (a.observaciones || "").replace(/"/g, '""'),
-    a.foto_url || "",
+    (a.foto_urls || []).join(" | "),
   ]);
   const csv = [encabezados, ...filas]
     .map((fila) => fila.map((v) => `"${v}"`).join(","))

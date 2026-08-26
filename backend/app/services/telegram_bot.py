@@ -1,8 +1,10 @@
 """Bot de Telegram para el auditor de poscosecha — port del state machine
-de Code.gs (Auditoria_LEsp). Mismo flujo: /lista -> elegir poscosecha (si
-hay mas de una) -> elegir despacho -> auditor -> cajas -> piezas -> tipo
-de caja OK? -> especie OK? -> etiqueta OK? -> observaciones -> foto ->
-se guarda en special_dispatch_audits y se marca el despacho AUDITADO.
+de Code.gs (Auditoria_LEsp), simplificado: /lista -> elegir poscosecha (si
+hay mas de una) -> elegir despacho -> resumen unico del despacho con
+botones Confirmado/No confirmado -> observaciones -> una o mas fotos
+(/listo para terminar) -> se guarda en special_dispatch_audits y se marca
+el despacho AUDITADO. El nombre del auditor ya no se pregunta, se toma
+del perfil de Telegram de quien confirma.
 
 El estado de la conversacion vive en telegram_conversation_state
 (Postgres) en vez de CacheService de Apps Script, para sobrevivir un
@@ -129,89 +131,58 @@ async def procesar_update(update: dict) -> None:
             await _enviar(chat_id, f"⚠️ Responde con el numero del despacho (1-{len(pendientes)}) o /cancelar.")
             return
         despacho = pendientes[n - 1]
-        estado = {"paso": "auditor", "despacho": despacho}
+        estado = {"paso": "confirmando", "despacho": despacho}
         _guardar_estado(chat_id, estado)
-        d = despacho
-        texto_msg = (
-            f"\U0001F4E6 <b>{d['cliente']}</b>\n\U0001F3ED Poscosecha: {d['postcosecha']}\n"
-            f"\U0001F4C4 Guia hija: {d['guia_hija']}\n\U0001F4E6 Cajas segun venta: {d['cajas']}"
-        )
-        if d.get("tipo_caja"):
-            texto_msg += f"\n\U0001F4E6 Tipo de caja segun venta: <b>{d['tipo_caja']}</b>"
-        texto_msg += f"\n\U0001F3F7️ Etiqueta: {d.get('etiqueta') or ''}"
-        if d.get("instrucciones"):
-            texto_msg += f"\n\U0001F4CB Instrucciones: {d['instrucciones']}"
-        texto_msg += "\n\n\U0001F464 <b>Nombre del auditor?</b>"
-        await _enviar(chat_id, texto_msg)
-        return
-
-    if paso == "auditor":
-        estado["auditor"] = texto
-        estado["paso"] = "cajas"
-        _guardar_estado(chat_id, estado)
-        await _enviar(chat_id, f"\U0001F4E6 Cuantas <b>cajas</b> se estan despachando? (segun venta: {estado['despacho']['cajas']})")
-        return
-
-    if paso == "cajas":
-        try:
-            cajas = float(texto.replace(",", "."))
-        except ValueError:
-            await _enviar(chat_id, "⚠️ Escribe solo el numero de cajas.")
-            return
-        estado["cajas"] = cajas
-        estado["paso"] = "piezas"
-        _guardar_estado(chat_id, estado)
-        pregunta = "\U0001F339 Cuantas <b>piezas</b> (tallos) se estan despachando?"
-        esperado = estado["despacho"].get("cajas")
-        if esperado is not None and cajas != float(esperado):
-            pregunta = f"⚠️ Ojo: la venta dice {esperado} cajas y declaraste {cajas}.\n\n" + pregunta
-        await _enviar(chat_id, pregunta)
-        return
-
-    if paso == "piezas":
-        try:
-            piezas = float(texto.replace(",", "."))
-        except ValueError:
-            await _enviar(chat_id, "⚠️ Escribe solo el numero de piezas.")
-            return
-        estado["piezas"] = piezas
-        estado["paso"] = "tipoCaja"
-        _guardar_estado(chat_id, estado)
-        tipo_esperado = estado["despacho"].get("tipo_caja")
-        pregunta = "\U0001F4E6 El <b>tipo de caja</b> revisado esta correcto"
-        pregunta += f" (segun venta: <b>{tipo_esperado}</b>)?" if tipo_esperado else " (HB, QB, EB)?"
-        await _enviar_botones(chat_id, pregunta, [[{"texto": "✅ Si", "datos": "SI"}, {"texto": "❌ No", "datos": "NO"}]])
+        await _enviar_botones(chat_id, _texto_resumen(despacho), [[
+            {"texto": "✅ Confirmado", "datos": "CONFIRMADO"},
+            {"texto": "❌ No confirmado", "datos": "NO_CONFIRMADO"},
+        ]])
         return
 
     if paso == "observaciones":
         estado["observaciones"] = "" if texto == "-" else texto
         estado["paso"] = "foto"
+        estado["fotos"] = []
         _guardar_estado(chat_id, estado)
-        await _enviar(chat_id, "\U0001F4F8 Envia ahora la <b>foto de respaldo</b> del despacho de las cajas.")
+        await _enviar(chat_id, "\U0001F4F8 Envia una o mas <b>fotos</b> de respaldo del despacho. Cuando termines, escribe /listo.")
         return
 
     if paso == "foto":
-        fotos = msg.get("photo")
-        if not fotos:
-            await _enviar(chat_id, "⚠️ Necesito una foto. Envia la imagen del despacho.")
-            return
-        url_foto = await _guardar_foto(fotos, estado)
-        guardado = await _registrar_auditoria(chat_id, estado, url_foto)
-        _borrar_estado(chat_id)
-        if not guardado:
+        if texto == "/listo":
+            fotos = estado.get("fotos") or []
+            if not fotos:
+                await _enviar(chat_id, "⚠️ Necesito al menos una foto antes de terminar.")
+                return
+            guardado = await _registrar_auditoria(chat_id, msg.get("from") or {}, estado)
+            _borrar_estado(chat_id)
+            if not guardado:
+                await _enviar(
+                    chat_id,
+                    "⚠️ Este despacho ya fue auditado por otra persona mientras llenabas el formulario. "
+                    "Tus respuestas no se guardaron.\n\nEscribe /lista para elegir otro despacho.",
+                )
+                return
+            confirmado = estado.get("confirmado")
             await _enviar(
                 chat_id,
-                "⚠️ Este despacho ya fue auditado por otra persona mientras llenabas el formulario. "
-                "Tus respuestas no se guardaron.\n\nEscribe /lista para elegir otro despacho.",
+                f"✅ <b>Auditoria registrada</b>\n\U0001F4E6 {estado['despacho']['cliente']}\n"
+                f"{'✅ Confirmado' if confirmado else '❌ No confirmado'}\n"
+                f"\U0001F4F7 {len(fotos)} foto(s) guardada(s).\n\n"
+                "Escribe /lista para auditar otro despacho.",
             )
             return
-        await _enviar(
-            chat_id,
-            f"✅ <b>Auditoria registrada</b>\n\U0001F4E6 {estado['despacho']['cliente']}\n"
-            f"\U0001F4E6 Cajas: {estado['cajas']}\n\U0001F339 Piezas: {estado['piezas']}\n"
-            f"\U0001F4F7 Foto {'guardada' if url_foto else 'NO se pudo guardar (revisar configuracion de Drive)'}.\n\n"
-            "Escribe /lista para auditar otro despacho.",
-        )
+
+        fotos_msg = msg.get("photo")
+        if not fotos_msg:
+            await _enviar(chat_id, "⚠️ Envia una foto, o escribe /listo si ya terminaste.")
+            return
+        url_foto = await _guardar_foto(fotos_msg, estado, len(estado.get("fotos") or []) + 1)
+        if url_foto:
+            estado.setdefault("fotos", []).append(url_foto)
+            _guardar_estado(chat_id, estado)
+            await _enviar(chat_id, f"\U0001F4F8 Foto {len(estado['fotos'])} guardada. Envia otra, o escribe /listo para terminar.")
+        else:
+            await _enviar(chat_id, "⚠️ No se pudo guardar esa foto (revisar configuracion de Drive). Intenta de nuevo.")
         return
 
     await _enviar(
@@ -236,27 +207,15 @@ async def _manejar_callback(cb: dict) -> None:
         await _mostrar_lista_por_poscosecha(chat_id, texto)
         return
 
-    if paso == "tipoCaja" and texto in ("SI", "NO"):
-        estado["tipoCajaOK"] = texto == "SI"
-        estado["paso"] = "especie"
-        _guardar_estado(chat_id, estado)
-        await _enviar_botones(chat_id, "\U0001F9EC La <b>especie</b> esta igual en la etiqueta especial y en la etiqueta de caja?",
-                               [[{"texto": "✅ Si", "datos": "SI"}, {"texto": "❌ No", "datos": "NO"}]])
-        return
-
-    if paso == "especie" and texto in ("SI", "NO"):
-        estado["especieOK"] = texto == "SI"
-        estado["paso"] = "etiqueta"
-        _guardar_estado(chat_id, estado)
-        await _enviar_botones(chat_id, "\U0001F3F7️ La <b>etiqueta especial</b> esta correctamente aplicada?",
-                               [[{"texto": "✅ Si", "datos": "SI"}, {"texto": "❌ No", "datos": "NO"}]])
-        return
-
-    if paso == "etiqueta" and texto in ("SI", "NO"):
-        estado["etiquetaOK"] = texto == "SI"
+    if paso == "confirmando" and texto in ("CONFIRMADO", "NO_CONFIRMADO"):
+        estado["confirmado"] = texto == "CONFIRMADO"
+        estado["auditor"] = _nombre_desde_perfil(cb.get("from") or {})
         estado["paso"] = "observaciones"
         _guardar_estado(chat_id, estado)
-        await _enviar(chat_id, "\U0001F4DD Escribe las <b>observaciones</b> (o envia \"-\" si no hay).")
+        if estado["confirmado"]:
+            await _enviar(chat_id, "\U0001F4DD Observaciones adicionales (opcional, escribe \"-\" si no hay).")
+        else:
+            await _enviar(chat_id, "\U0001F4DD Explica que <b>fallo</b>:")
         return
 
 
@@ -293,13 +252,38 @@ async def _mostrar_lista_por_poscosecha(chat_id: str, poscosecha: str, pendiente
 
     texto = f"\U0001F4CB <b>Despachos pendientes - {poscosecha}</b>\n\n"
     for i, d in enumerate(filtrados, start=1):
-        texto += f"{i}. <b>{d['cliente']}</b> - {d['cajas']} cajas"
+        texto += f"{i}. <b>{d['cliente']}</b> - {_entero(d['cajas'])} cajas"
         if d.get("tipo_caja"):
             texto += f" ({d['tipo_caja']})"
-        texto += f" - Guia {d['guia_hija']}\n"
+        texto += f" - Guia {d.get('guia_hija') or '-'}\n"
     texto += "\n➡️ Responde con el <b>numero</b> del despacho que vas a auditar."
     _guardar_estado(chat_id, {"paso": "eligiendo", "pendientes": filtrados})
     await _enviar(chat_id, texto)
+
+
+def _entero(valor) -> int:
+    try:
+        return int(round(float(valor)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _nombre_desde_perfil(perfil: dict) -> str:
+    nombre = " ".join(p for p in [perfil.get("first_name"), perfil.get("last_name")] if p).strip()
+    if not nombre:
+        nombre = perfil.get("username") or str(perfil.get("id") or "desconocido")
+    return nombre
+
+
+def _texto_resumen(d: dict) -> str:
+    return (
+        f"\U0001F4E6 <b>{d['cliente']}</b>\n"
+        f"Destinatario: {d.get('destinatario') or '-'}\n"
+        f"\U0001F3ED Poscosecha: {d['postcosecha']}\n"
+        f"\U0001F4C4 Guia hija: {d.get('guia_hija') or '-'}\n"
+        f"\U0001F4E6 Cajas segun venta: <b>{_entero(d['cajas'])}</b>\n"
+        f"\U0001F4E6 Tipo de caja segun venta: <b>{d.get('tipo_caja') or '-'}</b>"
+    )
 
 
 async def _enviar_resumen(chat_id: str) -> None:
@@ -326,7 +310,7 @@ async def _enviar_resumen(chat_id: str) -> None:
 
 # ---------- Foto + registro final ----------
 
-async def _guardar_foto(fotos: list, estado: dict) -> str:
+async def _guardar_foto(fotos: list, estado: dict, indice: int) -> str:
     file_id = fotos[-1]["file_id"]  # mayor resolucion
     async with httpx.AsyncClient(timeout=20) as client:
         info = (await client.get(_api_url("getFile"), params={"file_id": file_id})).json()
@@ -336,36 +320,35 @@ async def _guardar_foto(fotos: list, estado: dict) -> str:
     d = estado["despacho"]
     hoy = datetime.now(ECUADOR).strftime("%Y-%m-%d")
     cliente_slug = "".join(c if c.isalnum() else "_" for c in d["cliente"])
-    nombre = f"{hoy}_{d['postcosecha']}_{cliente_slug}_{d['guia_hija']}.jpg"
+    guia_slug = d.get("guia_hija") or "singuia"
+    nombre = f"{hoy}_{d['postcosecha']}_{cliente_slug}_{guia_slug}_{indice}.jpg"
     return google_drive.subir_foto(contenido, nombre, subcarpeta=hoy)
 
 
-async def _registrar_auditoria(chat_id: str, estado: dict, url_foto: str) -> bool:
+async def _registrar_auditoria(chat_id: str, perfil: dict, estado: dict) -> bool:
     """Devuelve False si el despacho ya no estaba PENDIENTE (otro auditor lo
     tomo mientras este formulario estaba en curso) — evita que dos personas
     terminen auditando el mismo despacho por una carrera entre /lista y foto."""
     d = estado["despacho"]
+    auditor = estado.get("auditor") or _nombre_desde_perfil(perfil)
     with engine.begin() as conn:
         tomado = conn.execute(text("""
             UPDATE special_dispatches
             SET estado = 'AUDITADO', auditado_por = :auditor, fecha_auditoria = now()
             WHERE id = :id AND estado = 'PENDIENTE'
             RETURNING id
-        """), {"auditor": estado.get("auditor"), "id": d["id"]}).first()
+        """), {"auditor": auditor, "id": d["id"]}).first()
         if not tomado:
             return False
 
         conn.execute(text("""
             INSERT INTO special_dispatch_audits
-                (dispatch_id, auditor, cajas_despachadas, piezas_despachadas,
-                 tipo_caja_ok, especie_ok, etiqueta_ok, observaciones, foto_url, chat_id)
-            VALUES (:dispatch_id, :auditor, :cajas, :piezas, :tipo_caja_ok, :especie_ok, :etiqueta_ok,
-                    :observaciones, :foto_url, :chat_id)
+                (dispatch_id, auditor, cajas_despachadas, confirmado, observaciones, foto_urls, chat_id)
+            VALUES (:dispatch_id, :auditor, :cajas, :confirmado, :observaciones, :foto_urls, :chat_id)
         """), {
-            "dispatch_id": d["id"], "auditor": estado.get("auditor"),
-            "cajas": estado.get("cajas"), "piezas": estado.get("piezas"),
-            "tipo_caja_ok": estado.get("tipoCajaOK"), "especie_ok": estado.get("especieOK"),
-            "etiqueta_ok": estado.get("etiquetaOK"), "observaciones": estado.get("observaciones"),
-            "foto_url": url_foto, "chat_id": chat_id,
+            "dispatch_id": d["id"], "auditor": auditor,
+            "cajas": _entero(d["cajas"]), "confirmado": estado.get("confirmado", False),
+            "observaciones": estado.get("observaciones") or "",
+            "foto_urls": estado.get("fotos") or [], "chat_id": chat_id,
         })
     return True
