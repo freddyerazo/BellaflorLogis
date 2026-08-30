@@ -74,7 +74,7 @@ BLIS/
 | Fincas | `/api/farms` (`farms` / `farm_postcosecha`) | 3 / 6 |
 | Tarifas aerolínea | `/api/airline-tariffs` | 8 |
 | Carriers Miami | `/api/truck-companies` (`truck_company`) | 139 — catálogo cargado desde "ID clientes.xlsx" hoja "Listado de Carriers-Miami"; usado como Carrier ID en Posteo de Inventario (Inventario LAG) |
-| Cotización (Costing Engine) | `/api/cotizacion` — wizard que combina especies, variedades, tarifas | funcional, `scenario_*` con datos de prueba |
+| Cotización (Costing Engine) | `/api/cotizacion` — wizard que combina especies, variedades, tarifas; `/api/cotizaciones` (`cotizaciones`) para guardarlas, listarlas y reabrirlas | funcional, `scenario_*` con datos de prueba |
 | Importación Dartis | `/api/dartis-import` (`dartis_ventas`, `import_species_varieties`) | 20,888 / 1,211 |
 | Ingresos locales | `/api/ingresos-locales` | — |
 | Dashboard | `/api/dashboard` | — |
@@ -116,6 +116,7 @@ Peso Facturable  = MAX(Peso Real, Peso Volumétrico)
 ```
 
 ## Deuda técnica conocida
+- Las cotizaciones guardadas viven en la tabla `cotizaciones` desde el 2026-08-30. Guardan el `state` completo del wizard en `estado` (JSONB) para poder reabrirlas tal cual, y ademas los totales desnormalizados en columnas propias: esos quedan **congelados** al guardar, asi que una cotizacion historica no cambia si manana cambia una tarifa o el tipo de cambio. Los montos se guardan siempre en USD (`moneda` solo define como se presenta). El catalogo se excluye del JSON al serializar (`estadoSerializable()` en `cotizaciones.js`): pesa cientos de KB y se recarga en cada `init()`. Antes de esto el boton "Guardar cotizacion" escribia en `localStorage` bajo `blis_cotizaciones`, clave que **no se leia en ninguna parte** — el guardado no guardaba nada recuperable
 - Sin tests automatizados en `backend/tests/`
 - `models/` vacío — toda la lógica de negocio vive directo en `api/*.py`/`services/*.py` con SQL embebido
 - **Sin autenticación**: la API en producción esta abierta a internet. Verificado el 2026-08-29: `GET /api/customers` responde 200 sin credenciales, y hay 53 endpoints de escritura sin ninguna dependencia de auth. Mitigación parcial aplicada ese día: CORS dejo de ser `*` (ahora `CORS_ORIGINS`) y `BLIS_API_KEY` exige `X-API-Key` en POST/PUT/PATCH/DELETE. Ojo: **activar `BLIS_API_KEY` rompe el guardado desde el frontend**, que no envía esa cabecera — sirve para integraciones, no sustituye al login. Las tablas `roles`/`profiles` siguen vacías

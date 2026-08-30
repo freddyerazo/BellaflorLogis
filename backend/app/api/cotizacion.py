@@ -1,7 +1,11 @@
-from fastapi import APIRouter
+import json
+
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
 from app.database.connection import engine
+from app.database.helpers import jsonable_params
+from app.schemas.cotizaciones import CotizacionCreate
 
 router = APIRouter()
 
@@ -128,3 +132,102 @@ def get_catalogo():
         "incoterms":      [dict(r) for r in incoterms_list],
         "exchange_rates": [dict(r) for r in fx_rates],
     }
+
+
+# ---------------------------------------------------------------------------
+# Cotizaciones guardadas
+#
+# El estado completo del wizard viaja en `estado` (JSONB) para poder reabrir
+# la cotizacion tal cual; la cabecera y los totales van desnormalizados en
+# columnas propias para que el listado no tenga que abrir el JSON.
+# ---------------------------------------------------------------------------
+
+_COLUMNAS_CABECERA = (
+    "id, nombre, creado_por, creado_at, ruta, aeropuerto_origen, "
+    "aeropuerto_destino, incoterm, moneda, producto, cajas, total_stems, "
+    "total_kg_real, total_chargeable, fob_usd, s1_usd, s2_usd, s3_usd, "
+    "s4_usd, s5_usd, total_usd, cost_per_stem, cost_per_box"
+)
+
+
+@router.get("/cotizaciones")
+def get_cotizaciones(limit: int = 100):
+    """Listado de cotizaciones guardadas, la mas reciente primero.
+
+    No devuelve `estado`: el JSON completo solo hace falta al reabrir una.
+    """
+    with engine.connect() as conn:
+        return conn.execute(
+            text(f"""
+                SELECT {_COLUMNAS_CABECERA}
+                FROM cotizaciones
+                WHERE active = true
+                ORDER BY creado_at DESC
+                LIMIT :limit
+            """),
+            {"limit": limit},
+        ).mappings().all()
+
+
+@router.get("/cotizaciones/{cotizacion_id}")
+def get_cotizacion(cotizacion_id: int):
+    """Una cotizacion con su `estado` completo, para reabrirla en el wizard."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(f"""
+                SELECT {_COLUMNAS_CABECERA}, estado
+                FROM cotizaciones
+                WHERE id = :id AND active = true
+            """),
+            {"id": cotizacion_id},
+        ).mappings().first()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Cotización no encontrada")
+    return row
+
+
+@router.post("/cotizaciones", status_code=201)
+def create_cotizacion(payload: CotizacionCreate):
+    data = jsonable_params(payload.model_dump())
+    # psycopg2 no sabe adaptar un dict a jsonb: se manda como texto y se castea.
+    data["estado"] = json.dumps(data["estado"], ensure_ascii=False)
+
+    with engine.begin() as conn:
+        return conn.execute(
+            text(f"""
+                INSERT INTO cotizaciones (
+                    nombre, creado_por, ruta, aeropuerto_origen, aeropuerto_destino,
+                    incoterm, moneda, producto, cajas, total_stems, total_kg_real,
+                    total_chargeable, fob_usd, s1_usd, s2_usd, s3_usd, s4_usd,
+                    s5_usd, total_usd, cost_per_stem, cost_per_box, estado
+                ) VALUES (
+                    :nombre, :creado_por, :ruta, :aeropuerto_origen, :aeropuerto_destino,
+                    :incoterm, :moneda, :producto, :cajas, :total_stems, :total_kg_real,
+                    :total_chargeable, :fob_usd, :s1_usd, :s2_usd, :s3_usd, :s4_usd,
+                    :s5_usd, :total_usd, :cost_per_stem, :cost_per_box,
+                    CAST(:estado AS jsonb)
+                )
+                RETURNING {_COLUMNAS_CABECERA}
+            """),
+            data,
+        ).mappings().first()
+
+
+@router.delete("/cotizaciones/{cotizacion_id}")
+def delete_cotizacion(cotizacion_id: int):
+    """Borrado logico, igual que el resto de catalogos del proyecto."""
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("""
+                UPDATE cotizaciones
+                SET active = false, updated_at = now()
+                WHERE id = :id AND active = true
+                RETURNING id
+            """),
+            {"id": cotizacion_id},
+        ).mappings().first()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Cotización no encontrada")
+    return row

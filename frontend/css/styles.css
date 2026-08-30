@@ -1660,3 +1660,171 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
+
+/* ── Cotizaciones guardadas: modal de guardado y listado ─────────────── */
+
+.preview-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.btn-guardadas {
+  width: 100%;
+  justify-content: center;
+}
+
+.cot-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.cot-overlay--open { display: flex; }
+
+.cot-modal {
+  background: var(--card-bg);
+  border-radius: 14px;
+  padding: 26px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: cot-modal-in 220ms var(--ease-out);
+}
+.cot-modal--sm { max-width: 460px; }
+.cot-modal--lg { max-width: 1080px; max-height: 82vh; }
+
+@keyframes cot-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cot-modal { animation: none; }
+}
+
+.cot-modal h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cot-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cot-modal-cuerpo {
+  overflow: auto;
+  margin: -4px;
+  padding: 4px;
+}
+.cot-modal-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cot-resumen {
+  background: var(--primary-light);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.cot-resumen strong {
+  color: var(--primary-dark);
+  font-size: 16px;
+}
+
+.cot-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cot-campo span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.cot-campo input {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--card-bg);
+}
+.cot-campo input:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
+
+.cot-error {
+  margin: 0;
+  min-height: 16px;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.cot-vacio {
+  margin: 0;
+  padding: 32px 8px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* Tabla del listado */
+.cot-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cot-tabla th {
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.cot-tabla td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.cot-tabla tbody tr:last-child td { border-bottom: none; }
+.cot-tabla tbody tr:hover { background: var(--bg); }
+.cot-tabla .num { text-align: right; font-variant-numeric: tabular-nums; }
+.cot-tabla b { font-weight: 600; }
+
+.cot-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.cot-acciones {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  align-items: center;
+  white-space: nowrap;
+}

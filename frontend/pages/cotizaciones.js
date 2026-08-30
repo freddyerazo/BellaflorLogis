@@ -1,4 +1,4 @@
-import { apiGet } from "../js/api.js";
+import { apiGet, apiPost, apiDelete } from "../js/api.js";
 
 /* ═══════════════════════════════════════════════════════════════════════
    COTIZACIONES — Wizard interactivo de costos de exportación (5 pasos)
@@ -1075,41 +1075,295 @@ function bindStep5() {
   }
 }
 
-/* ─── Guardar cotización ─────────────────────────────────────────────── */
-function guardarCotizacion() {
+/* ─── Cotizaciones guardadas ─────────────────────────────────────────────
+   Persisten en Supabase vía /api/cotizaciones. El estado completo del wizard
+   viaja en `estado` para poder reabrir la cotización tal cual quedó; los
+   totales van aparte, congelados: si mañana cambia una tarifa o el tipo de
+   cambio, la cotización histórica sigue diciendo lo que dijo al emitirse.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* El catálogo pesa cientos de KB (870 variedades, 255 países) y se recarga en
+   cada init(): no tiene por qué viajar dentro de cada cotización guardada. */
+function estadoSerializable() {
+  const { catalogo, step, ...resto } = state;
+  return resto;
+}
+
+function nombrePorDefecto() {
+  const producto = `${state.especie_nombre} ${state.variedad_nombre}`.trim();
+  const ruta = state.aeropuerto_origen && state.aeropuerto_destino
+    ? `${state.aeropuerto_origen}–${state.aeropuerto_destino}`
+    : state.pais_destino_nombre;
+  return [producto, ruta].filter(Boolean).join(" · ") || "Cotización sin nombre";
+}
+
+function abrirModalGuardar() {
+  const c = calcular();
+  document.getElementById("inp-cotiz-nombre").value = nombrePorDefecto();
+  document.getElementById("inp-cotiz-autor").value =
+    localStorage.getItem("blis_cotizador_autor") || "";
+  document.getElementById("guardar-resumen").innerHTML = `
+    <strong>${$money(c.total_usd)}</strong> · ${c.total_cajas} cajas ·
+    ${c.total_stems.toLocaleString("es-EC")} tallos · ${$money(c.cost_per_stem)}/tallo`;
+  document.getElementById("guardar-error").textContent = "";
+  document.getElementById("overlay-guardar").classList.add("cot-overlay--open");
+  document.getElementById("inp-cotiz-nombre").select();
+}
+
+function cerrarModalGuardar() {
+  document.getElementById("overlay-guardar").classList.remove("cot-overlay--open");
+}
+
+async function confirmarGuardar() {
+  const btn = document.getElementById("btn-confirmar-guardar");
+  const err = document.getElementById("guardar-error");
+  const nombre = document.getElementById("inp-cotiz-nombre").value.trim();
+  const autor = document.getElementById("inp-cotiz-autor").value.trim();
+
+  if (!nombre) {
+    err.textContent = "Ponle un nombre para poder encontrarla después.";
+    return;
+  }
+
   const c = calcular();
   const s = state;
-  const cotiz = {
-    id:              Date.now(),
-    fecha:           new Date().toLocaleString("es-EC"),
-    ruta:            `${s.pais_origen_nombre} → ${s.pais_destino_nombre}`,
-    aeropuerto_orig: s.aeropuerto_origen  || "",
-    aeropuerto_dest: s.aeropuerto_destino || "",
-    incoterm:        s.incoterm_code || "",
-    moneda:          s.moneda,
-    producto:        `${s.especie_nombre} ${s.variedad_nombre}`.trim() || "Sin nombre",
-    cajas:           s.cajas,
-    total_stems:     c.total_stems,
-    fob_usd:         s.fob_usd,
-    total_kg_real:   c.total_kg_real,
-    total_chargeable:c.total_chargeable,
-    s1_usd: c.s1_usd, s2_usd: c.s2_usd, s3_usd: c.s3_usd,
-    s4_usd: c.s4_usd, s5_usd: c.s5_usd,
-    total_usd:       c.total_usd,
-    cost_per_stem:   c.cost_per_stem,
-    cost_per_box:    c.cost_per_box,
-  };
-  const saved = JSON.parse(localStorage.getItem("blis_cotizaciones") || "[]");
-  saved.unshift(cotiz);
-  localStorage.setItem("blis_cotizaciones", JSON.stringify(saved.slice(0, 20)));
+  btn.disabled = true;
+  btn.innerHTML = `<i class="ph ph-circle-notch"></i> Guardando...`;
 
-  const btn = document.getElementById("btn-guardar");
-  btn.innerHTML = '<i class="ph ph-check-circle"></i> Guardado';
-  btn.disabled  = true;
-  setTimeout(() => {
-    btn.innerHTML = '<i class="ph ph-floppy-disk"></i> Guardar cotización';
-    btn.disabled  = false;
-  }, 2000);
+  try {
+    await apiPost("/cotizaciones", {
+      nombre,
+      creado_por: autor || null,
+      ruta: `${s.pais_origen_nombre} → ${s.pais_destino_nombre}`.trim(),
+      aeropuerto_origen: s.aeropuerto_origen || null,
+      aeropuerto_destino: s.aeropuerto_destino || null,
+      incoterm: s.incoterm_code || null,
+      moneda: s.moneda,
+      producto: `${s.especie_nombre} ${s.variedad_nombre}`.trim() || null,
+      cajas: Math.round(c.total_cajas),
+      total_stems: Math.round(c.total_stems),
+      total_kg_real: c.total_kg_real,
+      total_chargeable: c.total_chargeable,
+      fob_usd: s.fob_usd,
+      s1_usd: c.s1_usd,
+      s2_usd: c.s2_usd,
+      s3_usd: c.s3_usd,
+      s4_usd: c.s4_usd,
+      s5_usd: c.s5_usd,
+      total_usd: c.total_usd,
+      cost_per_stem: c.cost_per_stem,
+      cost_per_box: c.cost_per_box,
+      estado: estadoSerializable(),
+    });
+
+    if (autor) localStorage.setItem("blis_cotizador_autor", autor);
+    cerrarModalGuardar();
+
+    const btnSave = document.getElementById("btn-guardar");
+    btnSave.innerHTML = `<i class="ph ph-check-circle"></i> Guardada`;
+    btnSave.disabled = true;
+    setTimeout(() => {
+      btnSave.innerHTML = `<i class="ph ph-floppy-disk"></i> Guardar cotización`;
+      btnSave.disabled = false;
+    }, 2000);
+  } catch (e) {
+    err.textContent = `No se pudo guardar: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="ph ph-floppy-disk"></i> Guardar`;
+  }
+}
+
+/* ─── Listado de guardadas ───────────────────────────────────────────── */
+async function abrirModalGuardadas() {
+  const cuerpo = document.getElementById("guardadas-cuerpo");
+  document.getElementById("overlay-guardadas").classList.add("cot-overlay--open");
+  cuerpo.innerHTML = `<p class="cot-vacio">Cargando cotizaciones...</p>`;
+
+  try {
+    renderGuardadas(await apiGet("/cotizaciones"));
+  } catch (e) {
+    cuerpo.innerHTML = `<p class="cot-vacio">No se pudieron cargar: ${e.message}</p>`;
+  }
+}
+
+function cerrarModalGuardadas() {
+  document.getElementById("overlay-guardadas").classList.remove("cot-overlay--open");
+}
+
+function renderGuardadas(filas) {
+  const cuerpo = document.getElementById("guardadas-cuerpo");
+
+  if (!filas.length) {
+    cuerpo.innerHTML = `<p class="cot-vacio">Todavía no hay cotizaciones guardadas.
+      Completa el wizard y usa «Guardar cotización».</p>`;
+    return;
+  }
+
+  const $f4 = (v) => new Intl.NumberFormat("es-EC",
+    { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(v ?? 0);
+
+  cuerpo.innerHTML = `
+    <table class="cot-tabla" id="tabla-cotizaciones">
+      <thead>
+        <tr>
+          <th>Cotización</th><th>Ruta</th><th class="num">Cajas</th>
+          <th class="num">Total USD</th><th class="num">$/tallo</th>
+          <th>Guardada</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filas.map((f) => `
+          <tr data-id="${f.id}">
+            <td>
+              <b>${f.nombre}</b>
+              ${f.producto ? `<span class="cot-sub">${f.producto}</span>` : ""}
+            </td>
+            <td>
+              ${f.ruta || "—"}
+              ${f.aeropuerto_origen && f.aeropuerto_destino
+                ? `<span class="cot-sub">${f.aeropuerto_origen} → ${f.aeropuerto_destino}${f.incoterm ? " · " + f.incoterm : ""}</span>`
+                : ""}
+            </td>
+            <td class="num">${f.cajas ?? "—"}</td>
+            <td class="num"><b>$${$f2(f.total_usd)}</b></td>
+            <td class="num">$${$f4(f.cost_per_stem)}</td>
+            <td>
+              ${new Date(f.creado_at).toLocaleDateString("es-EC")}
+              ${f.creado_por ? `<span class="cot-sub">${f.creado_por}</span>` : ""}
+            </td>
+            <td class="cot-acciones">
+              <button class="btn btn-secondary btn-abrir" data-id="${f.id}">
+                <i class="ph ph-folder-open"></i> Abrir</button>
+              <button class="btn-link btn-danger btn-eliminar" data-id="${f.id}"
+                      title="Eliminar cotización"><i class="ph ph-trash"></i></button>
+            </td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+
+  cuerpo.querySelectorAll(".btn-abrir").forEach((b) =>
+    b.addEventListener("click", () => abrirCotizacion(b.dataset.id)));
+  cuerpo.querySelectorAll(".btn-eliminar").forEach((b) =>
+    b.addEventListener("click", () => eliminarCotizacion(b.dataset.id)));
+}
+
+async function eliminarCotizacion(id) {
+  const fila = document.querySelector(`#tabla-cotizaciones tr[data-id="${id}"]`);
+  const nombre = fila?.querySelector("b")?.textContent || "esta cotización";
+  if (!confirm(`¿Eliminar «${nombre}»?`)) return;
+
+  try {
+    await apiDelete(`/cotizaciones/${id}`);
+    renderGuardadas(await apiGet("/cotizaciones"));
+  } catch (e) {
+    alert(`No se pudo eliminar: ${e.message}`);
+  }
+}
+
+async function abrirCotizacion(id) {
+  try {
+    const cot = await apiGet(`/cotizaciones/${id}`);
+    cerrarModalGuardadas();
+    aplicarEstado(cot.estado);
+  } catch (e) {
+    alert(`No se pudo abrir la cotización: ${e.message}`);
+  }
+}
+
+/* Repuebla el wizard con un estado guardado.
+   Los inputs numéricos y las filas de cajas se restauran solos al re-renderizar
+   (leen de `state`), pero los selects encadenados —país → aeropuerto → aerolínea,
+   especie → variedad— se llenan por eventos `change`. En vez de duplicar esa
+   lógica se reusa: se asigna el valor y se dispara el evento, en el orden en que
+   dependen unos de otros. */
+function aplicarEstado(estado) {
+  Object.assign(state, estado);
+  state.step = 1;
+  renderPage(_catalog);
+
+  const set = (id, valor) => {
+    const el = document.getElementById(id);
+    if (!el || valor === null || valor === undefined || valor === "") return;
+    el.value = valor;
+    el.dispatchEvent(new Event("change"));
+  };
+
+  set("sel-pais-origen", estado.pais_origen_id);
+  set("sel-aeropuerto-origen", estado.aeropuerto_origen);
+  set("sel-pais-destino", estado.pais_destino_id);
+  set("sel-aeropuerto-destino", estado.aeropuerto_destino);
+  set("sel-aerolinea-ruta", estado.aerolinea_id);
+  set("sel-incoterm", estado.incoterm_id);
+  set("sel-especie", estado.especie_id);
+  set("sel-variedad", estado.variedad_id);
+  set("sel-grado", estado.grado_id);
+
+  // La moneda son dos botones, no un select
+  state.moneda = estado.moneda || "USD";
+  document.querySelectorAll(".moneda-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.moneda === state.moneda));
+
+  updatePreview();
+}
+
+/* ─── Modales (viven fuera de #content, que se reescribe al re-renderizar) ─── */
+function montarModales() {
+  if (document.getElementById("overlay-guardar")) return;
+
+  const html = `
+    <div class="cot-overlay" id="overlay-guardar">
+      <div class="cot-modal cot-modal--sm">
+        <h3><i class="ph ph-floppy-disk"></i> Guardar cotización</h3>
+        <div class="cot-resumen" id="guardar-resumen"></div>
+        <label class="cot-campo">
+          <span>Nombre</span>
+          <input type="text" id="inp-cotiz-nombre" maxlength="200"
+                 placeholder="Ej. Rosa Freedom · GYE–AMS" />
+        </label>
+        <label class="cot-campo">
+          <span>Guardada por</span>
+          <input type="text" id="inp-cotiz-autor" maxlength="120" placeholder="Tu nombre" />
+        </label>
+        <p class="cot-error" id="guardar-error"></p>
+        <div class="cot-modal-acciones">
+          <button class="btn btn-secondary" id="btn-cancelar-guardar">Cancelar</button>
+          <button class="btn btn-primary" id="btn-confirmar-guardar">
+            <i class="ph ph-floppy-disk"></i> Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="cot-overlay" id="overlay-guardadas">
+      <div class="cot-modal cot-modal--lg">
+        <div class="cot-modal-head">
+          <h3><i class="ph ph-folders"></i> Cotizaciones guardadas</h3>
+          <button class="btn-link" id="btn-cerrar-guardadas" title="Cerrar">
+            <i class="ph ph-x"></i></button>
+        </div>
+        <div class="cot-modal-cuerpo" id="guardadas-cuerpo"></div>
+      </div>
+    </div>`;
+
+  const cont = document.createElement("div");
+  cont.innerHTML = html;
+  while (cont.firstElementChild) document.body.appendChild(cont.firstElementChild);
+
+  document.getElementById("btn-cancelar-guardar").addEventListener("click", cerrarModalGuardar);
+  document.getElementById("btn-confirmar-guardar").addEventListener("click", confirmarGuardar);
+  document.getElementById("btn-cerrar-guardadas").addEventListener("click", cerrarModalGuardadas);
+
+  // Clic en el fondo cierra
+  for (const id of ["overlay-guardar", "overlay-guardadas"]) {
+    document.getElementById(id).addEventListener("click", (e) => {
+      if (e.target.id === id) e.target.classList.remove("cot-overlay--open");
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    cerrarModalGuardar();
+    cerrarModalGuardadas();
+  });
 }
 
 /* ─── Render principal de la página ─────────────────────────────────── */
@@ -1216,7 +1470,10 @@ function renderPage(cat) {
           <div class="donut-empty">Completa los pasos para ver el análisis</div>
         </div>
 
-        <button class="btn btn-save" id="btn-guardar"><i class="ph ph-floppy-disk"></i> Guardar cotización</button>
+        <div class="preview-acciones">
+          <button class="btn btn-save" id="btn-guardar"><i class="ph ph-floppy-disk"></i> Guardar cotización</button>
+          <button class="btn btn-secondary btn-guardadas" id="btn-guardadas"><i class="ph ph-folders"></i> Ver guardadas</button>
+        </div>
       </aside>
 
     </div>`;
@@ -1241,7 +1498,8 @@ function renderPage(cat) {
   document.querySelectorAll(".step-indicator .step-item").forEach((it) => {
     it.addEventListener("click", () => goStep(parseInt(it.dataset.step)));
   });
-  document.getElementById("btn-guardar").addEventListener("click", guardarCotizacion);
+  document.getElementById("btn-guardar").addEventListener("click", abrirModalGuardar);
+  document.getElementById("btn-guardadas").addEventListener("click", abrirModalGuardadas);
 
   updatePreview();
 
@@ -1273,6 +1531,7 @@ async function init() {
       state.eur_to_usd = parseFloat((1 / latestFx.usd_to_eur).toFixed(4));
     }
 
+    montarModales();
     renderPage(cat);
 
     // Aviso si no hay tarifas vigentes (debe ir después de renderPage que resetea innerHTML)
