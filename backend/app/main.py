@@ -1,9 +1,12 @@
+import asyncio
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.health import router as health_router
@@ -34,17 +37,87 @@ from app.api.proveedores import router as proveedores_router
 from app.api.armellini import router as armellini_router
 from app.services import courier_reconciliation
 
+scheduler = AsyncIOScheduler()
+
+# Referencia al refresco inicial: sin guardarla, el recolector de basura
+# puede cancelar la tarea antes de que termine.
+_refresco_inicial: asyncio.Task | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Igual patron que el proyecto original: un refresco inicial y luego
+    uno periodico cada REFRESH_SECONDS, protegidos por el mismo lock que
+    usa el boton 'Actualizar ahora' (app/services/courier_reconciliation).
+
+    El refresco inicial va en segundo plano y no con await: consulta UPS,
+    FedEx y entregas locales, y tarda ~20s. Con await, el servidor no
+    acepta conexiones hasta terminarlo — en Render (plan free) el servicio
+    se duerme por inactividad, asi que ese costo se pagaba en cada
+    despertar y podia agotar el timeout de arranque.
+    """
+    global _refresco_inicial
+    _refresco_inicial = asyncio.create_task(courier_reconciliation.refrescar())
+    scheduler.add_job(
+        courier_reconciliation.refrescar, "interval",
+        seconds=int(os.getenv("REFRESH_SECONDS", "300")),
+    )
+    scheduler.start()
+
+    yield
+
+    scheduler.shutdown(wait=False)
+    if _refresco_inicial and not _refresco_inicial.done():
+        _refresco_inicial.cancel()
+
+
 app = FastAPI(
     title="BLIS API",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
+
+# El frontend se sirve desde este mismo origen, asi que no hace falta abrir
+# CORS a terceros: con "*" cualquier web podia llamar a la API desde el
+# navegador de un usuario. CORS_ORIGINS permite sumar origenes separados por
+# coma (por ejemplo un frontend servido aparte durante desarrollo).
+CORS_ORIGINS = [
+    o.strip() for o in os.getenv(
+        "CORS_ORIGINS",
+        "https://blis-hxu1.onrender.com,http://localhost:8000,http://127.0.0.1:8000",
+    ).split(",") if o.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_METODOS_ESCRITURA = ("POST", "PUT", "PATCH", "DELETE")
+
+# El webhook de Telegram no pasa por la clave: Telegram no envia cabeceras
+# propias y ya trae su secreto en X-Telegram-Bot-Api-Secret-Token.
+_RUTAS_SIN_API_KEY = frozenset({"/api/auditoria-etiquetas/telegram/webhook"})
+
+
+@app.middleware("http")
+async def exigir_api_key_en_escrituras(request: Request, call_next):
+    """Barrera minima mientras no haya login: sin BLIS_API_KEY configurada no
+    exige nada (asi el deploy no rompe), y con ella toda escritura necesita la
+    cabecera X-API-Key. No sustituye a la autenticacion: el frontend tiene que
+    llevar la clave en su JavaScript, de modo que frena el acceso automatizado
+    y anonimo, no a quien inspeccione la pagina."""
+    clave = os.getenv("BLIS_API_KEY", "")
+    if (
+        clave
+        and request.method in _METODOS_ESCRITURA
+        and request.url.path not in _RUTAS_SIN_API_KEY
+        and request.headers.get("X-API-Key") != clave
+    ):
+        return JSONResponse({"detail": "X-API-Key ausente o invalida"}, status_code=401)
+    return await call_next(request)
 
 app.include_router(health_router)
 app.include_router(db_router)
@@ -76,18 +149,3 @@ app.include_router(armellini_router, prefix="/api")
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
-
-scheduler = AsyncIOScheduler()
-
-
-@app.on_event("startup")
-async def iniciar_torre_control():
-    """Igual patron que el proyecto original: un refresco inicial y luego
-    uno periodico cada REFRESH_SECONDS, protegidos por el mismo lock que
-    usa el boton 'Actualizar ahora' (app/services/courier_reconciliation)."""
-    await courier_reconciliation.refrescar()
-    scheduler.add_job(
-        courier_reconciliation.refrescar, "interval",
-        seconds=int(os.getenv("REFRESH_SECONDS", "300")),
-    )
-    scheduler.start()

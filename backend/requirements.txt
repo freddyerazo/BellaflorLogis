@@ -1,13 +1,16 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg2-binary
-python-dotenv
-supabase
-pydantic
-alembic
-openpyxl
-python-multipart
-httpx
-pdfplumber
-apscheduler
+# Versiones fijas: sin ellas cada build de Render instalaba lo ultimo
+# publicado ese dia, y produccion podia romperse sin que nadie tocara el
+# codigo. Verificadas en Python 3.13 el 2026-08-29.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+sqlalchemy==2.0.52
+psycopg2-binary==2.9.12
+python-dotenv==1.2.3
+supabase==2.31.0
+pydantic==2.13.5
+alembic==1.19.1
+openpyxl==3.1.5
+python-multipart==0.0.32
+httpx==0.28.1
+pdfplumber==0.11.10
+apscheduler==3.11.3

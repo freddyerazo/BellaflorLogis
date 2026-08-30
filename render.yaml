@@ -1,3 +1,8 @@
+# La version de Python vive en .python-version (3.13), no aqui: la variable
+# PYTHON_VERSION exige un patch exacto y el build falla si ese patch no
+# existe, mientras que el archivo acepta la serie y Render resuelve el
+# ultimo patch. Ojo: una PYTHON_VERSION puesta a mano en el dashboard
+# tendria precedencia sobre el archivo.
 services:
   - type: web
     name: blis-api
@@ -8,5 +13,3 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
-      - key: PYTHON_VERSION
-        value: 3.11.0

@@ -226,17 +226,17 @@ async def refrescar() -> dict:
     async with _lock:
         error = None
         try:
-            base = _obtener_base_dartis()
+            base = await asyncio.to_thread(_obtener_base_dartis)
         except Exception as e:
             base, error = [], str(e)
 
         try:
-            manif_ups = _obtener_manifiesto_ups()
+            manif_ups = await asyncio.to_thread(_obtener_manifiesto_ups)
         except Exception as e:
             manif_ups, error = {}, (error + " | " if error else "") + f"Manifiesto UPS: {e}"
 
         try:
-            manif_fdx = _obtener_manifiesto_fedex()
+            manif_fdx = await asyncio.to_thread(_obtener_manifiesto_fedex)
         except Exception as e:
             manif_fdx, error = {}, (error + " | " if error else "") + f"Manifiesto FedEx: {e}"
 
@@ -291,7 +291,7 @@ async def refrescar() -> dict:
             fila["conciliacion"] = "NO EN DARTIS"
             cajas.append(fila)
 
-        _persistir(cajas)
+        await asyncio.to_thread(_persistir, cajas)
         _ultimo_error = error
         _ultimo_refresh = datetime.now(UTC).isoformat()
 

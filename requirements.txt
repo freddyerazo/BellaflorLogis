@@ -1,13 +1,5 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg2-binary
-python-dotenv
-supabase
-pydantic
-alembic
-openpyxl
-python-multipart
-httpx
-pdfplumber
-apscheduler
+# Las dependencias reales viven en backend/requirements.txt (es el que usa
+# render.yaml). Este archivo solo lo incluye, para que "pip install -r
+# requirements.txt" desde la raiz siga funcionando sin mantener dos listas
+# que se desincronizan.
+-r backend/requirements.txt
