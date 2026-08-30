@@ -12,6 +12,7 @@ Regla: se suben los dos archivos juntos. Primero se procesa Recetas
 import asyncio
 import logging
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import openpyxl
@@ -41,8 +42,18 @@ def _safe_float(val):
     except: return None
 
 def _safe_date(val):
+    """Normaliza a date. Dartis no siempre exporta la columna como fecha de
+    Excel; cuando viene como texto, devolverla tal cual rompia el import:
+    la reconciliacion terminaba comparando date = text, que en Postgres no
+    existe como operador, y abortaba toda la transaccion."""
     if val is None: return None
     if hasattr(val, "date"): return val.date()
+    if isinstance(val, str):
+        try:
+            # admite "2026-08-24" y "2026-08-24 00:00:00"
+            return date.fromisoformat(val.strip()[:10])
+        except ValueError:
+            return val
     return val
 
 def _load_wb(upload: UploadFile):
@@ -220,7 +231,7 @@ def _import_recetas(ws, conn) -> dict:
         r = conn.execute(text("""
             UPDATE dartis_ventas
             SET active = false
-            WHERE fecha = ANY(:fechas) AND importado_at < :inicio AND active = true
+            WHERE fecha = ANY(CAST(:fechas AS date[])) AND importado_at < :inicio AND active = true
         """), {"fechas": fechas_archivo, "inicio": inicio})
         inactivados = r.rowcount
 
