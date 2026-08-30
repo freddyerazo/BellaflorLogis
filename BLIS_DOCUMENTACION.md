@@ -7565,24 +7565,22 @@ Render → BLIS → **Environment** → Add Environment Variable. Ver la lista c
 
 ## 20. Desarrollo local — paso a paso
 
-```bash
+```powershell
 # 1. Clonar
 git clone https://github.com/freddyerazo/BellaflorLogis.git
 cd BellaflorLogis
 
-# 2. Entorno virtual
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-source .venv/bin/activate      # Linux/Mac
+# 2. Entorno virtual — FUERA de OneDrive (ver Deuda técnica en CLAUDE.md).
+#    Crearlo dentro del repo lo rompe: OneDrive deshidrata los archivos.
+python -m venv C:\dev\venvs\blis
 
 # 3. Dependencias
-pip install -r backend/requirements.txt
+C:\dev\venvs\blis\Scripts\python.exe -m pip install -r backend\requirements.txt
 
 # 4. Variables de entorno (crear backend/.env, ver §4 para la lista completa)
 
-# 5. Iniciar
-cd backend
-uvicorn app.main:app --reload --port 8000
+# 5. Iniciar (desde la raíz del repo)
+.\scripts\dev.ps1
 ```
 
 La aplicación estará disponible en `http://localhost:8000`. El frontend se sirve como archivos estáticos desde `../frontend/`:

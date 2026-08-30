@@ -14,22 +14,30 @@ FastAPI (Python) + Vanilla JS/HTML/CSS + PostgreSQL (Supabase). Sin build step e
 
 ## Arrancar en local
 
-```bash
+El entorno virtual vive **fuera del repositorio**, en `C:\dev\venvs\blis`: el proyecto está dentro de OneDrive, y OneDrive deshidrata los archivos sincronizados — eso rompe tanto los paquetes instalados como git.
+
+```powershell
 git clone https://github.com/freddyerazo/BellaflorLogis.git
 cd BellaflorLogis
-python -m venv .venv
-.venv\Scripts\activate          # Windows — source .venv/bin/activate en Linux/Mac
-pip install -r backend/requirements.txt
+python -m venv C:\dev\venvs\blis
+C:\dev\venvs\blis\Scripts\python.exe -m pip install -r backend\requirements.txt
 ```
 
-Crear `backend/.env` con al menos `DATABASE_URL` (ver [`CLAUDE.md`](CLAUDE.md) para la lista completa de variables por módulo). Luego:
+Crear `backend/.env` con al menos `DATABASE_URL` (ver [`CLAUDE.md`](CLAUDE.md) para la lista completa de variables por módulo). Luego, desde la raíz del repo:
 
-```bash
+```powershell
+.\scripts\dev.ps1              # http://localhost:8000
+.\scripts\dev.ps1 -Port 8010   # otro puerto
+```
+
+El script verifica que existan el venv y el `.env` antes de arrancar. En Linux/Mac no aplica la ruta `C:\dev`: basta un venv propio y `uvicorn app.main:app --reload` desde `backend/`. Para hacerlo a mano en Windows:
+
+```powershell
 cd backend
-uvicorn app.main:app --reload --port 8000
+C:\dev\venvs\blis\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
-Abrir `http://localhost:8000`.
+Comprobar que responde: `/health` devuelve `{"status":"ok"}` y `/db-test` confirma la conexión a Supabase.
 
 ## Estructura
 
