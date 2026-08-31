@@ -76,14 +76,36 @@ def _mapear_columnas(rows, alias: dict, clave_obligatoria: str):
     Devuelve (indices, fila_datos) o (None, 0) si no encuentra el encabezado.
     """
     for i, row in enumerate(rows[:20]):
+        # El encabezado de Dartis viene partido en dos filas: la primera trae
+        # los nombres de campo y un "total" generico, y la siguiente los
+        # subtitulos de ese total (piezas / tallos / dolares). Se buscan los
+        # alias en ambas.
         norm = [_norm_encabezado(v) for v in row]
+
+        # Primero solo con esta fila. La clave obligatoria TIENE que estar
+        # aca: si se aceptara encontrarla en la fila siguiente, una fila vacia
+        # anterior al encabezado pasaria por encabezado y devolveria un mapeo
+        # incompleto (justamente lo que pasaba con los totales).
         indices = {}
         for campo, nombres in alias.items():
             for n in nombres:
                 if n in norm:
                     indices[campo] = norm.index(n)
                     break
+
         if clave_obligatoria in indices:
+            # Recien ahora se completan los que faltan con la fila siguiente:
+            # el encabezado de Dartis viene partido en dos, con un "total"
+            # generico arriba y sus subtitulos (piezas/tallos/dolares) abajo.
+            sig = [_norm_encabezado(v) for v in rows[i + 1]] if i + 1 < len(rows) else []
+            for campo, nombres in alias.items():
+                if campo in indices:
+                    continue
+                for n in nombres:
+                    if n in sig:
+                        indices[campo] = sig.index(n)
+                        break
+
             # Los datos empiezan en la primera fila posterior cuya clave sea
             # numerica: entre el encabezado y los datos puede haber una fila
             # de subtitulos (en Ventas, "Piezas"/"dolares").
@@ -113,38 +135,79 @@ def _load_wb_bytes(data: bytes, filename: str):
 # -- Logica importacion -------------------------------------------------------
 BATCH_SIZE = 500
 
+# Encabezados del archivo Ventas Recetas. Igual que en Ventas, se ubican por
+# nombre y no por posicion: cuando Dartis agrego `variedad_receta` la inserto
+# en el medio (posicion 9), corriendo guia_madre, guia_hija, tipo_caja y los
+# tres totales un lugar a la derecha. Leyendo por indice fijo, tipo_caja
+# ("QB") habria terminado en total_piezas y los tallos en los dolares.
+RECETAS_ALIAS = {
+    "fecha":         ("fecha",),
+    "dae":           ("dae",),
+    "id_com":        ("idcomercializadora",),
+    "id_pedido":     ("idpedido",),
+    "empresa":       ("empresa",),
+    "cliente":       ("cliente",),
+    "destinatario":  ("destinatario",),
+    "postcosecha":   ("postcosecha",),
+    "especie":       ("especie",),
+    "variedad":      ("variedadreceta", "variedad"),
+    "guia_madre":    ("guiamadre",),
+    "guia_hija":     ("guiahija",),
+    "tipo_caja":     ("tipocaja",),
+    "total_piezas":  ("piezas",),
+    "total_tallos":  ("tallos",),
+    "total_dolares": ("dolares",),
+}
+
+
 def _import_recetas(ws, conn) -> dict:
-    rows = list(ws.iter_rows(values_only=True))[RECETAS_DATA_START:]
+    todas = list(ws.iter_rows(values_only=True))
+    idx, inicio = _mapear_columnas(todas, RECETAS_ALIAS, "id_pedido")
+
+    if idx is None:
+        idx = {"fecha": 0, "dae": 1, "id_com": 2, "id_pedido": 3, "empresa": 4,
+               "cliente": 5, "destinatario": 6, "postcosecha": 7, "especie": 8,
+               "guia_madre": 9, "guia_hija": 10, "tipo_caja": 11,
+               "total_piezas": 12, "total_tallos": 13, "total_dolares": 14}
+        inicio = RECETAS_DATA_START
+        logger.warning("Recetas: no se reconocio el encabezado, se usan posiciones fijas")
+
+    rows = todas[inicio:]
     postcosechas = set()
     params = []
     errores = 0
+
+    def col(row, campo):
+        i = idx.get(campo)
+        return row[i] if i is not None and i < len(row) else None
 
     for row in rows:
         if not any(row):
             continue
         try:
-            id_pedido = _safe_int(row[3])
+            id_pedido = _safe_int(col(row, "id_pedido"))
             if not id_pedido:
                 continue
-            pc = _safe_str(row[7])
+            pc = _safe_str(col(row, "postcosecha"))
             if pc:
                 postcosechas.add(pc)
             params.append({
-                "fecha":        _safe_date(row[0]),
-                "dae":          _safe_str(row[1]),
-                "id_com":       _safe_int(row[2]),
+                "fecha":        _safe_date(col(row, "fecha")),
+                "dae":          _safe_str(col(row, "dae")),
+                "id_com":       _safe_int(col(row, "id_com")),
                 "id_pedido":    id_pedido,
-                "empresa":      _safe_str(row[4]),
-                "cliente":      _safe_str(row[5]),
-                "destinatario": _safe_str(row[6]),
+                "empresa":      _safe_str(col(row, "empresa")),
+                "cliente":      _safe_str(col(row, "cliente")),
+                "destinatario": _safe_str(col(row, "destinatario")),
                 "postcosecha":  pc,
-                "especie":      _safe_str(row[8]),
-                "guia_madre":   _safe_str(row[9]),
-                "guia_hija":    _safe_str(row[10]),
-                "tipo_caja":    _safe_str(row[11]),
-                "total_piezas": _safe_float(row[12]),
-                "total_tallos": _safe_int(row[13]),
-                "total_dolares":_safe_float(row[14]),
+                "especie":      _safe_str(col(row, "especie")),
+                "variedad":     _safe_str(col(row, "variedad")),
+                "guia_madre":   _safe_str(col(row, "guia_madre")),
+                "guia_hija":    _safe_str(col(row, "guia_hija")),
+                "tipo_caja":    _safe_str(col(row, "tipo_caja")),
+                "total_piezas": _safe_float(col(row, "total_piezas")),
+                "total_tallos": _safe_int(col(row, "total_tallos")),
+                "total_dolares":_safe_float(col(row, "total_dolares")),
             })
         except Exception:
             errores += 1
@@ -153,9 +216,17 @@ def _import_recetas(ws, conn) -> dict:
     # transportar varias especies distintas). Si dos lineas comparten
     # la clave completa (mismo pedido+guia+caja+especie), son lotes
     # separados del mismo producto y se suman sus cantidades.
+    # La clave unica no incluye la variedad, y una misma linea puede agrupar
+    # varias: en el archivo del 2026-08-30, 702 de 2.017 claves traen mas de
+    # una, y un pedido de BOUQUETS llega a 53 por ser producto compuesto. Se
+    # conservan TODAS en una lista en vez de quedarse con una sola, que daria
+    # un dato preciso en apariencia y equivocado en el fondo.
     dedup = {}
+    variedades_por_clave = {}
     for p in params:
         key = (p["id_pedido"], p["guia_madre"], p["guia_hija"], p["tipo_caja"], p["especie"])
+        if p.get("variedad"):
+            variedades_por_clave.setdefault(key, set()).add(p["variedad"])
         if key in dedup:
             existing = dedup[key]
             existing["total_piezas"] = (existing["total_piezas"] or 0) + (p["total_piezas"] or 0)
@@ -163,11 +234,17 @@ def _import_recetas(ws, conn) -> dict:
             existing["total_dolares"] = (existing["total_dolares"] or 0) + (p["total_dolares"] or 0)
         else:
             dedup[key] = p
+
+    for key, p in dedup.items():
+        vs = variedades_por_clave.get(key)
+        p["variedad_receta"] = ", ".join(sorted(vs)) if vs else None
+
     params = list(dedup.values())
 
     tuples = [
         (p["fecha"], p["dae"], p["id_com"], p["id_pedido"],
          p["empresa"], p["cliente"], p["destinatario"], p["postcosecha"], p["especie"],
+         p["variedad_receta"],
          p["guia_madre"], p["guia_hija"], p["tipo_caja"],
          p["total_piezas"], p["total_tallos"], p["total_dolares"])
         for p in params
@@ -238,6 +315,7 @@ def _import_recetas(ws, conn) -> dict:
         INSERT INTO dartis_ventas (
             fecha, dae, id_comercializadora, id_pedido,
             empresa, cliente, destinatario, postcosecha, especie,
+            variedad_receta,
             guia_madre, guia_hija, tipo_caja,
             total_piezas, total_tallos, total_dolares, active
         ) VALUES %s
@@ -250,6 +328,7 @@ def _import_recetas(ws, conn) -> dict:
             destinatario        = EXCLUDED.destinatario,
             postcosecha         = EXCLUDED.postcosecha,
             especie             = EXCLUDED.especie,
+            variedad_receta     = EXCLUDED.variedad_receta,
             total_piezas        = EXCLUDED.total_piezas,
             total_tallos        = EXCLUDED.total_tallos,
             total_dolares       = EXCLUDED.total_dolares,
