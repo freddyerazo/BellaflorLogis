@@ -431,6 +431,132 @@ function renderResultadoPais(pais, movimiento, area, filas, hechas, total) {
   seccion.classList.remove("hidden");
 }
 
+/* ─── Navegación por pestañas ─────────────────────────────────────────── */
+document.querySelectorAll(".subtab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".subtab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".subpanel").forEach((p) => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+    if (tab.dataset.tab === "comparacion") cargarComparacion();
+  });
+});
+
+/* ─── Agrocalidad vs Ventas vs VUE ────────────────────────────────────────
+   Hoy solo se puede cruzar por ESPECIE: dartis_ventas no trae el país de
+   destino y VUE todavía no tiene datos cargados. La pantalla lo dice en vez
+   de mostrar una comparación a medias como si estuviera completa.
+   ───────────────────────────────────────────────────────────────────────── */
+
+let comparacionCargada = false;
+
+const $dinero = (v) =>
+  "$" + new Intl.NumberFormat("es-EC", { maximumFractionDigits: 0 }).format(v || 0);
+const $num = (v) => new Intl.NumberFormat("es-EC").format(v || 0);
+
+async function cargarComparacion() {
+  if (comparacionCargada) return;
+  const caja = document.getElementById("compEstado");
+  caja.innerHTML = `<div class="ag-cargando"><span></span> Cruzando ventas contra Agrocalidad…</div>`;
+
+  try {
+    const d = await apiGet("/agrocalidad/comparacion");
+    renderComparacion(d);
+    comparacionCargada = true;
+  } catch (err) {
+    caja.innerHTML = `<div class="result-box error">
+      <h3><i class="ph ph-x-circle"></i> No se pudo cargar</h3>
+      <p>${esc(err.message)}</p></div>`;
+  }
+}
+
+function renderComparacion(d) {
+  const especies = d.especies || [];
+  const sinMapeo = especies.filter((e) => !e.id_producto_agrocalidad);
+  const sinConsultar = especies.filter((e) => e.id_producto_agrocalidad && !e.consultas);
+  const cubiertas = especies.filter((e) => e.con_requisitos > 0);
+  const facturaSinMapeo = sinMapeo.reduce((a, e) => a + Number(e.dolares || 0), 0);
+
+  /* Lo que falta para que la comparación esté completa. Se enumera explícito:
+     una comparación incompleta presentada como completa es peor que no tenerla. */
+  const faltantes = [];
+  if (!d.pendientes.pais_en_ventas) {
+    faltantes.push(`<li><strong>País de destino en Ventas.</strong> El archivo de Dartis
+      todavía no trae la columna de país, así que no se puede cruzar contra los
+      requisitos, que son por país. Los requisitos de una especie a Estados Unidos
+      no son los mismos que a Rusia.</li>`);
+  }
+  if (!d.pendientes.vue) {
+    faltantes.push(`<li><strong>Datos de VUE.</strong> No hay ninguno cargado en BLIS.
+      Falta definir el archivo de la Ventanilla Única y su importador.</li>`);
+  }
+
+  document.getElementById("compEstado").innerHTML = `
+    ${faltantes.length ? `
+      <div class="ag-pendiente">
+        <h4><i class="ph ph-warning-circle"></i> Comparación parcial</h4>
+        <p>Por ahora el cruce es <strong>solo por especie</strong>. Falta:</p>
+        <ul>${faltantes.join("")}</ul>
+      </div>` : ""}
+
+    <div class="comp-tarjetas">
+      <div class="comp-tarjeta">
+        <span class="comp-num">${especies.length}</span>
+        <span class="comp-lbl">especies vendidas</span>
+      </div>
+      <div class="comp-tarjeta">
+        <span class="comp-num">${cubiertas.length}</span>
+        <span class="comp-lbl">con requisitos averiguados</span>
+      </div>
+      <div class="comp-tarjeta ${sinMapeo.length ? "comp-tarjeta--alerta" : ""}">
+        <span class="comp-num">${sinMapeo.length}</span>
+        <span class="comp-lbl">sin mapeo en Agrocalidad</span>
+      </div>
+      <div class="comp-tarjeta ${sinConsultar.length ? "comp-tarjeta--aviso" : ""}">
+        <span class="comp-num">${sinConsultar.length}</span>
+        <span class="comp-lbl">mapeadas pero sin consultar</span>
+      </div>
+    </div>
+
+    ${sinMapeo.length ? `
+      <p class="ag-resumen-pais">
+        <strong>${$dinero(facturaSinMapeo)}</strong> facturados en especies que no están
+        mapeadas al catálogo de Agrocalidad — no se les puede averiguar requisitos.
+      </p>` : ""}
+
+    <div class="ag-tabla-scroll">
+      <table class="cot-tabla">
+        <thead>
+          <tr>
+            <th>Especie vendida</th>
+            <th class="num">Facturado</th>
+            <th class="num">Tallos</th>
+            <th>Agrocalidad</th>
+            <th class="num">Consultas</th>
+            <th class="num">Con requisitos</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${especies.map((e) => `
+            <tr>
+              <td><b>${esc(e.especie)}</b></td>
+              <td class="num">${$dinero(e.dolares)}</td>
+              <td class="num">${$num(e.tallos)}</td>
+              <td>
+                ${e.id_producto_agrocalidad
+                  ? `<span class="badge badge-green">mapeada</span>`
+                  : `<span class="badge badge-red">sin mapeo</span>`}
+              </td>
+              <td class="num">${e.consultas}</td>
+              <td class="num">
+                <span class="badge ${e.con_requisitos ? "badge-green" : "badge-gray"}">${e.con_requisitos}</span>
+              </td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
 /* ─── Arranque ───────────────────────────────────────────────────────── */
 document.getElementById("species_id").addEventListener("change", alCambiarEspecie);
 document.getElementById("trade_type").addEventListener("change", alCambiarEspecie);

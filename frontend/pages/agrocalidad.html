@@ -11,9 +11,17 @@
 
   <main class="content" id="content">
     <div class="page-header">
-      <h1><i class="ph ph-leaf"></i> Consulta Agrocalidad</h1>
-      <p class="page-subtitle">Requisitos fitosanitarios por especie y país de destino, en vivo.</p>
+      <h1><i class="ph ph-leaf"></i> Agrocalidad</h1>
+      <p class="page-subtitle">Requisitos fitosanitarios de exportación.</p>
     </div>
+
+    <nav class="subtabs">
+      <button class="subtab active" data-tab="consulta">Consulta de requisitos</button>
+      <button class="subtab" data-tab="comparacion">Agrocalidad vs Ventas vs VUE</button>
+    </nav>
+
+    <!-- CONSULTA DE REQUISITOS -->
+    <section id="panel-consulta" class="subpanel active">
 
     <div class="import-card">
       <form id="consultaForm">
@@ -125,6 +133,15 @@
         </tbody>
       </table>
     </div>
+    </section>
+
+    <!-- AGROCALIDAD vs VENTAS vs VUE -->
+    <section id="panel-comparacion" class="subpanel">
+      <div class="import-card">
+        <div id="compEstado"></div>
+      </div>
+    </section>
+
   </main>
 
   <script type="module" src="/js/layout.js"></script>

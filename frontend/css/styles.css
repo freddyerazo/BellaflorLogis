@@ -2006,3 +2006,57 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   background: var(--card-bg);
   z-index: 1;
 }
+
+/* Agrocalidad vs Ventas vs VUE */
+.ag-pendiente {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  background: #fff8e6;
+  border: 1px solid #f0d9a0;
+  border-left: 3px solid #e0a800;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.ag-pendiente h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ag-pendiente h4 i { color: #b98900; }
+.ag-pendiente p { margin: 0 0 6px; }
+.ag-pendiente ul { margin: 0; padding-left: 20px; }
+.ag-pendiente li { margin-bottom: 5px; }
+
+.comp-tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.comp-tarjeta {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.comp-tarjeta--alerta { border-color: var(--danger); background: var(--danger-light); }
+.comp-tarjeta--aviso  { border-color: #f0d9a0; background: #fff8e6; }
+.comp-num {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--primary-dark);
+  font-variant-numeric: tabular-nums;
+}
+.comp-tarjeta--alerta .comp-num { color: var(--danger); }
+.comp-lbl { font-size: 12px; color: var(--text-muted); }
+
+.badge-red { background: var(--danger-light); color: var(--danger); }

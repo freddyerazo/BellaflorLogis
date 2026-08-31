@@ -56,6 +56,43 @@ def _safe_date(val):
             return val
     return val
 
+def _norm_encabezado(v):
+    """Normaliza un encabezado para compararlo: sin espacios, tildes ni mayusculas."""
+    import unicodedata
+    t = str(v or "").strip().lower().replace(" ", "").replace("_", "")
+    t = unicodedata.normalize("NFD", t)
+    return "".join(c for c in t if unicodedata.category(c) != "Mn")
+
+
+def _mapear_columnas(rows, alias: dict, clave_obligatoria: str):
+    """Ubica las columnas por NOMBRE de encabezado, no por posicion.
+
+    Dartis agrega columnas al archivo sin avisar: cuando aparecio `paisVenta`
+    en la sexta columna, el vendedor se corrio un lugar y el importador, que
+    leia por indice fijo, habria escrito el nombre del pais dentro de
+    `vendedor` en las 24.000 filas. Leer por encabezado hace que agregar o
+    reordenar columnas deje de romper la importacion.
+
+    Devuelve (indices, fila_datos) o (None, 0) si no encuentra el encabezado.
+    """
+    for i, row in enumerate(rows[:20]):
+        norm = [_norm_encabezado(v) for v in row]
+        indices = {}
+        for campo, nombres in alias.items():
+            for n in nombres:
+                if n in norm:
+                    indices[campo] = norm.index(n)
+                    break
+        if clave_obligatoria in indices:
+            # Los datos empiezan en la primera fila posterior cuya clave sea
+            # numerica: entre el encabezado y los datos puede haber una fila
+            # de subtitulos (en Ventas, "Piezas"/"dolares").
+            for j in range(i + 1, len(rows)):
+                if _safe_int(rows[j][indices[clave_obligatoria]]) is not None:
+                    return indices, j
+    return None, 0
+
+
 def _load_wb(upload: UploadFile):
     """Guarda el archivo en un temporal y abre el workbook."""
     suffix = Path(upload.filename).suffix or ".xlsx"
@@ -248,26 +285,62 @@ def _import_recetas(ws, conn) -> dict:
     }
 
 
+# Nombres de encabezado del archivo Ventas. Se listan variantes por si Dartis
+# los renombra: lo unico que no puede faltar es IdFactura.
+VENTAS_ALIAS = {
+    "id_pedido":     ("idfactura",),
+    "agencia_carga": ("agenciacarga",),
+    "vendedor":      ("vendedorpacking", "vendedor"),
+    "pais_venta":    ("paisventa", "pais"),
+}
+
+
+# Dartis escribe algunos paises distinto que el catalogo de countries (que usa
+# los nombres de Agrocalidad). Se declaran explicitos: adivinarlos con una
+# busqueda difusa es justo lo que no conviene en un dato que despues se cruza
+# contra requisitos fitosanitarios. Si aparece uno nuevo sin equivalencia, la
+# importacion lo devuelve en `paises_sin_equivalencia` en vez de callarselo.
+DARTIS_PAIS_ALIAS = {
+    "bahrein": "Barein",
+    "singapur": "Singapore",
+    "paisesbajosholanda": "Paises Bajos",
+}
+
+
 def _enrich_ventas(ws, conn) -> dict:
-    rows = list(ws.iter_rows(values_only=True))[VENTAS_DATA_START:]
+    todas = list(ws.iter_rows(values_only=True))
+    idx, inicio = _mapear_columnas(todas, VENTAS_ALIAS, "id_pedido")
+
+    if idx is None:
+        # Sin encabezado reconocible se vuelve a las posiciones historicas,
+        # que son las del archivo anterior a que apareciera paisVenta.
+        idx, inicio = {"id_pedido": 1, "agencia_carga": 4, "vendedor": 5}, VENTAS_DATA_START
+        logger.warning("Ventas: no se reconocio el encabezado, se usan posiciones fijas")
+
+    rows = todas[inicio:]
     agencias = set()
     params = []
     errores = 0
+
+    def col(row, campo):
+        i = idx.get(campo)
+        return row[i] if i is not None and i < len(row) else None
 
     for row in rows:
         if not any(row):
             continue
         try:
-            id_pedido = _safe_int(row[1])
+            id_pedido = _safe_int(col(row, "id_pedido"))
             if not id_pedido:
                 continue
-            ag = _safe_str(row[4])
+            ag = _safe_str(col(row, "agencia_carga"))
             if ag:
                 agencias.add(ag)
             params.append({
                 "id_pedido":    id_pedido,
                 "agencia_carga": ag,
-                "vendedor":     _safe_str(row[5]),
+                "vendedor":     _safe_str(col(row, "vendedor")),
+                "pais_venta":   _safe_str(col(row, "pais_venta")),
             })
         except Exception:
             errores += 1
@@ -281,21 +354,47 @@ def _enrich_ventas(ws, conn) -> dict:
         dedup[p["id_pedido"]] = p
     params = list(dedup.values())
 
-    tuples = [(p["id_pedido"], p["agencia_carga"], p["vendedor"]) for p in params]
+    # El pais se resuelve aca y no en SQL: comparar sin tildes en Postgres
+    # exigiria la extension unaccent, que no esta instalada en este proyecto.
+    # Se prueba contra name_es (el nombre que usa Agrocalidad) y contra name.
+    catalogo_paises = {}
+    for cid, nombre_es, nombre in conn.execute(text(
+            "SELECT id, name_es, name FROM countries")).all():
+        for n in (nombre_es, nombre):
+            if n:
+                catalogo_paises.setdefault(_norm_encabezado(n), str(cid))
+
+    sin_pais = set()
+    for p in params:
+        clave = _norm_encabezado(p["pais_venta"])
+        if clave in DARTIS_PAIS_ALIAS:
+            clave = _norm_encabezado(DARTIS_PAIS_ALIAS[clave])
+        p["country_id"] = catalogo_paises.get(clave)
+        if p["pais_venta"] and not p["country_id"]:
+            sin_pais.add(p["pais_venta"])
+
+    tuples = [(p["id_pedido"], p["agencia_carga"], p["vendedor"],
+               p["pais_venta"], p["country_id"]) for p in params]
 
     raw = conn.connection.cursor()
     raw.execute("""
         CREATE TEMP TABLE tmp_ventas_enrich (
             id_pedido    INTEGER,
             agencia_carga TEXT,
-            vendedor      TEXT
+            vendedor      TEXT,
+            pais_venta    TEXT,
+            country_id    UUID
         ) ON COMMIT DROP
     """)
     execute_values(raw, "INSERT INTO tmp_ventas_enrich VALUES %s", tuples, page_size=2000)
+    # El texto crudo del pais se guarda aunque no matchee ningun pais del
+    # catalogo, para poder re-resolver el mapeo sin volver a importar.
     raw.execute("""
         UPDATE dartis_ventas dv
         SET    vendedor      = t.vendedor,
-               agencia_carga = t.agencia_carga
+               agencia_carga = t.agencia_carga,
+               pais_venta    = t.pais_venta,
+               country_id    = t.country_id
         FROM   tmp_ventas_enrich t
         WHERE  dv.id_pedido = t.id_pedido
     """)
@@ -307,6 +406,7 @@ def _enrich_ventas(ws, conn) -> dict:
         "filas_procesadas": len(tuples),
         "actualizadas": afectadas,
         "errores": errores,
+        "paises_sin_equivalencia": sorted(sin_pais),
         "agencias_nuevas": nuevas_ag,
     }
 

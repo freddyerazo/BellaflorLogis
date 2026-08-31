@@ -141,6 +141,59 @@ def get_requisito(requirement_id: str):
     return fila
 
 
+@router.get("/comparacion")
+def comparacion():
+    """Agrocalidad vs Ventas: cobertura de lo que Bellaflor realmente exporta.
+
+    Cruza las especies que aparecen en `dartis_ventas` contra el mapeo a
+    Agrocalidad y contra los requisitos ya consultados, para responder algo
+    concreto: de lo que efectivamente vendemos, ¿que tiene requisitos
+    averiguados y que no?
+
+    El cruce por PAIS todavia no se puede armar — `dartis_ventas` no trae el
+    pais de destino (solo `cliente` y `destinatario`, que son nombres) — y VUE
+    aun no tiene datos cargados. Ambos se informan en `pendientes` para que la
+    pantalla lo diga en vez de mostrar una comparacion incompleta como si
+    estuviera completa.
+    """
+    with engine.connect() as conn:
+        especies = conn.execute(text("""
+            SELECT
+                d.especie,
+                count(*)                        AS lineas,
+                sum(d.total_tallos)             AS tallos,
+                sum(d.total_dolares)            AS dolares,
+                s.id                            AS species_id,
+                s.id_producto_agrocalidad,
+                (SELECT count(*) FROM agrocalidad_requirements r
+                  WHERE r.species_id = s.id AND r.active) AS consultas,
+                (SELECT count(*) FROM v_agrocalidad_requisitos v
+                  WHERE v.species_id = s.id AND v.n_requisitos > 0) AS con_requisitos
+            FROM dartis_ventas d
+            LEFT JOIN species s ON upper(s.name) = upper(d.especie)
+            WHERE d.active
+            GROUP BY d.especie, s.id, s.id_producto_agrocalidad
+            ORDER BY sum(d.total_dolares) DESC NULLS LAST
+        """)).mappings().all()
+
+        # ¿ya se puede cruzar por pais?  ¿hay algo de VUE?
+        # No alcanza con que exista la columna: hace falta que tenga datos.
+        # La columna se agrega con la migracion 034, pero recien se llena
+        # cuando se importa un archivo de Ventas que traiga `paisVenta`.
+        pais_en_ventas = conn.execute(text("""
+            SELECT count(*) FROM dartis_ventas
+            WHERE active AND country_id IS NOT NULL
+        """)).scalar()
+
+    return {
+        "especies": especies,
+        "pendientes": {
+            "pais_en_ventas": bool(pais_en_ventas),
+            "vue": False,
+        },
+    }
+
+
 # Una consulta guardada mas nueva que esto se reutiliza en vez de volver a
 # pedirsela a Agrocalidad. Los requisitos fitosanitarios cambian pocas veces al
 # ano; reconsultar lo mismo cada vez solo agrega 3 s de espera al usuario y
