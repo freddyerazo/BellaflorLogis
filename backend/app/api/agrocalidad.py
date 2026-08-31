@@ -1,150 +1,311 @@
+"""API del modulo Agrocalidad: requisitos fitosanitarios de exportacion.
+
+Desde el 2026-08-30 consulta directo la API movil de Agrocalidad
+(`services/agrocalidad_api.py`) en vez de encolar una solicitud y disparar un
+workflow de GitHub Actions con Playwright. La consulta es SINCRONA: ~2,9 s de
+mediana en vivo y ~1,2 s reutilizando un resultado guardado, contra los 30-90 s
+del worker. Ya no hacen falta la cola `agrocalidad_requests`, el polling del
+frontend ni `GITHUB_TOKEN`.
+
+`agrocalidad_requests` se conserva con su historial (49 filas) pero este modulo
+ya no escribe en ella.
+
+Resultados: cabecera en `agrocalidad_requirements`, requisitos estructurados en
+`agrocalidad_requisitos` (catalogo, PK = id_requisito de Agrocalidad) y
+`agrocalidad_requirement_items` (enlace). Ver migracion 030.
 """
-API del modulo Agrocalidad: consulta de requisitos fitosanitarios de
-exportacion (guia.agrocalidad.gob.ec).
 
-El sitio de Agrocalidad esta protegido por Imperva/Incapsula y bloquea
-cualquier peticion que no venga de un navegador real, por lo que el
-scraping en si NO corre aqui: sigue viviendo en GitHub Actions del repo
-freddyerazo/AgrocalidadDartis (workflow "Consultar Agrocalidad", ejecuta
-worker_ci.py con Playwright). Este modulo solo:
-  1. Encola la solicitud en public.agrocalidad_requests (misma Supabase).
-  2. Dispara ese workflow via la API REST de GitHub.
-  3. Permite hacer polling del resultado y consultar el historial ya
-     guardado en public.agrocalidad_requirements.
-"""
-
-import os
-
-import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from psycopg2.extras import execute_values
 from sqlalchemy import text
 
 from app.database.connection import engine
-from app.schemas.agrocalidad import (
-    AREAS_VALIDAS,
-    TIPOS_VALIDOS,
-    AgrocalidadConsultaRequest,
-)
+from app.schemas.agrocalidad import AREAS_VALIDAS, AgrocalidadConsultaRequest
+from app.services import agrocalidad_api
+from app.services.agrocalidad_api import AgrocalidadError
 
 router = APIRouter(prefix="/agrocalidad", tags=["Agrocalidad"])
-
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = os.getenv("GITHUB_REPO", "freddyerazo/AgrocalidadDartis")
-GITHUB_WORKFLOW = "consultar.yml"
 
 
 @router.get("/catalogo")
 def get_catalogo():
-    """Especies/paises disponibles y los choices fijos de tipo/area."""
+    """Especies y paises de BLIS, con su id de Agrocalidad ya mapeado.
+
+    Solo se ofrecen los que tienen mapeo: sin `id_producto_agrocalidad` o sin
+    `id_localizacion_agrocalidad` la consulta no se puede armar.
+    """
     with engine.connect() as conn:
-        especies = conn.execute(text(
-            "SELECT id, code, name, name_agrocalidad FROM species "
-            "WHERE active = true ORDER BY name"
-        )).mappings().all()
-        paises = conn.execute(text(
-            "SELECT id, code, name, name_es FROM countries "
-            "WHERE active = true ORDER BY name_es NULLS LAST, name"
-        )).mappings().all()
+        especies = conn.execute(text("""
+            SELECT id, code, name, name_agrocalidad, id_producto_agrocalidad
+            FROM species
+            WHERE active = true AND id_producto_agrocalidad IS NOT NULL
+            ORDER BY name
+        """)).mappings().all()
+
+        sin_mapeo = conn.execute(text("""
+            SELECT count(*) FROM species
+            WHERE active = true AND id_producto_agrocalidad IS NULL
+        """)).scalar()
+
+        # Los bloques comerciales (Unión Europea, CEEA) viven en `countries` con
+        # active = false para no aparecer en los listados del resto de modulos,
+        # pero aqui SI son destinos validos: Agrocalidad publica requisitos a
+        # nivel de bloque.
+        paises = conn.execute(text("""
+            SELECT id, code, name, name_es, nombre_agrocalidad,
+                   id_localizacion_agrocalidad, es_bloque_agrocalidad
+            FROM countries
+            WHERE id_localizacion_agrocalidad IS NOT NULL
+              AND (active = true OR es_bloque_agrocalidad = true)
+            ORDER BY es_bloque_agrocalidad, name_es NULLS LAST, name
+        """)).mappings().all()
 
     return {
         "especies": especies,
         "paises": paises,
-        "tipos": sorted(TIPOS_VALIDOS),
+        "especies_sin_mapeo": sin_mapeo,
+        "movimientos": list(agrocalidad_api.MOVIMIENTOS),
         "areas": sorted(AREAS_VALIDAS),
     }
 
 
+@router.get("/productos")
+def buscar_productos(q: str = Query(min_length=2), limite: int = 50):
+    """Busca en el catalogo de Agrocalidad (flores + follajes).
+
+    Sirve para mapear especies nuevas o consultar productos que BLIS todavia no
+    tiene en `species`.
+    """
+    try:
+        return agrocalidad_api.buscar_productos(q, limite)
+    except AgrocalidadError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/paises-disponibles/{id_producto}")
+def paises_disponibles(id_producto: int, movimiento: str = "Exportación"):
+    """Destinos con requisitos publicados para ese producto.
+
+    Permite mostrar solo los paises que van a devolver algo, en vez de dejar al
+    usuario probar uno por uno.
+    """
+    try:
+        return agrocalidad_api.paises_producto(id_producto, movimiento)
+    except AgrocalidadError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.get("/requisitos")
 def list_requisitos(species_id: str | None = None, country_id: str | None = None):
-    """Historial de requisitos ya consultados (sin relanzar el scraping)."""
-    filtros = []
-    params = {}
+    """Historial de consultas guardadas, con sus requisitos ya estructurados."""
+    filtros, params = [], {}
     if species_id:
-        filtros.append("r.species_id = :species_id")
+        filtros.append("species_id = :species_id")
         params["species_id"] = species_id
     if country_id:
-        filtros.append("r.country_id = :country_id")
+        filtros.append("country_id = :country_id")
         params["country_id"] = country_id
     where = f"WHERE {' AND '.join(filtros)}" if filtros else ""
 
     with engine.connect() as conn:
-        rows = conn.execute(text(f"""
-            SELECT r.*, s.name AS species_name, c.name_es AS country_name
-            FROM agrocalidad_requirements r
-            JOIN species s ON s.id = r.species_id
-            JOIN countries c ON c.id = r.country_id
+        return conn.execute(text(f"""
+            SELECT * FROM v_agrocalidad_requisitos
             {where}
-            ORDER BY r.queried_at DESC
+            ORDER BY queried_at DESC
             LIMIT 200
         """), params).mappings().all()
-    return rows
 
 
-@router.get("/solicitud/{request_id}")
-def get_solicitud(request_id: str):
+@router.get("/requisitos/{requirement_id}")
+def get_requisito(requirement_id: str):
     with engine.connect() as conn:
-        solicitud = conn.execute(text("""
-            SELECT * FROM agrocalidad_requests WHERE id = :id
-        """), {"id": request_id}).mappings().first()
+        fila = conn.execute(text("""
+            SELECT * FROM v_agrocalidad_requisitos WHERE requirement_id = :id
+        """), {"id": requirement_id}).mappings().first()
 
-        if solicitud is None:
-            raise HTTPException(status_code=404, detail="Solicitud no encontrada")
-
-        solicitud = dict(solicitud)
-        if solicitud.get("requirement_id"):
-            requirement = conn.execute(text("""
-                SELECT * FROM agrocalidad_requirements WHERE id = :id
-            """), {"id": solicitud["requirement_id"]}).mappings().first()
-            solicitud["requirement"] = requirement
-
-    return solicitud
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Consulta no encontrada")
+    return fila
 
 
-@router.post("/consultar", status_code=201)
-def crear_consulta(payload: AgrocalidadConsultaRequest):
-    if payload.trade_type not in TIPOS_VALIDOS:
-        raise HTTPException(status_code=400, detail=f"trade_type invalido: {payload.trade_type}")
+# Una consulta guardada mas nueva que esto se reutiliza en vez de volver a
+# pedirsela a Agrocalidad. Los requisitos fitosanitarios cambian pocas veces al
+# ano; reconsultar lo mismo cada vez solo agrega 3 s de espera al usuario y
+# carga innecesaria sobre un servicio publico del Estado.
+HORAS_VIGENCIA = 24
+
+
+@router.post("/consultar")
+def consultar(payload: AgrocalidadConsultaRequest, refrescar: bool = False):
+    """Consulta Agrocalidad y guarda el resultado.
+
+    Si ya hay una consulta guardada de las ultimas `HORAS_VIGENCIA` horas se
+    devuelve esa (respuesta en ~0,4 s en vez de ~3,7 s). Con `?refrescar=true`
+    se fuerza la consulta en vivo.
+    """
     if payload.area_code not in AREAS_VALIDAS:
-        raise HTTPException(status_code=400, detail=f"area_code invalido: {payload.area_code}")
+        raise HTTPException(status_code=400,
+                            detail=f"area_code invalido: {payload.area_code}")
+    if payload.trade_type not in agrocalidad_api.MOVIMIENTOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"trade_type invalido: {payload.trade_type}. "
+                   f"Debe ser uno de {list(agrocalidad_api.MOVIMIENTOS)}")
 
+    # --- mapeo + consulta vigente, en un solo viaje ---
+    # Cada round-trip a Supabase cuesta ~195 ms, asi que se resuelve todo junto:
+    # los ids de Agrocalidad y si ya hay un resultado reutilizable.
+    with engine.connect() as conn:
+        mapeo = conn.execute(text(f"""
+            SELECT
+                (SELECT row_to_json(e) FROM (
+                    SELECT id, name, id_producto_agrocalidad
+                    FROM species WHERE id = :species_id) e) AS especie,
+                (SELECT row_to_json(p) FROM (
+                    SELECT id, name_es, id_localizacion_agrocalidad
+                    FROM countries WHERE id = :country_id) p) AS pais,
+                (SELECT id FROM agrocalidad_requirements
+                  WHERE species_id = :species_id AND country_id = :country_id
+                    AND trade_type = :trade_type AND area_code = :area_code
+                    AND active = true AND fuente = 'api'
+                    AND queried_at > now() - interval '{HORAS_VIGENCIA} hours'
+                ) AS vigente
+        """), {"species_id": str(payload.species_id),
+               "country_id": str(payload.country_id),
+               "trade_type": payload.trade_type,
+               "area_code": payload.area_code}).mappings().first()
+
+    especie = mapeo["especie"]
+    pais = mapeo["pais"]
+
+    # Resultado reciente: se devuelve sin molestar a Agrocalidad.
+    if mapeo["vigente"] and not refrescar:
+        with engine.connect() as conn:
+            fila = conn.execute(text(
+                "SELECT * FROM v_agrocalidad_requisitos WHERE requirement_id = :id"
+            ), {"id": str(mapeo["vigente"])}).mappings().first()
+        if fila is not None:
+            return {**dict(fila), "desde_cache": True}
+
+    if especie is None:
+        raise HTTPException(status_code=404, detail="Especie no encontrada")
+    if pais is None:
+        raise HTTPException(status_code=404, detail="País no encontrado")
+    if not especie["id_producto_agrocalidad"]:
+        raise HTTPException(
+            status_code=422,
+            detail=f"La especie {especie['name']} no está mapeada al catálogo de "
+                   f"Agrocalidad. Búscala en /api/agrocalidad/productos y carga "
+                   f"species.id_producto_agrocalidad.")
+    if not pais["id_localizacion_agrocalidad"]:
+        raise HTTPException(
+            status_code=422,
+            detail=f"El país {pais['name_es']} no está mapeado al catálogo de "
+                   f"Agrocalidad.")
+
+    # --- consulta en vivo ---
+    try:
+        resultado = agrocalidad_api.consultar(
+            especie["id_producto_agrocalidad"],
+            pais["id_localizacion_agrocalidad"],
+            payload.trade_type,
+        )
+    except AgrocalidadError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    ficha = resultado["ficha"]
+    reqs = resultado["requisitos"]
+
+    # --- guardar ---
     with engine.begin() as conn:
-        solicitud = conn.execute(text("""
-            INSERT INTO agrocalidad_requests (species_id, country_id, trade_type, area_code, status)
-            VALUES (:species_id, :country_id, :trade_type, :area_code, 'pending')
-            RETURNING *
+        # Catalogo de requisitos: el texto se guarda una sola vez y se reutiliza.
+        # En lote — fila por fila serian ~195 ms cada una (ver rules/coding-style.md).
+        if reqs:
+            cursor = conn.connection.cursor()
+            execute_values(cursor, """
+                INSERT INTO agrocalidad_requisitos
+                    (id_requisito, nombre, requisito, detalle_impreso)
+                VALUES %s
+                ON CONFLICT (id_requisito) DO UPDATE SET
+                    nombre = EXCLUDED.nombre,
+                    requisito = EXCLUDED.requisito,
+                    detalle_impreso = EXCLUDED.detalle_impreso,
+                    visto_ultima_vez = now(),
+                    updated_at = now()
+            """, [(r["id_requisito"], r["nombre"], r.get("requisito"),
+                   r.get("detalle_impreso")) for r in reqs])
+
+        # Cabecera. La clave unica (especie, pais, tipo, area) hace de cache:
+        # reconsultar actualiza la fila en vez de duplicarla.
+        fila = conn.execute(text("""
+            INSERT INTO agrocalidad_requirements (
+                species_id, country_id, trade_type, area_code, status,
+                matched_product_name, scientific_name, tariff_heading,
+                agrocalidad_code, id_producto, tipo, id_subtipo_producto,
+                subtipo, unidad_medida, id_localizacion, fuente, queried_at
+            ) VALUES (
+                :species_id, :country_id, :trade_type, :area_code, :status,
+                :producto, :cientifico, :partida,
+                :codigo, :id_producto, :tipo, :id_subtipo,
+                :subtipo, :unidad, :id_localizacion, 'api', now()
+            )
+            ON CONFLICT (species_id, country_id, trade_type, area_code)
+            DO UPDATE SET
+                status = EXCLUDED.status,
+                matched_product_name = EXCLUDED.matched_product_name,
+                scientific_name = EXCLUDED.scientific_name,
+                tariff_heading = EXCLUDED.tariff_heading,
+                agrocalidad_code = EXCLUDED.agrocalidad_code,
+                id_producto = EXCLUDED.id_producto,
+                tipo = EXCLUDED.tipo,
+                id_subtipo_producto = EXCLUDED.id_subtipo_producto,
+                subtipo = EXCLUDED.subtipo,
+                unidad_medida = EXCLUDED.unidad_medida,
+                id_localizacion = EXCLUDED.id_localizacion,
+                fuente = 'api',
+                active = true,
+                queried_at = now(),
+                updated_at = now()
+            RETURNING id
         """), {
             "species_id": str(payload.species_id),
             "country_id": str(payload.country_id),
             "trade_type": payload.trade_type,
             "area_code": payload.area_code,
+            "status": resultado["status"],
+            "producto": ficha.get("producto"),
+            "cientifico": ficha.get("cientifico"),
+            "partida": ficha.get("partida_arancelaria"),
+            "codigo": agrocalidad_api.codigo_con_letra(ficha.get("codigo_producto")),
+            "id_producto": ficha.get("id_producto"),
+            "tipo": ficha.get("tipo"),
+            "id_subtipo": ficha.get("id_subtipo_producto"),
+            "subtipo": ficha.get("subtipo"),
+            "unidad": ficha.get("unidad_medida"),
+            "id_localizacion": pais["id_localizacion_agrocalidad"],
         }).mappings().first()
 
-    _disparar_workflow(str(solicitud["id"]))
-    return solicitud
+        requirement_id = fila["id"]
 
+        # Enlaces: se reemplazan, para que una reconsulta refleje bajas de
+        # requisitos y no solo altas.
+        conn.execute(text(
+            "DELETE FROM agrocalidad_requirement_items WHERE requirement_id = :id"
+        ), {"id": str(requirement_id)})
 
-def _disparar_workflow(request_id: str):
-    if not GITHUB_TOKEN:
-        # Sin token configurado: la solicitud queda encolada como "pending"
-        # y puede procesarse manualmente desde GitHub Actions mientras tanto.
-        return
+        if reqs:
+            cursor = conn.connection.cursor()
+            execute_values(cursor, """
+                INSERT INTO agrocalidad_requirement_items
+                    (requirement_id, id_requisito, orden)
+                VALUES %s
+                ON CONFLICT (requirement_id, id_requisito) DO NOTHING
+            """, [(str(requirement_id), r["id_requisito"], orden)
+                  for orden, r in enumerate(reqs, 1)])
 
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{GITHUB_WORKFLOW}/dispatches"
-    try:
-        resp = httpx.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {GITHUB_TOKEN}",
-                "Accept": "application/vnd.github+json",
-            },
-            json={"ref": "main", "inputs": {"request_id": request_id}},
-            timeout=15,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPError as e:
-        with engine.begin() as conn:
-            conn.execute(text("""
-                UPDATE agrocalidad_requests
-                SET status = 'error', error_message = :msg, updated_at = now()
-                WHERE id = :id
-            """), {"id": request_id, "msg": f"No se pudo disparar el workflow: {e}"})
+    with engine.connect() as conn:
+        fila = conn.execute(text(
+            "SELECT * FROM v_agrocalidad_requisitos WHERE requirement_id = :id"
+        ), {"id": str(requirement_id)}).mappings().first()
+
+    return {**dict(fila), "desde_cache": False}

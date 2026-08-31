@@ -12,7 +12,7 @@
   <main class="content" id="content">
     <div class="page-header">
       <h1><i class="ph ph-leaf"></i> Consulta Agrocalidad</h1>
-      <p class="page-subtitle">Requisitos fitosanitarios de exportación por especie y país de destino.</p>
+      <p class="page-subtitle">Requisitos fitosanitarios por especie y país de destino, en vivo.</p>
     </div>
 
     <div class="import-card">
@@ -21,13 +21,17 @@
           <div class="form-group">
             <label for="species_id">Especie</label>
             <select id="species_id" required></select>
+            <small class="ag-nota" id="nota_especies"></small>
           </div>
           <div class="form-group">
             <label for="country_id">País de destino</label>
-            <select id="country_id" required></select>
+            <select id="country_id" required disabled>
+              <option value="">Elige una especie primero…</option>
+            </select>
+            <small class="ag-nota" id="nota_paises"></small>
           </div>
           <div class="form-group">
-            <label for="trade_type">Tipo de trámite</label>
+            <label for="trade_type">Movimiento</label>
             <select id="trade_type" required></select>
           </div>
           <div class="form-group">
@@ -40,19 +44,15 @@
           <button type="submit" id="btnConsultar" class="btn btn-primary">
             <i class="ph ph-magnifying-glass"></i> Consultar
           </button>
+          <span class="ag-hint">La consulta va directo a Agrocalidad y tarda unos segundos.</span>
         </div>
       </form>
-
-      <div id="progressSection" class="hidden">
-        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
-        <p id="progressMsg" class="progress-msg">Consultando en Agrocalidad (puede tardar hasta 90 segundos)...</p>
-      </div>
 
       <div id="resultSection" class="hidden"></div>
     </div>
 
     <div class="page-header" style="margin-top: 2rem;">
-      <h2><i class="ph ph-clock-counter-clockwise"></i> Historial de consultas</h2>
+      <h2><i class="ph ph-clock-counter-clockwise"></i> Consultas guardadas</h2>
     </div>
 
     <div class="import-card">
@@ -71,16 +71,16 @@
           <tr>
             <th>Especie</th>
             <th>País</th>
-            <th>Tipo</th>
-            <th>Área</th>
-            <th>Estado</th>
-            <th>Código Agrocalidad</th>
+            <th>Movimiento</th>
+            <th class="num">Requisitos</th>
             <th>Partida</th>
+            <th>Código</th>
             <th>Consultado</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="historyBody">
-          <tr><td colspan="8" class="loading">Cargando...</td></tr>
+          <tr><td colspan="8" class="loading">Cargando…</td></tr>
         </tbody>
       </table>
     </div>

@@ -1828,3 +1828,156 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   align-items: center;
   white-space: nowrap;
 }
+
+/* ── Agrocalidad: ficha del producto y requisitos ────────────────────── */
+
+.ag-nota {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.ag-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 10px;
+}
+
+.ag-cargando {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 4px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.ag-cargando span {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: ag-giro 700ms linear infinite;
+  flex: none;
+}
+@keyframes ag-giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .ag-cargando span { animation-duration: 2s; }
+}
+
+/* Ficha: los datos generales del producto */
+.ag-ficha {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 18px;
+  font-size: 13px;
+}
+.ag-ficha th,
+.ag-ficha td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.ag-ficha th {
+  width: 220px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg);
+}
+.ag-ficha td {
+  font-variant-numeric: tabular-nums;
+}
+.ag-ficha tr:last-child th,
+.ag-ficha tr:last-child td { border-bottom: none; }
+
+/* Un requisito */
+.ag-reqs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ag-req {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: 8px;
+  background: var(--card-bg);
+  padding: 12px 14px;
+}
+.ag-req header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.ag-req h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ag-req-num {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary-dark);
+  background: var(--primary-light);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+/* El texto trae saltos de línea y viñetas propias de Agrocalidad: se respetan */
+.ag-req-texto {
+  margin: 0;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ag-req-impreso {
+  display: flex;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ag-req-impreso strong { color: var(--text); font-weight: 500; }
+
+.ag-vacio {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.ag-vacio i { color: var(--primary); margin-right: 6px; }
+
+.ag-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Aviso de resultado reutilizado (Agrocalidad) */
+.ag-cache {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.ag-cache strong { color: var(--text); font-weight: 500; }
+.ag-cache .btn-link { margin-left: auto; font-size: 12.5px; }

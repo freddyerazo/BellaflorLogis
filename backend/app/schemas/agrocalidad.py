@@ -1,10 +1,14 @@
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 
+# Areas de Agrocalidad: SA sanidad animal, SV sanidad vegetal,
+# IAP/IAV/IAF insumos agricolas (pecuarios / veterinarios / fertilizantes).
+# Bellaflor trabaja SV.
 AREAS_VALIDAS = {"SA", "SV", "IAP", "IAV", "IAF"}
-TIPOS_VALIDOS = {"Exportación", "Importación", "Tránsito", "Nacional"}
+
+# Los movimientos validos viven en services/agrocalidad_api.MOVIMIENTOS: son
+# los literales que espera el servicio, con tilde, y no conviene duplicarlos.
 
 
 class AgrocalidadConsultaRequest(BaseModel):
@@ -12,25 +16,3 @@ class AgrocalidadConsultaRequest(BaseModel):
     country_id: UUID
     trade_type: str = "Exportación"
     area_code: str = "SV"
-
-
-class AgrocalidadRequirement(BaseModel):
-    id: UUID
-    species_id: UUID
-    country_id: UUID
-    trade_type: str
-    area_code: str
-    matched_product_name: Optional[str] = None
-    scientific_name: Optional[str] = None
-    tariff_heading: Optional[str] = None
-    agrocalidad_code: Optional[str] = None
-    status: str
-    requirements: Optional[str] = None
-    queried_at: str
-
-
-class AgrocalidadSolicitud(BaseModel):
-    id: UUID
-    status: str
-    error_message: Optional[str] = None
-    requirement: Optional[AgrocalidadRequirement] = None
