@@ -52,6 +52,47 @@
     </div>
 
     <div class="page-header" style="margin-top: 2rem;">
+      <h2><i class="ph ph-globe-hemisphere-west"></i> Consulta por país</h2>
+      <p class="page-subtitle">Todo el catálogo de especies contra un mismo destino.</p>
+    </div>
+
+    <div class="import-card">
+      <form id="paisForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="pais_country_id">País de destino</label>
+            <select id="pais_country_id" required></select>
+          </div>
+          <div class="form-group">
+            <label for="pais_trade_type">Movimiento</label>
+            <select id="pais_trade_type" required></select>
+          </div>
+          <div class="form-group">
+            <label for="pais_area_code">Área</label>
+            <select id="pais_area_code" required></select>
+          </div>
+        </div>
+
+        <div class="import-actions">
+          <button type="submit" id="btnConsultarPais" class="btn btn-primary">
+            <i class="ph ph-list-magnifying-glass"></i> Consultar todo el catálogo
+          </button>
+          <button type="button" id="btnCancelarPais" class="btn btn-secondary hidden">
+            <i class="ph ph-x"></i> Cancelar
+          </button>
+          <span class="ag-hint" id="pais_hint"></span>
+        </div>
+      </form>
+
+      <div id="paisProgreso" class="hidden">
+        <div class="progress-bar"><div id="paisProgresoFill" class="progress-fill"></div></div>
+        <p class="progress-msg" id="paisProgresoMsg"></p>
+      </div>
+
+      <div id="paisResultado" class="hidden"></div>
+    </div>
+
+    <div class="page-header" style="margin-top: 2rem;">
       <h2><i class="ph ph-clock-counter-clockwise"></i> Consultas guardadas</h2>
     </div>
 

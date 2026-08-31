@@ -1981,3 +1981,28 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 }
 .ag-cache strong { color: var(--text); font-weight: 500; }
 .ag-cache .btn-link { margin-left: auto; font-size: 12.5px; }
+
+/* Consulta por país: resumen y tabla de resultados */
+.ag-resumen-pais {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  background: var(--primary-light);
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text);
+}
+.ag-resumen-pais strong {
+  color: var(--primary-dark);
+  font-size: 15px;
+}
+/* La tabla puede traer 86 filas: se acota el alto y scrollea sola */
+.ag-tabla-scroll {
+  max-height: 460px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ag-tabla-scroll .cot-tabla th {
+  background: var(--card-bg);
+  z-index: 1;
+}

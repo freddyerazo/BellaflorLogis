@@ -50,6 +50,8 @@ async function initCatalogo() {
     value: "id", label: "name_es", placeholder: "Todos",
   });
 
+  initFormularioPais();
+
   const sinMapeo = catalogo.especies_sin_mapeo;
   document.getElementById("nota_especies").textContent = sinMapeo
     ? `${catalogo.especies.length} especies disponibles · ${sinMapeo} sin mapear en Agrocalidad`
@@ -258,6 +260,166 @@ async function verGuardada(id) {
   } catch (err) {
     alert(`No se pudo abrir la consulta: ${err.message}`);
   }
+}
+
+/* ─── Consulta por país: todo el catálogo contra un mismo destino ──────
+   Equivalente al "Verificar catálogo completo para este país" del sitio de
+   GitHub, pero sobre la API: allá cada especie tardaba 30-90 s con Playwright,
+   acá ~3 s (y ~1 s si ya hay resultado guardado de las últimas 24 h).
+
+   Se lanzan varias en paralelo pero con un tope bajo: es un servicio público
+   de un organismo del Estado, no conviene saturarlo. Con 3 a la vez el
+   catálogo completo tarda cerca de minuto y medio.
+   ───────────────────────────────────────────────────────────────────── */
+
+const CONCURRENCIA_PAIS = 3;
+let cancelarPais = false;
+let corriendoPais = false;
+
+function initFormularioPais() {
+  llenarSelect(document.getElementById("pais_country_id"), catalogo.paises, {
+    value: "id", label: "name_es", placeholder: "Selecciona país…",
+  });
+  llenarSelect(document.getElementById("pais_trade_type"),
+    catalogo.movimientos.map((m) => ({ v: m })), { value: "v", label: "v" });
+  llenarSelect(document.getElementById("pais_area_code"),
+    catalogo.areas.map((a) => ({ v: a })), { value: "v", label: "v" });
+  document.getElementById("pais_trade_type").value = "Exportación";
+  document.getElementById("pais_area_code").value = "SV";
+  document.getElementById("pais_hint").textContent =
+    `${catalogo.especies.length} especies del catálogo`;
+}
+
+function progresoPais(hechas, total, texto) {
+  document.getElementById("paisProgresoFill").style.width =
+    `${Math.round((hechas / total) * 100)}%`;
+  document.getElementById("paisProgresoMsg").textContent =
+    `${hechas} de ${total} · ${texto}`;
+}
+
+document.getElementById("paisForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (corriendoPais) return;
+
+  const countryId = document.getElementById("pais_country_id").value;
+  const pais = catalogo.paises.find((p) => p.id === countryId);
+  const movimiento = document.getElementById("pais_trade_type").value;
+  const area = document.getElementById("pais_area_code").value;
+  const especies = catalogo.especies;
+
+  /* Medido con concurrencia 3: ~1,9 s de reloj por especie en vivo (ese numero
+     ya incluye el paralelismo, no hay que volver a dividir por la concurrencia).
+     Las que salen de cache tardan ~0,4 s, asi que la estimacion es el techo. */
+  const minutos = Math.max(1, Math.round(especies.length * 1.9 / 60));
+  if (!confirm(
+    `Se van a consultar las ${especies.length} especies del catálogo contra ` +
+    `${pais.name_es} (${movimiento}, ${area}).\n\n` +
+    `Cada consulta va en vivo a Agrocalidad; las que ya tengan resultado de las ` +
+    `últimas 24 h se reutilizan y tardan mucho menos. La primera corrida completa ` +
+    `toma alrededor de ${minutos} minuto(s) ` +
+    `y necesita esta página abierta.\n\n¿Continuar?`)) return;
+
+  corriendoPais = true;
+  cancelarPais = false;
+  const btn = document.getElementById("btnConsultarPais");
+  const btnCancelar = document.getElementById("btnCancelarPais");
+  btn.disabled = true;
+  btn.innerHTML = `<i class="ph ph-circle-notch"></i> Consultando…`;
+  btnCancelar.classList.remove("hidden");
+  document.getElementById("paisProgreso").classList.remove("hidden");
+  document.getElementById("paisResultado").classList.add("hidden");
+
+  const filas = [];
+  let hechas = 0;
+  const cola = [...especies];
+
+  async function trabajador() {
+    while (cola.length && !cancelarPais) {
+      const especie = cola.shift();
+      try {
+        const r = await apiPost("/agrocalidad/consultar", {
+          species_id: especie.id, country_id: countryId,
+          trade_type: movimiento, area_code: area,
+        });
+        filas.push({
+          especie: especie.name,
+          requisitos: (r.requisitos || []).length,
+          partida: r.tariff_heading,
+          codigo: r.agrocalidad_code,
+          cache: r.desde_cache,
+          error: null,
+        });
+      } catch (err) {
+        filas.push({ especie: especie.name, requisitos: 0, error: err.message });
+      }
+      hechas += 1;
+      progresoPais(hechas, especies.length, especie.name);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: CONCURRENCIA_PAIS }, () => trabajador()));
+
+  document.getElementById("paisProgreso").classList.add("hidden");
+  btnCancelar.classList.add("hidden");
+  btn.disabled = false;
+  btn.innerHTML = `<i class="ph ph-list-magnifying-glass"></i> Consultar todo el catálogo`;
+  corriendoPais = false;
+
+  renderResultadoPais(pais, movimiento, area, filas, hechas, especies.length);
+  cargarHistorial();
+});
+
+document.getElementById("btnCancelarPais").addEventListener("click", () => {
+  cancelarPais = true;
+  document.getElementById("paisProgresoMsg").textContent += " — cancelando…";
+});
+
+function renderResultadoPais(pais, movimiento, area, filas, hechas, total) {
+  const seccion = document.getElementById("paisResultado");
+  const conReq = filas.filter((f) => !f.error && f.requisitos > 0);
+  const sinReq = filas.filter((f) => !f.error && f.requisitos === 0);
+  const conError = filas.filter((f) => f.error);
+
+  /* Primero las que tienen requisitos, que es lo accionable */
+  const orden = [...conReq.sort((a, b) => b.requisitos - a.requisitos),
+                 ...sinReq, ...conError];
+
+  seccion.innerHTML = `
+    <div class="result-box success">
+      <h3>
+        <i class="ph ph-globe-hemisphere-west"></i>
+        ${esc(pais.name_es)} · ${esc(movimiento)} · ${esc(area)}
+        ${hechas < total ? `<span class="badge badge-gray">cancelado en ${hechas}/${total}</span>` : ""}
+      </h3>
+      <p class="ag-resumen-pais">
+        <strong>${conReq.length}</strong> especies con requisitos ·
+        <strong>${sinReq.length}</strong> sin requisitos publicados
+        ${conError.length ? ` · <strong>${conError.length}</strong> con error` : ""}
+      </p>
+      <div class="ag-tabla-scroll">
+        <table class="cot-tabla">
+          <thead>
+            <tr><th>Especie</th><th class="num">Requisitos</th><th>Partida</th>
+                <th>Código</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${orden.map((f) => `
+              <tr>
+                <td>${esc(f.especie)}</td>
+                <td class="num">
+                  ${f.error ? "—"
+                    : `<span class="badge ${f.requisitos ? "badge-green" : "badge-gray"}">${f.requisitos}</span>`}
+                </td>
+                <td>${esc(f.partida || "—")}</td>
+                <td>${esc(f.codigo || "—")}</td>
+                <td class="ag-sub">${f.error ? esc(f.error) : (f.cache ? "guardado" : "")}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  seccion.classList.remove("hidden");
 }
 
 /* ─── Arranque ───────────────────────────────────────────────────────── */
