@@ -96,8 +96,19 @@ def paises_disponibles(id_producto: int, movimiento: str = "Exportación"):
 
 
 @router.get("/requisitos")
-def list_requisitos(species_id: str | None = None, country_id: str | None = None):
-    """Historial de consultas guardadas, con sus requisitos ya estructurados."""
+def list_requisitos(species_id: str | None = None, country_id: str | None = None,
+                    solo_con_requisitos: bool = True):
+    """Historial de consultas guardadas, con sus requisitos ya estructurados.
+
+    Por defecto lista solo las combinaciones que exigen algo: una especie sin
+    requisitos publicados para ese destino no aporta nada al listado. El filtro
+    usa `n_requisitos` de la vista, que cuenta tanto los items estructurados
+    como los del texto plano del scraping viejo — hay 7 filas historicas con
+    requisitos reales (Euphorbia a Estados Unidos tiene 12) y 0 items, y
+    filtrarlas por items las habria ocultado.
+
+    Con `solo_con_requisitos=false` se ven todas, incluidas las que dieron cero.
+    """
     filtros, params = [], {}
     if species_id:
         filtros.append("species_id = :species_id")
@@ -105,6 +116,8 @@ def list_requisitos(species_id: str | None = None, country_id: str | None = None
     if country_id:
         filtros.append("country_id = :country_id")
         params["country_id"] = country_id
+    if solo_con_requisitos:
+        filtros.append("n_requisitos > 0")
     where = f"WHERE {' AND '.join(filtros)}" if filtros else ""
 
     with engine.connect() as conn:

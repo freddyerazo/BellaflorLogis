@@ -229,7 +229,9 @@ async function cargarHistorial() {
       return;
     }
     tbody.innerHTML = filas.map((f) => {
-      const n = (f.requisitos || []).length;
+      /* n_requisitos viene de la vista y cubre tambien las filas del scraping
+         viejo, que tienen los requisitos en texto plano y 0 items. */
+      const n = f.n_requisitos ?? (f.requisitos || []).length;
       return `
         <tr>
           <td>${esc(f.especie)}</td>
