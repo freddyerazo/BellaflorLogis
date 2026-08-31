@@ -381,9 +381,12 @@ function renderResultadoPais(pais, movimiento, area, filas, hechas, total) {
   const sinReq = filas.filter((f) => !f.error && f.requisitos === 0);
   const conError = filas.filter((f) => f.error);
 
-  /* Primero las que tienen requisitos, que es lo accionable */
-  const orden = [...conReq.sort((a, b) => b.requisitos - a.requisitos),
-                 ...sinReq, ...conError];
+  /* Solo se listan las que tienen requisitos: una especie sin requisitos
+     publicados no aporta nada a la tabla y solo diluye lo accionable. El conteo
+     de las que quedaron fuera sigue visible en el resumen de arriba.
+     Los errores SI se muestran: no son "cero requisitos" sino consultas que
+     fallaron, y ocultarlas haria pensar que el destino no exige nada. */
+  const orden = [...conReq.sort((a, b) => b.requisitos - a.requisitos), ...conError];
 
   seccion.innerHTML = `
     <div class="result-box success">
@@ -393,10 +396,11 @@ function renderResultadoPais(pais, movimiento, area, filas, hechas, total) {
         ${hechas < total ? `<span class="badge badge-gray">cancelado en ${hechas}/${total}</span>` : ""}
       </h3>
       <p class="ag-resumen-pais">
-        <strong>${conReq.length}</strong> especies con requisitos ·
-        <strong>${sinReq.length}</strong> sin requisitos publicados
+        <strong>${conReq.length}</strong> especies con requisitos
+        ${sinReq.length ? ` · ${sinReq.length} sin requisitos publicados (no se listan)` : ""}
         ${conError.length ? ` · <strong>${conError.length}</strong> con error` : ""}
       </p>
+      ${orden.length ? `
       <div class="ag-tabla-scroll">
         <table class="cot-tabla">
           <thead>
@@ -417,7 +421,10 @@ function renderResultadoPais(pais, movimiento, area, filas, hechas, total) {
               </tr>`).join("")}
           </tbody>
         </table>
-      </div>
+      </div>` : `
+      <p class="ag-vacio"><i class="ph ph-info"></i>
+        Agrocalidad no publica requisitos de ninguna especie del catálogo para
+        este destino, movimiento y área.</p>`}
     </div>`;
   seccion.classList.remove("hidden");
 }
