@@ -224,6 +224,98 @@ def comparacion(desde: str | None = None, hasta: str | None = None):
     }
 
 
+@router.get("/verificacion")
+def verificacion(dias: int = 5):
+    """Alerta operativa: lo que se despacha estos dias, ¿tiene requisitos verificados?
+
+    Ventana: hoy -dias / +dias, que es el horizonte que le importa a quien
+    despacha. Se listan las combinaciones **pais + especie + variedad** que
+    salen en ese rango y se contrasta cada una contra lo verificado en
+    Agrocalidad.
+
+    SOBRE EL GRANO — importante para leer el resultado:
+    Dartis registra la variedad comercial (AKITO, AMNESIA, PLAYA BLANCA) pero
+    **Agrocalidad no regula por variedad**: su catalogo llega a especie. De 234
+    variedades de Dartis solo 8 existen como producto en Agrocalidad, y esas 8
+    son follajes (SALAL, PHOTINIA, COCCULUS), no cultivares. Por eso la
+    verificacion se resuelve a nivel especie+pais y la variedad se muestra como
+    detalle operativo: es lo que identifica el despacho concreto, aunque no sea
+    lo que Agrocalidad exige.
+
+    `alerta` es true en toda combinacion que se este despachando sin requisitos
+    verificados para ese destino.
+    """
+    with engine.connect() as conn:
+        filas = conn.execute(text("""
+            SELECT
+                d.fecha,
+                co.name_es                              AS pais,
+                co.id                                   AS country_id,
+                d.especie,
+                s.id                                    AS species_id,
+                s.id_producto_agrocalidad,
+                -- `variedad_receta` guarda una LISTA separada por coma cuando la
+                -- linea agrupa varias (un bouquet llega a 53). Se aplana aca
+                -- para que el resultado sean variedades sueltas y no listas.
+                array_agg(DISTINCT d.variedad_receta)
+                    FILTER (WHERE d.variedad_receta IS NOT NULL) AS variedades_crudas,
+                count(*)                                AS lineas,
+                sum(d.total_tallos)                     AS tallos,
+                sum(d.total_dolares)                    AS dolares,
+                v.requirement_id,
+                v.n_requisitos,
+                v.queried_at
+            FROM dartis_ventas d
+            JOIN countries co ON co.id = d.country_id
+            LEFT JOIN species s ON upper(s.name) = upper(d.especie)
+            LEFT JOIN v_agrocalidad_requisitos v
+                   ON v.species_id = s.id
+                  AND v.country_id = d.country_id
+                  AND v.trade_type = 'Exportación'
+                  AND v.area_code  = 'SV'
+            WHERE d.active
+              AND d.country_id IS NOT NULL
+              AND d.fecha BETWEEN CURRENT_DATE - :dias AND CURRENT_DATE + :dias
+            GROUP BY d.fecha, co.name_es, co.id, d.especie, s.id,
+                     s.id_producto_agrocalidad, v.requirement_id,
+                     v.n_requisitos, v.queried_at
+            ORDER BY d.fecha, sum(d.total_dolares) DESC NULLS LAST
+        """), {"dias": dias}).mappings().all()
+
+        # Lo que se despacha en la ventana pero no tiene pais: no se puede
+        # verificar contra nada, y callarlo daria una cobertura falsa.
+        sin_pais = conn.execute(text("""
+            SELECT count(*) lineas, sum(total_dolares) dolares
+            FROM dartis_ventas
+            WHERE active AND country_id IS NULL
+              AND fecha BETWEEN CURRENT_DATE - :dias AND CURRENT_DATE + :dias
+        """), {"dias": dias}).mappings().first()
+
+        hoy = conn.execute(text("SELECT CURRENT_DATE")).scalar()
+
+    # Aplanado y deduplicado de variedades. Se hace en Python y no en SQL
+    # porque desplegarlas con unnest multiplicaria las filas y romperia los
+    # sumatorios de lineas, tallos y dolares.
+    salida = []
+    for f in filas:
+        variedades = set()
+        for lista in (f["variedades_crudas"] or []):
+            for v in str(lista).split(","):
+                v = v.strip()
+                if v:
+                    variedades.add(v)
+        fila = {k: v for k, v in f.items() if k != "variedades_crudas"}
+        fila["variedades"] = sorted(variedades)
+        fila["alerta"] = not f["n_requisitos"]
+        salida.append(fila)
+
+    return {
+        "ventana": {"dias": dias, "hoy": hoy},
+        "filas": salida,
+        "sin_pais": sin_pais,
+    }
+
+
 # Una consulta guardada mas nueva que esto se reutiliza en vez de volver a
 # pedirsela a Agrocalidad. Los requisitos fitosanitarios cambian pocas veces al
 # ano; reconsultar lo mismo cada vez solo agrega 3 s de espera al usuario y

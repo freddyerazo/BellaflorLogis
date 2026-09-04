@@ -438,7 +438,10 @@ document.querySelectorAll(".subtab").forEach((tab) => {
     document.querySelectorAll(".subpanel").forEach((p) => p.classList.remove("active"));
     tab.classList.add("active");
     document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
-    if (tab.dataset.tab === "comparacion") cargarComparacion(false);
+    if (tab.dataset.tab === "comparacion") {
+      cargarVerificacion(false);
+      cargarComparacion(false);
+    }
   });
 });
 
@@ -635,6 +638,7 @@ async function consultarUna(boton) {
       species_id: boton.dataset.esp, country_id: boton.dataset.pais,
       trade_type: "Exportación", area_code: "SV",
     });
+    await cargarVerificacion(true);
     await cargarComparacion(true);
   } catch (err) {
     boton.disabled = false;
@@ -687,9 +691,188 @@ async function consultarPendientes(pendientes) {
 
   await Promise.all(Array.from({ length: CONCURRENCIA_PEND }, () => trabajador()));
 
-  document.getElementById("pendProgreso").classList.add("hidden");
+  document.getElementById("pendProgreso")?.classList.add("hidden");
+  await cargarVerificacion(true);
   await cargarComparacion(true);
   cargarHistorial();
+}
+
+/* ─── Verificación diaria: lo que se despacha vs lo verificado ─────────────
+   Ventana hoy ±N días, que es el horizonte de quien despacha. Por cada
+   combinación fecha + país + especie que sale en ese rango se contrasta contra
+   lo verificado en Agrocalidad, y lo que no cuadra salta como alerta.
+
+   Sobre el grano, que conviene tener presente al leerlo: Dartis registra la
+   variedad comercial (AKITO, PLAYA BLANCA, BRIGHTON) pero Agrocalidad no
+   regula por variedad — su catálogo llega a especie. De 234 variedades de
+   Dartis solo 8 existen como producto en Agrocalidad, y son follajes, no
+   cultivares. Así que la verificación se resuelve a nivel especie+país y la
+   variedad se muestra como detalle del despacho.
+   ───────────────────────────────────────────────────────────────────────── */
+
+let verificacion = null;
+let diasVentana = 5;
+
+async function cargarVerificacion(forzar) {
+  if (verificacion && !forzar) return;
+  const caja = document.getElementById("verifEstado");
+  caja.innerHTML = `<div class="ag-cargando"><span></span> Verificando los despachos de la ventana…</div>`;
+  try {
+    verificacion = await apiGet(`/agrocalidad/verificacion?dias=${diasVentana}`);
+    renderVerificacion();
+  } catch (err) {
+    caja.innerHTML = `<div class="result-box error">
+      <h3><i class="ph ph-x-circle"></i> No se pudo verificar</h3>
+      <p>${esc(err.message)}</p></div>`;
+  }
+}
+
+function renderVerificacion() {
+  const d = verificacion;
+  const filas = d.filas || [];
+  const alertas = filas.filter((f) => f.alerta);
+  const usdAlerta = alertas.reduce((a, f) => a + Number(f.dolares || 0), 0);
+
+  /* Alertas agrupadas por día: es como lo mira quien despacha. */
+  const porDia = {};
+  for (const f of filas) {
+    porDia[f.fecha] ??= { fecha: f.fecha, total: 0, alertas: 0, usd: 0 };
+    porDia[f.fecha].total += 1;
+    if (f.alerta) {
+      porDia[f.fecha].alertas += 1;
+      porDia[f.fecha].usd += Number(f.dolares || 0);
+    }
+  }
+  const dias = Object.values(porDia).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const hoy = d.ventana.hoy;
+
+  document.getElementById("verifEstado").innerHTML = `
+    <div class="verif-cabecera">
+      <label class="verif-dias">
+        Ventana ±
+        <select id="verifDias">
+          ${[3, 5, 7, 10, 15].map((n) =>
+            `<option value="${n}"${n === diasVentana ? " selected" : ""}>${n}</option>`).join("")}
+        </select>
+        días desde hoy (${esc(hoy)})
+      </label>
+      <button class="btn btn-secondary" id="btnRecargarVerif">
+        <i class="ph ph-arrows-clockwise"></i> Actualizar
+      </button>
+    </div>
+
+    ${alertas.length ? `
+      <div class="verif-alerta">
+        <i class="ph ph-warning"></i>
+        <div>
+          <strong>${alertas.length} despacho${alertas.length === 1 ? "" : "s"} sin requisitos verificados</strong>
+          <p>${$dinero(usdAlerta)} en combinaciones especie+país que salen en esta
+             ventana y no tienen los requisitos de Agrocalidad averiguados.</p>
+        </div>
+        ${alertas.some((a) => a.id_producto_agrocalidad) ? `
+          <button class="btn btn-primary" id="btnResolverAlertas">
+            <i class="ph ph-list-magnifying-glass"></i>
+            Consultar las ${alertas.filter((a) => a.id_producto_agrocalidad).length} consultables
+          </button>` : ""}
+      </div>` : `
+      <div class="verif-ok">
+        <i class="ph ph-check-circle"></i>
+        <div><strong>Sin diferencias.</strong>
+          <p>Todo lo que sale en esta ventana tiene requisitos verificados en Agrocalidad.</p></div>
+      </div>`}
+
+    <div class="verif-dias-grid">
+      ${dias.map((x) => `
+        <div class="verif-dia ${x.alertas ? "verif-dia--alerta" : ""} ${x.fecha === hoy ? "verif-dia--hoy" : ""}">
+          <span class="verif-fecha">${esc(x.fecha)}${x.fecha === hoy ? " · hoy" : ""}</span>
+          <span class="verif-n">${x.alertas}</span>
+          <span class="verif-lbl">${x.alertas ? "alertas" : "sin alertas"} · ${x.total} combinaciones</span>
+        </div>`).join("")}
+    </div>
+
+    <div class="comp-filtros">
+      <label><input type="checkbox" id="soloAlertas" checked> Ver solo las alertas</label>
+    </div>
+
+    <div class="ag-tabla-scroll">
+      <table class="cot-tabla">
+        <thead>
+          <tr>
+            <th>Fecha</th><th>País</th><th>Especie</th><th>Variedades</th>
+            <th class="num">Tallos</th><th class="num">Facturado</th>
+            <th>Estado</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="verifFilas"></tbody>
+      </table>
+    </div>`;
+
+  document.getElementById("verifDias").addEventListener("change", (e) => {
+    diasVentana = Number(e.target.value);
+    cargarVerificacion(true);
+  });
+  document.getElementById("btnRecargarVerif")
+    .addEventListener("click", () => cargarVerificacion(true));
+  document.getElementById("soloAlertas")
+    .addEventListener("change", pintarVerifFilas);
+  const btnRes = document.getElementById("btnResolverAlertas");
+  if (btnRes) btnRes.addEventListener("click", () =>
+    consultarPendientes(alertas.filter((a) => a.id_producto_agrocalidad)));
+
+  pintarVerifFilas();
+}
+
+function pintarVerifFilas() {
+  const solo = document.getElementById("soloAlertas")?.checked;
+  const filas = (verificacion.filas || []).filter((f) => !solo || f.alerta);
+  const tbody = document.getElementById("verifFilas");
+
+  if (!filas.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">Nada que mostrar</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filas.map((f, i) => {
+    const vs = f.variedades || [];
+    const estado = !f.id_producto_agrocalidad ? "sin_mapeo"
+      : (f.alerta ? "sin_consultar" : "con_requisitos");
+    const et = ETIQUETA[estado];
+    /* Un bouquet puede traer 125 variedades: se muestran las primeras y el
+       resto se despliega, para que la fila siga siendo legible. */
+    const visibles = vs.slice(0, 4).map(esc).join(", ");
+    const resto = vs.length > 4
+      ? ` <button class="btn-link verif-mas" data-i="${i}">+${vs.length - 4}</button>` : "";
+    return `
+      <tr>
+        <td>${esc(f.fecha)}</td>
+        <td>${esc(f.pais)}</td>
+        <td><b>${esc(f.especie)}</b></td>
+        <td class="verif-vars">
+          <span id="vars-${i}">${visibles}${resto}</span>
+          <span class="ag-sub">${vs.length} variedad${vs.length === 1 ? "" : "es"}</span>
+        </td>
+        <td class="num">${$num(f.tallos)}</td>
+        <td class="num">${$dinero(f.dolares)}</td>
+        <td><span class="badge ${et.clase}">${et.txt}</span></td>
+        <td class="cot-acciones">
+          ${f.requirement_id
+            ? `<button class="btn-link comp-ver" data-id="${f.requirement_id}">Ver</button>`
+            : (f.id_producto_agrocalidad
+                ? `<button class="btn-link comp-consultar" data-esp="${f.species_id}" data-pais="${f.country_id}">Consultar</button>`
+                : "")}
+        </td>
+      </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll(".verif-mas").forEach((b) =>
+    b.addEventListener("click", () => {
+      const f = filas[Number(b.dataset.i)];
+      document.getElementById(`vars-${b.dataset.i}`).textContent = f.variedades.join(", ");
+    }));
+  tbody.querySelectorAll(".comp-ver").forEach((b) =>
+    b.addEventListener("click", () => verGuardada(b.dataset.id)));
+  tbody.querySelectorAll(".comp-consultar").forEach((b) =>
+    b.addEventListener("click", () => consultarUna(b)));
 }
 
 /* ─── Arranque ───────────────────────────────────────────────────────── */
