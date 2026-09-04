@@ -469,6 +469,13 @@ function estadoDe(c) {
   return "con_requisitos";
 }
 
+const ETIQUETA_VUE = {
+  autorizado:    { txt: "autorizado", clase: "badge-green" },
+  no_autorizado: { txt: "NO autorizado", clase: "badge-red" },
+  sin_registro:  { txt: "sin registro VUE", clase: "badge-gray" },
+  sin_datos:     { txt: "falta consultar", clase: "badge-gray" },
+};
+
 const ETIQUETA = {
   con_requisitos: { txt: "con requisitos", clase: "badge-green" },
   sin_consultar: { txt: "sin consultar", clase: "badge-amber" },
@@ -732,6 +739,8 @@ function renderVerificacion() {
   const filas = d.filas || [];
   const alertas = filas.filter((f) => f.alerta);
   const usdAlerta = alertas.reduce((a, f) => a + Number(f.dolares || 0), 0);
+  const nAgro = filas.filter((f) => f.alerta_agrocalidad).length;
+  const nVue = filas.filter((f) => f.alerta_vue).length;
 
   /* Alertas agrupadas por día: es como lo mira quien despacha. */
   const porDia = {};
@@ -765,9 +774,12 @@ function renderVerificacion() {
       <div class="verif-alerta">
         <i class="ph ph-warning"></i>
         <div>
-          <strong>${alertas.length} despacho${alertas.length === 1 ? "" : "s"} sin requisitos verificados</strong>
-          <p>${$dinero(usdAlerta)} en combinaciones especie+país que salen en esta
-             ventana y no tienen los requisitos de Agrocalidad averiguados.</p>
+          <strong>${alertas.length} despacho${alertas.length === 1 ? "" : "s"} con diferencias</strong>
+          <p>
+            ${nAgro ? `<b>${nAgro}</b> sin los requisitos de Agrocalidad averiguados. ` : ""}
+            ${nVue ? `<b>${nVue}</b> <span class="txt-alerta">no autorizados en la VUE</span>. ` : ""}
+            ${$dinero(usdAlerta)} en juego, saliendo en esta ventana.
+          </p>
         </div>
         ${alertas.some((a) => a.id_producto_agrocalidad) ? `
           <button class="btn btn-primary" id="btnResolverAlertas">
@@ -798,9 +810,9 @@ function renderVerificacion() {
       <table class="cot-tabla">
         <thead>
           <tr>
-            <th>Fecha</th><th>País</th><th>Especie</th><th>Variedades</th>
-            <th class="num">Tallos</th><th class="num">Facturado</th>
-            <th>Estado</th><th></th>
+            <th>Fecha</th><th>Empresa</th><th>País</th><th>Especie</th><th>Variedades</th>
+            <th class="num">Facturado</th>
+            <th>Agrocalidad</th><th>VUE</th><th></th>
           </tr>
         </thead>
         <tbody id="verifFilas"></tbody>
@@ -828,7 +840,7 @@ function pintarVerifFilas() {
   const tbody = document.getElementById("verifFilas");
 
   if (!filas.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">Nada que mostrar</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty">Nada que mostrar</td></tr>`;
     return;
   }
 
@@ -837,6 +849,7 @@ function pintarVerifFilas() {
     const estado = !f.id_producto_agrocalidad ? "sin_mapeo"
       : (f.alerta ? "sin_consultar" : "con_requisitos");
     const et = ETIQUETA[estado];
+    const ev = ETIQUETA_VUE[f.vue_estado] || ETIQUETA_VUE.sin_datos;
     /* Un bouquet puede traer 125 variedades: se muestran las primeras y el
        resto se despliega, para que la fila siga siendo legible. */
     const visibles = vs.slice(0, 4).map(esc).join(", ");
@@ -845,15 +858,16 @@ function pintarVerifFilas() {
     return `
       <tr>
         <td>${esc(f.fecha)}</td>
+        <td class="ag-sub">${esc(String(f.empresa || "").replace(" CIA. LTDA.", "").replace(" CIA LTDA", ""))}</td>
         <td>${esc(f.pais)}</td>
         <td><b>${esc(f.especie)}</b></td>
         <td class="verif-vars">
           <span id="vars-${i}">${visibles}${resto}</span>
-          <span class="ag-sub">${vs.length} variedad${vs.length === 1 ? "" : "es"}</span>
+          <span class="ag-sub">${vs.length} variedad${vs.length === 1 ? "" : "es"} · ${$num(f.tallos)} tallos</span>
         </td>
-        <td class="num">${$num(f.tallos)}</td>
         <td class="num">${$dinero(f.dolares)}</td>
         <td><span class="badge ${et.clase}">${et.txt}</span></td>
+        <td><span class="badge ${ev.clase}">${ev.txt}</span></td>
         <td class="cot-acciones">
           ${f.requirement_id
             ? `<button class="btn-link comp-ver" data-id="${f.requirement_id}">Ver</button>`

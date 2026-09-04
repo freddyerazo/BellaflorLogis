@@ -23,6 +23,7 @@ from app.api.roles import router as roles_router
 from app.api.profiles import router as profiles_router
 from app.api.dashboard import router as dashboard_router
 from app.api.cotizacion import router as cotizacion_router
+from app.api.vue import router as vue_router
 from app.api.airline_tariffs import router as airline_tariffs_router
 from app.api.cargo_agencies import router as cargo_agencies_router
 from app.api.farms import router as farms_router
@@ -133,6 +134,7 @@ app.include_router(roles_router, prefix="/api")
 app.include_router(profiles_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(cotizacion_router, prefix="/api")
+app.include_router(vue_router, prefix="/api")
 app.include_router(airline_tariffs_router, prefix="/api")
 app.include_router(cargo_agencies_router, prefix="/api")
 app.include_router(farms_router, prefix="/api")

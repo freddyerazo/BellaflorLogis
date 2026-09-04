@@ -14,3 +14,5 @@ python-multipart==0.0.32
 httpx==0.28.1
 pdfplumber==0.11.10
 apscheduler==3.11.3
+# La VUE entrega su registro en .xls legacy (OLE2); openpyxl no lo lee
+xlrd==2.0.2

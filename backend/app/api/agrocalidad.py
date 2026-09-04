@@ -249,8 +249,10 @@ def verificacion(dias: int = 5):
         filas = conn.execute(text("""
             SELECT
                 d.fecha,
+                d.empresa,
                 co.name_es                              AS pais,
                 co.id                                   AS country_id,
+                co.cod_agroca,
                 d.especie,
                 s.id                                    AS species_id,
                 s.id_producto_agrocalidad,
@@ -264,7 +266,23 @@ def verificacion(dias: int = 5):
                 sum(d.total_dolares)                    AS dolares,
                 v.requirement_id,
                 v.n_requisitos,
-                v.queried_at
+                v.queried_at,
+                v.agrocalidad_code,
+                v.tariff_heading,
+                -- ¿Esta autorizado en la VUE? Se cruza por codigo + partida +
+                -- pais, los tres: el codigo solo no alcanza porque A0001 cubre
+                -- rosa, clavel, crisantemo, aster, gerbera y alstroemeria.
+                -- NULL = no hay registro VUE de esa empresa, que es distinto
+                -- de "no autorizado".
+                EXISTS (
+                    SELECT 1 FROM vue_productos vp
+                    WHERE vp.codigo_producto = v.agrocalidad_code
+                      AND vp.partida         = v.tariff_heading
+                      AND vp.pais_cod        = co.cod_agroca
+                )                                       AS vue_autorizado,
+                EXISTS (
+                    SELECT 1 FROM vue_productos vp2 WHERE vp2.empresa = d.empresa
+                )                                       AS vue_hay_registro
             FROM dartis_ventas d
             JOIN countries co ON co.id = d.country_id
             LEFT JOIN species s ON upper(s.name) = upper(d.especie)
@@ -276,9 +294,10 @@ def verificacion(dias: int = 5):
             WHERE d.active
               AND d.country_id IS NOT NULL
               AND d.fecha BETWEEN CURRENT_DATE - :dias AND CURRENT_DATE + :dias
-            GROUP BY d.fecha, co.name_es, co.id, d.especie, s.id,
-                     s.id_producto_agrocalidad, v.requirement_id,
-                     v.n_requisitos, v.queried_at
+            GROUP BY d.fecha, d.empresa, co.name_es, co.id, co.cod_agroca,
+                     d.especie, s.id, s.id_producto_agrocalidad,
+                     v.requirement_id, v.n_requisitos, v.queried_at,
+                     v.agrocalidad_code, v.tariff_heading
             ORDER BY d.fecha, sum(d.total_dolares) DESC NULLS LAST
         """), {"dias": dias}).mappings().all()
 
@@ -306,7 +325,22 @@ def verificacion(dias: int = 5):
                     variedades.add(v)
         fila = {k: v for k, v in f.items() if k != "variedades_crudas"}
         fila["variedades"] = sorted(variedades)
-        fila["alerta"] = not f["n_requisitos"]
+
+        # Dos verificaciones independientes:
+        #   agrocalidad -> ¿se averiguaron los requisitos de esa especie/pais?
+        #   vue         -> ¿esta autorizada la exportacion de ese producto/pais?
+        # `vue_estado` distingue "no autorizado" de "no se puede saber", que es
+        # lo que pasa mientras la empresa no tenga su registro VUE cargado.
+        fila["alerta_agrocalidad"] = not f["n_requisitos"]
+        if not f["vue_hay_registro"]:
+            fila["vue_estado"] = "sin_registro"
+        elif not f["agrocalidad_code"] or not f["tariff_heading"] or not f["cod_agroca"]:
+            fila["vue_estado"] = "sin_datos"
+        else:
+            fila["vue_estado"] = "autorizado" if f["vue_autorizado"] else "no_autorizado"
+
+        fila["alerta_vue"] = fila["vue_estado"] == "no_autorizado"
+        fila["alerta"] = fila["alerta_agrocalidad"] or fila["alerta_vue"]
         salida.append(fila)
 
     return {

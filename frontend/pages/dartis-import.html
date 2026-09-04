@@ -64,6 +64,60 @@
 
       <div id="resultSection" class="hidden"></div>
     </div>
+
+    <div class="page-header" style="margin-top: 2rem;">
+      <h2><i class="ph ph-certificate"></i> Registro VUE</h2>
+      <p class="page-subtitle">
+        Autorizaciones de exportación de la Ventanilla Única, una empresa por archivo.
+      </p>
+    </div>
+
+    <div class="import-card">
+      <div class="import-rule">
+        <i class="ph ph-info"></i>
+        <span>El archivo <strong>"Lista de Producto.xls"</strong> se descarga de la VUE y es
+          <strong>por RUC</strong>: hay que subir uno por cada empresa que exporta. Cada carga
+          <strong>actualiza y agrega</strong>, nunca borra lo ya registrado.</span>
+      </div>
+
+      <form id="vueForm">
+        <div class="file-fields">
+          <div class="file-field">
+            <label>Lista de Producto (.xls de la VUE)</label>
+            <div class="file-drop" id="drop_vue" data-target="file_vue">
+              <i class="ph ph-file-xls"></i>
+              <span id="label_vue">Arrastra el archivo o haz clic para seleccionar</span>
+              <input type="file" id="file_vue" name="file_vue" accept=".xls" required />
+            </div>
+          </div>
+          <div class="file-field">
+            <label for="vue_empresa">Empresa que exporta</label>
+            <select id="vue_empresa" class="vue-empresa" required>
+              <option value="">Selecciona la empresa…</option>
+            </select>
+            <small class="ag-nota">
+              Se elige de las empresas que aparecen en Dartis: es lo que enlaza el
+              registro con los despachos. El RUC se lee del propio archivo.
+            </small>
+          </div>
+        </div>
+
+        <div class="import-actions">
+          <button type="submit" id="btnVue" class="btn btn-primary" disabled>
+            <i class="ph ph-upload-simple"></i> Importar registro VUE
+          </button>
+        </div>
+      </form>
+
+      <div id="vueProgreso" class="hidden">
+        <div class="progress-bar"><div id="vueFill" class="progress-fill"></div></div>
+        <p class="progress-msg">Procesando el registro de la VUE…</p>
+      </div>
+
+      <div id="vueResultado" class="hidden"></div>
+
+      <div id="vueRegistros"></div>
+    </div>
   </main>
 
   <script type="module" src="/js/layout.js"></script>
