@@ -150,4 +150,31 @@ app.include_router(armellini_router, prefix="/api")
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
+# ---------------------------------------------------------------------------
+# Revalidacion de los estaticos del frontend
+#
+# StaticFiles manda ETag y Last-Modified pero NO Cache-Control, asi que el
+# navegador aplica cache heuristica: se queda con el .js viejo aunque el
+# servidor ya tenga el nuevo. Paso de verdad el 2026-09-04 — Render ya habia
+# desplegado la version nueva y la pantalla seguia mostrando la anterior,
+# porque el HTML se recargaba y el JS salia del disco.
+#
+# `no-cache` no significa "no guardar": significa "guardalo pero preguntame
+# antes de usarlo". Con el ETag esa consulta se resuelve casi siempre con un
+# 304 sin cuerpo, asi que el costo es minimo y el usuario nunca ve codigo
+# viejo. Se aplica solo a lo que cambia con cada deploy; imagenes y fuentes
+# siguen con la cache normal.
+# ---------------------------------------------------------------------------
+EXTENSIONES_SIN_CACHE = (".html", ".js", ".css")
+
+
+@app.middleware("http")
+async def revalidar_estaticos(request, call_next):
+    respuesta = await call_next(request)
+    ruta = request.url.path
+    if ruta.endswith(EXTENSIONES_SIN_CACHE) or ruta.endswith("/"):
+        respuesta.headers["Cache-Control"] = "no-cache"
+    return respuesta
+
+
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
