@@ -438,31 +438,48 @@ document.querySelectorAll(".subtab").forEach((tab) => {
     document.querySelectorAll(".subpanel").forEach((p) => p.classList.remove("active"));
     tab.classList.add("active");
     document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
-    if (tab.dataset.tab === "comparacion") cargarComparacion();
+    if (tab.dataset.tab === "comparacion") cargarComparacion(false);
   });
 });
 
 /* ─── Agrocalidad vs Ventas vs VUE ────────────────────────────────────────
-   Hoy solo se puede cruzar por ESPECIE: dartis_ventas no trae el país de
-   destino y VUE todavía no tiene datos cargados. La pantalla lo dice en vez
-   de mostrar una comparación a medias como si estuviera completa.
+   Cruza cada combinación especie+país realmente exportada contra los
+   requisitos de Agrocalidad. Es por especie Y país porque los requisitos
+   dependen de ambos: los de rosa a Estados Unidos no son los de rosa a Rusia.
+
+   VUE todavía no tiene datos cargados; la pantalla lo dice en vez de aparentar
+   una comparación completa.
    ───────────────────────────────────────────────────────────────────────── */
 
-let comparacionCargada = false;
+let comparacion = null;
+let cancelarPendientes = false;
 
 const $dinero = (v) =>
   "$" + new Intl.NumberFormat("es-EC", { maximumFractionDigits: 0 }).format(v || 0);
 const $num = (v) => new Intl.NumberFormat("es-EC").format(v || 0);
 
-async function cargarComparacion() {
-  if (comparacionCargada) return;
+/* Estado de una combinación: es lo que ordena toda la pantalla. */
+function estadoDe(c) {
+  if (!c.id_producto_agrocalidad) return "sin_mapeo";
+  if (c.n_requisitos === null || c.n_requisitos === undefined) return "sin_consultar";
+  if (c.n_requisitos === 0) return "sin_requisitos";
+  return "con_requisitos";
+}
+
+const ETIQUETA = {
+  con_requisitos: { txt: "con requisitos", clase: "badge-green" },
+  sin_consultar: { txt: "sin consultar", clase: "badge-amber" },
+  sin_mapeo: { txt: "sin mapeo", clase: "badge-red" },
+  sin_requisitos: { txt: "sin requisitos publicados", clase: "badge-gray" },
+};
+
+async function cargarComparacion(forzar) {
+  if (comparacion && !forzar) return;
   const caja = document.getElementById("compEstado");
   caja.innerHTML = `<div class="ag-cargando"><span></span> Cruzando ventas contra Agrocalidad…</div>`;
-
   try {
-    const d = await apiGet("/agrocalidad/comparacion");
-    renderComparacion(d);
-    comparacionCargada = true;
+    comparacion = await apiGet("/agrocalidad/comparacion");
+    renderComparacion();
   } catch (err) {
     caja.innerHTML = `<div class="result-box error">
       <h3><i class="ph ph-x-circle"></i> No se pudo cargar</h3>
@@ -470,91 +487,209 @@ async function cargarComparacion() {
   }
 }
 
-function renderComparacion(d) {
-  const especies = d.especies || [];
-  const sinMapeo = especies.filter((e) => !e.id_producto_agrocalidad);
-  const sinConsultar = especies.filter((e) => e.id_producto_agrocalidad && !e.consultas);
-  const cubiertas = especies.filter((e) => e.con_requisitos > 0);
-  const facturaSinMapeo = sinMapeo.reduce((a, e) => a + Number(e.dolares || 0), 0);
+function renderComparacion() {
+  const d = comparacion;
+  const combos = d.combinaciones || [];
+  const por = (e) => combos.filter((c) => estadoDe(c) === e);
+  const suma = (arr) => arr.reduce((a, c) => a + Number(c.dolares || 0), 0);
 
-  /* Lo que falta para que la comparación esté completa. Se enumera explícito:
-     una comparación incompleta presentada como completa es peor que no tenerla. */
-  const faltantes = [];
-  if (!d.pendientes.pais_en_ventas) {
-    faltantes.push(`<li><strong>País de destino en Ventas.</strong> El archivo de Dartis
-      todavía no trae la columna de país, así que no se puede cruzar contra los
-      requisitos, que son por país. Los requisitos de una especie a Estados Unidos
-      no son los mismos que a Rusia.</li>`);
+  const conReq = por("con_requisitos");
+  const sinCon = por("sin_consultar");
+  const sinMap = por("sin_mapeo");
+  const sinReq = por("sin_requisitos");
+
+  /* Lo que queda fuera del cruce. Se dice explícito: una cobertura calculada
+     sobre la mitad de las ventas, presentada como si fuera del total, engaña. */
+  const sp = d.sin_pais || {};
+  const avisos = [];
+  if (sp.lineas) {
+    avisos.push(`<li><strong>${$num(sp.lineas)} líneas (${$dinero(sp.dolares)})
+      quedan fuera del cruce</strong> porque no tienen país: se importaron con
+      archivos anteriores a que Dartis agregara la columna <code>paisVenta</code>
+      (${esc(sp.desde)} a ${esc(sp.hasta)}). Para incluirlas hay que re-importar
+      esos meses con el formato nuevo.</li>`);
   }
   if (!d.pendientes.vue) {
-    faltantes.push(`<li><strong>Datos de VUE.</strong> No hay ninguno cargado en BLIS.
-      Falta definir el archivo de la Ventanilla Única y su importador.</li>`);
+    avisos.push(`<li><strong>VUE no tiene datos cargados.</strong> Falta definir
+      el archivo de la Ventanilla Única y su importador; hasta entonces la
+      comparación es Agrocalidad contra Ventas.</li>`);
   }
 
   document.getElementById("compEstado").innerHTML = `
-    ${faltantes.length ? `
+    ${avisos.length ? `
       <div class="ag-pendiente">
-        <h4><i class="ph ph-warning-circle"></i> Comparación parcial</h4>
-        <p>Por ahora el cruce es <strong>solo por especie</strong>. Falta:</p>
-        <ul>${faltantes.join("")}</ul>
+        <h4><i class="ph ph-warning-circle"></i> Alcance de esta comparación</h4>
+        <ul>${avisos.join("")}</ul>
       </div>` : ""}
 
+    <p class="ag-rango">
+      Ventas cruzadas del <strong>${esc(d.rango?.desde || "—")}</strong> al
+      <strong>${esc(d.rango?.hasta || "—")}</strong> · ${combos.length} combinaciones especie+país
+    </p>
+
     <div class="comp-tarjetas">
-      <div class="comp-tarjeta">
-        <span class="comp-num">${especies.length}</span>
-        <span class="comp-lbl">especies vendidas</span>
-      </div>
-      <div class="comp-tarjeta">
-        <span class="comp-num">${cubiertas.length}</span>
-        <span class="comp-lbl">con requisitos averiguados</span>
-      </div>
-      <div class="comp-tarjeta ${sinMapeo.length ? "comp-tarjeta--alerta" : ""}">
-        <span class="comp-num">${sinMapeo.length}</span>
-        <span class="comp-lbl">sin mapeo en Agrocalidad</span>
-      </div>
-      <div class="comp-tarjeta ${sinConsultar.length ? "comp-tarjeta--aviso" : ""}">
-        <span class="comp-num">${sinConsultar.length}</span>
-        <span class="comp-lbl">mapeadas pero sin consultar</span>
-      </div>
+      ${tarjeta(conReq.length, "con requisitos averiguados", suma(conReq), "")}
+      ${tarjeta(sinCon.length, "sin consultar", suma(sinCon), sinCon.length ? "comp-tarjeta--aviso" : "")}
+      ${tarjeta(sinMap.length, "sin mapeo en Agrocalidad", suma(sinMap), sinMap.length ? "comp-tarjeta--alerta" : "")}
+      ${tarjeta(sinReq.length, "sin requisitos publicados", suma(sinReq), "")}
     </div>
 
-    ${sinMapeo.length ? `
-      <p class="ag-resumen-pais">
-        <strong>${$dinero(facturaSinMapeo)}</strong> facturados en especies que no están
-        mapeadas al catálogo de Agrocalidad — no se les puede averiguar requisitos.
-      </p>` : ""}
+    ${sinCon.length ? `
+      <div class="comp-accion">
+        <button class="btn btn-primary" id="btnConsultarPendientes">
+          <i class="ph ph-list-magnifying-glass"></i>
+          Consultar las ${sinCon.length} pendientes
+        </button>
+        <button class="btn btn-secondary hidden" id="btnCancelarPendientes">
+          <i class="ph ph-x"></i> Cancelar
+        </button>
+        <span class="ag-hint" id="pendHint"></span>
+      </div>
+      <div id="pendProgreso" class="hidden">
+        <div class="progress-bar"><div id="pendFill" class="progress-fill"></div></div>
+        <p class="progress-msg" id="pendMsg"></p>
+      </div>` : ""}
+
+    <div class="comp-filtros">
+      <label><input type="checkbox" class="comp-filtro" value="con_requisitos" checked> con requisitos</label>
+      <label><input type="checkbox" class="comp-filtro" value="sin_consultar" checked> sin consultar</label>
+      <label><input type="checkbox" class="comp-filtro" value="sin_mapeo" checked> sin mapeo</label>
+      <label><input type="checkbox" class="comp-filtro" value="sin_requisitos"> sin requisitos publicados</label>
+    </div>
 
     <div class="ag-tabla-scroll">
-      <table class="cot-tabla">
+      <table class="cot-tabla" id="tablaComparacion">
         <thead>
           <tr>
-            <th>Especie vendida</th>
-            <th class="num">Facturado</th>
-            <th class="num">Tallos</th>
-            <th>Agrocalidad</th>
-            <th class="num">Consultas</th>
-            <th class="num">Con requisitos</th>
+            <th>Especie</th><th>País</th>
+            <th class="num">Facturado</th><th class="num">Tallos</th>
+            <th>Agrocalidad</th><th class="num">Requisitos</th><th></th>
           </tr>
         </thead>
-        <tbody>
-          ${especies.map((e) => `
-            <tr>
-              <td><b>${esc(e.especie)}</b></td>
-              <td class="num">${$dinero(e.dolares)}</td>
-              <td class="num">${$num(e.tallos)}</td>
-              <td>
-                ${e.id_producto_agrocalidad
-                  ? `<span class="badge badge-green">mapeada</span>`
-                  : `<span class="badge badge-red">sin mapeo</span>`}
-              </td>
-              <td class="num">${e.consultas}</td>
-              <td class="num">
-                <span class="badge ${e.con_requisitos ? "badge-green" : "badge-gray"}">${e.con_requisitos}</span>
-              </td>
-            </tr>`).join("")}
-        </tbody>
+        <tbody id="compFilas"></tbody>
       </table>
     </div>`;
+
+  document.querySelectorAll(".comp-filtro").forEach((ch) =>
+    ch.addEventListener("change", pintarFilas));
+  const btn = document.getElementById("btnConsultarPendientes");
+  if (btn) btn.addEventListener("click", () => consultarPendientes(sinCon));
+  const btnC = document.getElementById("btnCancelarPendientes");
+  if (btnC) btnC.addEventListener("click", () => { cancelarPendientes = true; });
+
+  pintarFilas();
+}
+
+function tarjeta(n, etiqueta, usd, clase) {
+  return `
+    <div class="comp-tarjeta ${clase}">
+      <span class="comp-num">${n}</span>
+      <span class="comp-lbl">${etiqueta}</span>
+      <span class="comp-usd">${$dinero(usd)}</span>
+    </div>`;
+}
+
+function pintarFilas() {
+  const activos = new Set(
+    [...document.querySelectorAll(".comp-filtro:checked")].map((c) => c.value));
+  const filas = (comparacion.combinaciones || []).filter((c) => activos.has(estadoDe(c)));
+  const tbody = document.getElementById("compFilas");
+
+  if (!filas.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">Nada que mostrar con estos filtros</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filas.map((c) => {
+    const e = estadoDe(c);
+    const et = ETIQUETA[e];
+    return `
+      <tr>
+        <td><b>${esc(c.especie)}</b></td>
+        <td>${esc(c.pais)}</td>
+        <td class="num">${$dinero(c.dolares)}</td>
+        <td class="num">${$num(c.tallos)}</td>
+        <td><span class="badge ${et.clase}">${et.txt}</span></td>
+        <td class="num">${c.n_requisitos ?? "—"}</td>
+        <td class="cot-acciones">
+          ${c.requirement_id
+            ? `<button class="btn-link comp-ver" data-id="${c.requirement_id}">Ver</button>`
+            : (c.id_producto_agrocalidad
+                ? `<button class="btn-link comp-consultar" data-esp="${c.species_id}" data-pais="${c.country_id}">Consultar</button>`
+                : "")}
+        </td>
+      </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll(".comp-ver").forEach((b) =>
+    b.addEventListener("click", () => verGuardada(b.dataset.id)));
+  tbody.querySelectorAll(".comp-consultar").forEach((b) =>
+    b.addEventListener("click", () => consultarUna(b)));
+}
+
+async function consultarUna(boton) {
+  boton.disabled = true;
+  boton.textContent = "…";
+  try {
+    await apiPost("/agrocalidad/consultar", {
+      species_id: boton.dataset.esp, country_id: boton.dataset.pais,
+      trade_type: "Exportación", area_code: "SV",
+    });
+    await cargarComparacion(true);
+  } catch (err) {
+    boton.disabled = false;
+    boton.textContent = "Consultar";
+    alert(`No se pudo consultar: ${err.message}`);
+  }
+}
+
+/* Consulta en tanda las combinaciones que faltan. Concurrencia baja: es un
+   servicio público de un organismo del Estado. Medido: ~1,9 s de reloj por
+   consulta con 3 en paralelo. */
+const CONCURRENCIA_PEND = 3;
+
+async function consultarPendientes(pendientes) {
+  const minutos = Math.max(1, Math.round(pendientes.length * 1.9 / 60));
+  if (!confirm(
+    `Se van a consultar ${pendientes.length} combinaciones especie+país contra ` +
+    `Agrocalidad.\n\nTarda alrededor de ${minutos} minuto(s) y necesita esta ` +
+    `página abierta. ¿Continuar?`)) return;
+
+  cancelarPendientes = false;
+  const btn = document.getElementById("btnConsultarPendientes");
+  const btnC = document.getElementById("btnCancelarPendientes");
+  btn.disabled = true;
+  btnC.classList.remove("hidden");
+  document.getElementById("pendProgreso").classList.remove("hidden");
+
+  const cola = [...pendientes];
+  let hechas = 0, errores = 0;
+
+  async function trabajador() {
+    while (cola.length && !cancelarPendientes) {
+      const c = cola.shift();
+      try {
+        await apiPost("/agrocalidad/consultar", {
+          species_id: c.species_id, country_id: c.country_id,
+          trade_type: "Exportación", area_code: "SV",
+        });
+      } catch (err) {
+        errores += 1;
+      }
+      hechas += 1;
+      document.getElementById("pendFill").style.width =
+        `${Math.round((hechas / pendientes.length) * 100)}%`;
+      document.getElementById("pendMsg").textContent =
+        `${hechas} de ${pendientes.length} · ${c.especie} → ${c.pais}` +
+        (errores ? ` · ${errores} con error` : "");
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCIA_PEND }, () => trabajador()));
+
+  document.getElementById("pendProgreso").classList.add("hidden");
+  await cargarComparacion(true);
+  cargarHistorial();
 }
 
 /* ─── Arranque ───────────────────────────────────────────────────────── */

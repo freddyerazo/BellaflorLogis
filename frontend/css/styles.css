@@ -2060,3 +2060,44 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 .comp-lbl { font-size: 12px; color: var(--text-muted); }
 
 .badge-red { background: var(--danger-light); color: var(--danger); }
+
+/* Comparación Agrocalidad vs Ventas: rango, filtros y tarjetas con monto */
+.ag-rango {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.ag-rango strong { color: var(--text); font-weight: 500; }
+
+.comp-usd {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.comp-tarjeta--alerta .comp-usd { color: var(--danger); }
+
+.comp-accion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.comp-filtros {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.comp-filtros label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.badge-amber { background: #fff8e6; color: #8a6800; }

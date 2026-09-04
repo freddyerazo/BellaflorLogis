@@ -142,55 +142,85 @@ def get_requisito(requirement_id: str):
 
 
 @router.get("/comparacion")
-def comparacion():
+def comparacion(desde: str | None = None, hasta: str | None = None):
     """Agrocalidad vs Ventas: cobertura de lo que Bellaflor realmente exporta.
 
-    Cruza las especies que aparecen en `dartis_ventas` contra el mapeo a
-    Agrocalidad y contra los requisitos ya consultados, para responder algo
-    concreto: de lo que efectivamente vendemos, ¿que tiene requisitos
+    Cruza cada combinacion **especie + pais** que aparece en `dartis_ventas`
+    contra los requisitos de Agrocalidad, para responder algo concreto: de lo
+    que efectivamente exportamos a cada destino, ¿que tiene los requisitos
     averiguados y que no?
 
-    El cruce por PAIS todavia no se puede armar — `dartis_ventas` no trae el
-    pais de destino (solo `cliente` y `destinatario`, que son nombres) — y VUE
-    aun no tiene datos cargados. Ambos se informan en `pendientes` para que la
-    pantalla lo diga en vez de mostrar una comparacion incompleta como si
-    estuviera completa.
+    El cruce es por especie Y pais porque los requisitos dependen de ambos: los
+    de rosa a Estados Unidos no son los mismos que a Rusia.
+
+    Solo entran las ventas con `country_id` resuelto. Las de junio y julio no
+    lo tienen porque se importaron con archivos anteriores a que Dartis
+    agregara la columna `paisVenta`; se informan aparte para que la pantalla
+    diga cuanto queda fuera del cruce en vez de disimularlo.
+
+    VUE todavia no tiene datos cargados en BLIS.
     """
+    filtros = ["d.active", "d.country_id IS NOT NULL"]
+    params = {}
+    if desde:
+        filtros.append("d.fecha >= :desde")
+        params["desde"] = desde
+    if hasta:
+        filtros.append("d.fecha <= :hasta")
+        params["hasta"] = hasta
+    where = " AND ".join(filtros)
+
     with engine.connect() as conn:
-        especies = conn.execute(text("""
+        combinaciones = conn.execute(text(f"""
             SELECT
                 d.especie,
-                count(*)                        AS lineas,
-                sum(d.total_tallos)             AS tallos,
-                sum(d.total_dolares)            AS dolares,
-                s.id                            AS species_id,
+                co.name_es                          AS pais,
+                co.id                               AS country_id,
+                s.id                                AS species_id,
                 s.id_producto_agrocalidad,
-                (SELECT count(*) FROM agrocalidad_requirements r
-                  WHERE r.species_id = s.id AND r.active) AS consultas,
-                (SELECT count(*) FROM v_agrocalidad_requisitos v
-                  WHERE v.species_id = s.id AND v.n_requisitos > 0) AS con_requisitos
+                count(*)                            AS lineas,
+                sum(d.total_tallos)                 AS tallos,
+                sum(d.total_dolares)                AS dolares,
+                min(d.fecha)                        AS desde,
+                max(d.fecha)                        AS hasta,
+                v.requirement_id,
+                v.n_requisitos,
+                v.tariff_heading,
+                v.agrocalidad_code,
+                v.queried_at
             FROM dartis_ventas d
+            JOIN countries co ON co.id = d.country_id
             LEFT JOIN species s ON upper(s.name) = upper(d.especie)
-            WHERE d.active
-            GROUP BY d.especie, s.id, s.id_producto_agrocalidad
+            LEFT JOIN v_agrocalidad_requisitos v
+                   ON v.species_id = s.id
+                  AND v.country_id = d.country_id
+                  AND v.trade_type = 'Exportación'
+                  AND v.area_code  = 'SV'
+            WHERE {where}
+            GROUP BY d.especie, co.name_es, co.id, s.id, s.id_producto_agrocalidad,
+                     v.requirement_id, v.n_requisitos, v.tariff_heading,
+                     v.agrocalidad_code, v.queried_at
             ORDER BY sum(d.total_dolares) DESC NULLS LAST
-        """)).mappings().all()
+        """), params).mappings().all()
 
-        # ¿ya se puede cruzar por pais?  ¿hay algo de VUE?
-        # No alcanza con que exista la columna: hace falta que tenga datos.
-        # La columna se agrega con la migracion 034, pero recien se llena
-        # cuando se importa un archivo de Ventas que traiga `paisVenta`.
-        pais_en_ventas = conn.execute(text("""
-            SELECT count(*) FROM dartis_ventas
+        # Cuanto queda afuera por no tener pais, para no dar una cobertura
+        # mejor de la real.
+        sin_pais = conn.execute(text("""
+            SELECT count(*) lineas, sum(total_dolares) dolares,
+                   min(fecha) desde, max(fecha) hasta
+            FROM dartis_ventas WHERE active AND country_id IS NULL
+        """)).mappings().first()
+
+        rango = conn.execute(text("""
+            SELECT min(fecha) desde, max(fecha) hasta FROM dartis_ventas
             WHERE active AND country_id IS NOT NULL
-        """)).scalar()
+        """)).mappings().first()
 
     return {
-        "especies": especies,
-        "pendientes": {
-            "pais_en_ventas": bool(pais_en_ventas),
-            "vue": False,
-        },
+        "combinaciones": combinaciones,
+        "sin_pais": sin_pais,
+        "rango": rango,
+        "pendientes": {"vue": False},
     }
 
 
