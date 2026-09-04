@@ -24,8 +24,8 @@ from app.database.connection import engine
 sys.stdout.reconfigure(encoding="utf-8")
 
 BASE = r"C:/Users/coordinacion/OneDrive - BELLAFLOR GROUP INC/BFG/Downloads/"
-RECETAS = BASE + "Ventas Recetas2026-08-30 21_45_43.xlsx"
-VENTAS = BASE + "Ventas2026-08-30 20_58_26.xlsx"
+RECETAS = BASE + "Ventas Recetas2026-09-03 21_47_33.xlsx"
+VENTAS = BASE + "Ventas2026-09-03 21_46_31.xlsx"
 
 wb_r = openpyxl.load_workbook(RECETAS, data_only=True, read_only=True)
 wb_v = openpyxl.load_workbook(VENTAS, data_only=True, read_only=True)
