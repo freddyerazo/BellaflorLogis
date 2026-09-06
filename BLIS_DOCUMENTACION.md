@@ -1,17 +1,22 @@
 # BLIS — Business Logistic Intelligence Systems
 ## Documentación Técnica Completa con Código · v2.1 · Agosto 2026
 
-> **Estado al 2026-09-05.** El documento se regeneró completo por última vez el
+> **Estado al 2026-09-06.** El documento se regeneró completo por última vez el
 > 2026-08-22; desde entonces se actualiza por partes.
 > **Al día:** nombre del proyecto, `components/sidebar.html`,
-> `pages/agrocalidad.html` y `pages/torre-control.html` — que en pantalla ahora
-> se llama **Fedex-Ups See** (solo el rótulo: ruta, archivos y tablas siguen
-> siendo `torre-control`/`courier_*`).
+> `pages/agrocalidad.html`, y la **sección 11 y el módulo Torre de Control
+> completo** (backend y frontend) — que en pantalla se llama **Fedex-Ups See**
+> desde el 2026-09-05 (solo el rótulo cambió; ruta, archivos y tablas siguen
+> siendo `torre-control`/`courier_*`). Desde el 2026-09-05/06 ya no consulta
+> tracking en línea ni cruza agencias de carga locales, los manifiestos de UPS
+> y FedEx se cargan directo a Supabase (nunca a archivo), y la pantalla se
+> rediseñó para verse como la de producción de REPORTEUPSFEDEX — ver
+> `CLAUDE.md` para el detalle completo de esa migración.
 > **Sin actualizar:** falta el módulo Armellini Post; el código de
 > `pages/agrocalidad.js` que se reproduce más abajo es anterior a las
-> sub-pestañas; y ningún fragmento refleja la reforma visual del CSS del
-> 2026-09-05 (paleta, tokens y sistema de tablas — está descrita en
-> `CLAUDE.md`). Falta una regeneración completa.
+> sub-pestañas; y ningún otro fragmento (fuera de Torre de Control) refleja la
+> reforma visual del CSS del 2026-09-05 (paleta, tokens y sistema de tablas —
+> está descrita en `CLAUDE.md`). Falta una regeneración completa.
 
 ---
 
@@ -51,7 +56,7 @@ Desde agosto de 2026, BLIS además **absorbe 4 herramientas que antes vivían co
 
 - **Agrocalidad** — consulta de requisitos fitosanitarios de exportación (clon de "Agrocalidad Consulta"). El scraping real (evade el anti-bot del sitio de Agrocalidad) sigue en GitHub Actions del repo `freddyerazo/AgrocalidadDartis`; BLIS orquesta y muestra el resultado.
 - **Inventario LAG** — proxy en vivo sobre el WMS de Logiztik Alliance Group, bodega de Miami (clon de "InventarioApiLag"). Sin base de datos propia, todo se consulta en tiempo real.
-- **Torre de Control** — conciliación de cajas Dartis vs manifiestos UPS/FedEx/agencias locales, con scheduler propio y sync a Duoplane (clon de "REPORTEUPSFEDEX").
+- **Torre de Control** ("Fedex-Ups See" en pantalla) — conciliación de cajas Dartis contra los manifiestos de UPS y FedEx, con scheduler propio y sync a Duoplane (clon de "REPORTEUPSFEDEX"). Sin tracking en línea ni agencias de carga locales desde el 2026-09-05/06.
 - **Auditoría de Etiquetas** — auditoría física de despachos de clientes especiales vía el mismo bot de Telegram del proyecto original, ahora con backend en BLIS (clon de "Auditoria_LEsp").
 
 El principio de diseño de estos 4 módulos: **`dartis_ventas` es la tabla base**. En vez de que cada módulo pida su propio archivo/Excel de ventas por separado, todos leen directo de `dartis_ventas` (ya normalizada y deduplicada correctamente, incluyendo `especie` en su clave única — ver el Troubleshooting §22 sobre el bug de pérdida de datos silenciosa que esto corrigió, encontrado y arreglado antes de empezar a clonar los módulos).
@@ -105,8 +110,9 @@ BLIS/
 │       │   └── auditoria_etiquetas.py     # Fase 4
 │       ├── services/                  # logica de negocio reutilizable (antes vacia)
 │       │   ├── lag_client.py, lag_xml_utils.py, lag_inventario_completo.py
-│       │   ├── courier_ups_client.py, courier_fedex_client.py, courier_parsers.py
-│       │   ├── courier_entregas_locales.py, courier_duoplane.py, courier_reconciliation.py
+│       │   ├── courier_parsers.py, courier_duoplane.py, courier_reconciliation.py
+│       │   │   # courier_ups_client.py / courier_fedex_client.py / courier_entregas_locales.py
+│       │   │   # se eliminaron el 2026-09-05: sin tracking en linea ni agencias locales
 │       │   ├── special_dispatches.py, google_drive.py, telegram_bot.py
 │       ├── schemas/                   # Pydantic, un archivo por modulo
 │       └── database/
@@ -161,20 +167,13 @@ LAG_TIMEOUT=30
 LAG_PLACE_ORDER_BASE_URL=https://cloudus.logiztikalliance.com:5005/external/api
 LAG_PLACE_ORDER_TOKEN=
 
-# Torre de Control (Fase 3)
-DEMO_MODE=true
+# Torre de Control (Fase 3) — desde el 2026-09-05/06 no consulta tracking en
+# linea ni cruza agencias locales, asi que ya no hacen falta credenciales de
+# UPS/FedEx ni la Sheet de EntregasLocales. Solo Duoplane sigue siendo real.
 REFRESH_SECONDS=300
-UPS_CLIENT_ID=
-UPS_CLIENT_SECRET=
-UPS_BASE_URL=https://onlinetools.ups.com
-FEDEX_CLIENT_ID=
-FEDEX_CLIENT_SECRET=
-FEDEX_BASE_URL=https://apis.fedex.com
 DUOPLANE_API_KEY=
 DUOPLANE_API_PASSWORD=
 DUOPLANE_BASE_URL=https://app.duoplane.com
-ENTREGAS_SHEET_URL=https://docs.google.com/spreadsheets/d/1QmMrXu_LVAIQBFmyl7MyvteaEMKoteNJjBfpWnlAjDM/export?format=csv
-GOOGLE_SHEETS_API_KEY=
 
 # Auditoria de Etiquetas (Fase 4)
 TELEGRAM_BOT_TOKEN=
@@ -198,11 +197,8 @@ LOGIZTIK_ENTITY_ID=
 | `GITHUB_REPO` | Agrocalidad | `owner/repo` del proyecto original (default `freddyerazo/AgrocalidadDartis`) |
 | `LAG_ENV`, `LAG_CUSTOMER_CODE`, `LAG_TOKEN`, `LAG_SALES_API_KEY` | Inventario LAG | Credenciales de Logiztik Alliance Group |
 | `LAG_PLACE_ORDER_BASE_URL`, `LAG_PLACE_ORDER_TOKEN` | Posteo de Inventario | Endpoint legacy `PlaceOrder/ordernew`, host y token propios, **sin ambiente de pruebas** — cualquier posteo va directo a producción de LAG |
-| `DEMO_MODE` | Torre de Control | `true` = tracking simulado, sin credenciales de courier |
 | `REFRESH_SECONDS` | Torre de Control | Intervalo del scheduler (default 300s) |
-| `UPS_CLIENT_ID/SECRET`, `FEDEX_CLIENT_ID/SECRET` | Torre de Control | OAuth2 client-credentials de cada courier |
-| `DUOPLANE_API_KEY/PASSWORD` | Torre de Control | Basic Auth de la API de Duoplane |
-| `ENTREGAS_SHEET_URL`, `GOOGLE_SHEETS_API_KEY` | Torre de Control | Google Sheet público de entregas de agencias locales |
+| `DUOPLANE_API_KEY/PASSWORD/BASE_URL` | Torre de Control | Basic Auth de la API de Duoplane — única credencial externa real desde el 2026-09-05/06; no consulta tracking en línea ni cruza agencias locales |
 | `TELEGRAM_BOT_TOKEN` | Auditoría de Etiquetas | Token del bot (se reutiliza el del proyecto original) |
 | `TELEGRAM_WEBHOOK_SECRET` | Auditoría de Etiquetas | Valida `X-Telegram-Bot-Api-Secret-Token` en el webhook |
 | `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DRIVE_FOLDER_ID` | Auditoría de Etiquetas | Cuenta de servicio con acceso de escritura a la carpeta de fotos |
@@ -210,7 +206,7 @@ LOGIZTIK_ENTITY_ID=
 | `LOGIZTIK_USER`, `LOGIZTIK_PASS` | Proveedores | Credenciales SSO de Bellaflor para `POST /apisso/Account/Login` |
 | `LOGIZTIK_ENTITY_ID` | Proveedores | Id de entidad/cliente (`idEntidad`, p.ej. `CLI013575`); si el login devuelve `entityId` se usa ese |
 
-> ⚠️ Nunca compartir el valor de estas variables en el chat ni en el código. Las 4 fases nuevas quedaron implementadas y probadas en `DEMO_MODE`/sin credenciales reales — activar cada integración real es un paso de configuración pendiente, no de código.
+> ⚠️ Nunca compartir el valor de estas variables en el chat ni en el código. Las 4 fases nuevas quedaron implementadas y probadas sin credenciales reales — activar cada integración real es un paso de configuración pendiente, no de código. Torre de Control es la excepción desde el 2026-09-05/06: ya no simula nada (`DEMO_MODE` se eliminó), solo Duoplane sigue siendo una integración externa real opcional.
 
 ---
 
@@ -2875,263 +2871,369 @@ def delete_truck_company(truck_company_id: str):
 
 ## 11. Backend — módulo Torre de Control
 
-Clon de **REPORTEUPSFEDEX**. Concilia, por factura, las cajas declaradas en Dartis contra el manifiesto/tracking en vivo de UPS, FedEx o una agencia de carga local.
+En pantalla se llama **"Fedex-Ups See"** (renombrado el 2026-09-05; el rótulo
+cambió, no la ruta ni las tablas). Clon de **REPORTEUPSFEDEX**. Concilia, por
+factura, las cajas declaradas en Dartis contra el manifiesto de UPS y FedEx.
 
-**Hallazgo clave de esta fase**: el proyecto original pedía subir un Excel Dartis propio (`empresa, factura, cliente, destinatario, courier, total, fecha, vendedor`) además de los manifiestos de UPS/FedEx. Verificado contra la Supabase real: `dartis_ventas` agrupada por `id_pedido` produce exactamente esa misma forma (`SUM(total_piezas)` = `total`), sin ninguna inconsistencia en las 10,774 facturas de la tabla — así que el `DartisExcelConnector` del original se elimina por completo. Solo hacen falta las subidas de manifiesto UPS (.csv) y FedEx (.pdf), que sí son datos que no existen en ningún otro lado de BLIS.
+**Alcance desde el 2026-09-05/06 — cambió el proceso, no solo el código:**
 
-También desaparece el hack de "persistir subiendo archivos vía `git commit`" (crear/pushear commits desde el servidor con un PAT embebido en la URL remota) — los manifiestos se parsean directo a Postgres al subirlos. Y se corrigió un bug del original: `shipper_name` en la sincronización con Duoplane quedaba hardcodeado a `"UPS"` incluso para trackings de FedEx.
+- **No consulta tracking en línea.** La rama FedEx de `_evaluar` comparaba
+  antes SOLO contra el Track API en vivo; apagarlo sin más habría dejado
+  FedEx en `PENDIENTE` para siempre, así que ahora compara contra el conteo
+  de bultos de su propio manifiesto, igual que UPS. Verificado con datos
+  reales: FedEx pasó de 0 conciliadas a 63 OK / 1 discrepancia.
+- **Las agencias de carga locales (courier "OTRO") quedaron fuera del
+  proceso**: su comprobante es un recibo físico y no existe manifiesto
+  electrónico contra el cual cruzarlas. `courier_ups_client.py`,
+  `courier_fedex_client.py` y `courier_entregas_locales.py` — los tres
+  archivos de esta sección en versiones anteriores del documento — se
+  eliminaron (recuperables en git). `courier_agency_mapping` quedó sin uso.
+- La asimetría entre couriers se mantuvo a propósito: UPS manda un
+  manifiesto ACUMULADO (si falta la factura, `SIN MANIFIESTO`); FedEx manda
+  un PDF por despacho (si falta, solo significa que ese PDF no llegó
+  todavía → `PENDIENTE`). Unificar las dos ramas generaría cientos de
+  alertas falsas en FedEx.
 
-### services/courier_ups_client.py — OAuth2 + Track API de UPS
+**Hallazgo clave de la fase original** (sigue vigente): el proyecto original
+pedía subir un Excel Dartis propio (`empresa, factura, cliente, destinatario,
+courier, total, fecha, vendedor`) además de los manifiestos de UPS/FedEx.
+Verificado contra la Supabase real: `dartis_ventas` agrupada por `id_pedido`
+produce exactamente esa misma forma (`SUM(total_piezas)` = `total`), así que
+el `DartisExcelConnector` del original se elimina por completo.
 
-`backend/app/services/courier_ups_client.py`
+También desaparece el hack de "persistir subiendo archivos vía `git commit`"
+del original — los manifiestos se parsean directo a Postgres al subirlos, en
+UPSERT por tracking (UPS, que reenvía el manifiesto acumulado entero cada
+vez) o INSERT de solo lo nuevo (FedEx, un PDF por despacho puntual). Y se
+corrigió un bug: `/subir-ups` hacía `TRUNCATE` antes de insertar — cada carga
+borraba todo el histórico y dejaba solo el último archivo.
+
+### courier_reconciliation.py — motor de conciliacion (Dartis vs manifiesto, sin tracking en vivo)
+
+`backend/app/services/courier_reconciliation.py`
 ```python
-"""Cliente OAuth2 + Track API de UPS.
+"""Motor de conciliacion: cruza dartis_ventas (agrupado por id_pedido)
+contra los manifiestos de UPS y FedEx.
 
-Clonado de REPORTEUPSFEDEX (clase UPSConnector). El token se cachea en
-memoria a nivel de modulo (expira en ~1h, se re-obtiene solo) — no hace
-falta persistirlo en Postgres.
+Clonado de REPORTEUPSFEDEX (clase Conciliador). Diferencia principal: no
+hay un Excel Dartis propio que subir — dartis_ventas ya provee esa
+informacion (ver hallazgo en el plan de la Fase 3), y el resultado se
+persiste en la tabla courier_reconciliation (en vez de vivir solo en
+memoria) para sobrevivir reinicios/redeploys.
+
+Alcance: solo UPS y FedEx.
+  - NO se consulta tracking en vivo. La conciliacion se resuelve entre los
+    dos documentos que dicen cuantas cajas salieron: dartis_ventas y el
+    manifiesto del courier.
+  - Las agencias de carga locales (courier "OTRO") quedan FUERA del proceso:
+    su comprobante es un recibo fisico y no existe manifiesto electronico
+    contra el cual cruzarlas.
 """
 
-import os
-import random
-from datetime import datetime, timedelta, timezone
+import asyncio
+import json
+from datetime import datetime, timezone
 from typing import Optional
 
-import httpx
+from sqlalchemy import text
+
+from app.database.connection import engine
+
+COURIERS = ("UPS", "FEDEX")
 
 UTC = timezone.utc
-DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
 
-_token: Optional[str] = None
-_token_exp: datetime = datetime.min.replace(tzinfo=UTC)
-
-
-def _base_url() -> str:
-    return os.getenv("UPS_BASE_URL", "https://onlinetools.ups.com")
+_lock = asyncio.Lock()
+_ultimo_error: Optional[str] = None
+_ultimo_refresh: Optional[str] = None
+_ultimo_omitidas: int = 0
 
 
-async def _get_token(client: httpx.AsyncClient) -> str:
-    global _token, _token_exp
-    if _token and datetime.now(UTC) < _token_exp:
-        return _token
-    r = await client.post(
-        f"{_base_url()}/security/v1/oauth/token",
-        data={"grant_type": "client_credentials"},
-        auth=(os.getenv("UPS_CLIENT_ID", ""), os.getenv("UPS_CLIENT_SECRET", "")),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    r.raise_for_status()
-    j = r.json()
-    _token = j["access_token"]
-    _token_exp = datetime.now(UTC) + timedelta(seconds=int(j.get("expires_in", 3600)) - 60)
-    return _token
+def _normalizar_courier(courier_raw: str) -> str:
+    c = (courier_raw or "").strip().upper()
+    if "UPS" in c:
+        return "UPS"
+    if "FEDEX" in c or "FDX" in c or "FED EX" in c:
+        return "FEDEX"
+    return c or "OTRO"
 
 
-def _demo(trackings: list[str]) -> dict[str, dict]:
-    estados = ["EN TRANSITO", "ENTREGADO", "EN ADUANA", "RECIBIDO EN ORIGEN", "EN REPARTO"]
-    out = {}
-    for t in trackings:
-        rnd = random.Random(t)
-        out[t] = {
-            "estado": rnd.choice(estados),
-            "cajas_manifiesto": None,
-            "ultimo_evento": rnd.choice(["Louisville, KY", "Miami, FL", "Quito, EC", "Bogota, CO"]),
-            "ts": datetime.now(UTC).isoformat(),
+def _obtener_base_dartis() -> list[dict]:
+    """dartis_ventas agrupado por id_pedido — reemplaza al Excel Dartis
+    del proyecto original (ver hallazgo del plan de la Fase 3).
+
+    Se agrupa SOLO por id_pedido: courier_reconciliation tiene UNIQUE(factura),
+    y un mismo id_pedido puede traer especies en filas con algun campo distinto
+    (ej. fecha) -- agruparlas tambien por esos campos partia un pedido en dos
+    filas con la misma factura, violando el UNIQUE y tumbando el refresco
+    completo (y el arranque del servidor, que lo dispara una vez al iniciar)."""
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT id_pedido AS factura, MAX(agencia_carga) AS courier_raw, MAX(empresa) AS empresa,
+                   MAX(cliente) AS cliente, MAX(destinatario) AS destinatario,
+                   MAX(vendedor) AS vendedor_cliente, MAX(fecha) AS fecha_dartis,
+                   SUM(total_piezas) AS cajas_dartis
+            FROM dartis_ventas
+            WHERE agencia_carga IS NOT NULL AND active = true
+            GROUP BY id_pedido
+        """)).mappings().all()
+
+    base = []
+    for r in rows:
+        base.append({
+            "factura": r["factura"],
+            "courier": _normalizar_courier(r["courier_raw"]),
+            "courier_raw": (r["courier_raw"] or "").strip(),
+            "empresa": r["empresa"],
+            "cliente": r["cliente"],
+            "destinatario": r["destinatario"],
+            "vendedor_cliente": r["vendedor_cliente"],
+            "fecha_dartis": r["fecha_dartis"].isoformat() if r["fecha_dartis"] else None,
+            "cajas_dartis": round(float(r["cajas_dartis"] or 0)),
+        })
+    return base
+
+
+def _obtener_manifiesto_ups() -> dict[int, dict]:
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT factura, tracking, estado, fecha_manifiesto, ship_to, servicio, entrega_programada
+            FROM courier_ups_manifest ORDER BY factura, id
+        """)).mappings().all()
+    return _agrupar_por_factura(rows)
+
+
+def _obtener_manifiesto_fedex() -> dict[int, dict]:
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT factura, tracking, estado_fedex AS estado, fecha_envio AS fecha_manifiesto,
+                   destinatario AS ship_to, fecha_entrega_fedex AS entrega_programada
+            FROM courier_fedex_envios WHERE factura IS NOT NULL ORDER BY factura, id
+        """)).mappings().all()
+    return _agrupar_por_factura(rows)
+
+
+def _agrupar_por_factura(rows) -> dict[int, dict]:
+    out: dict[int, dict] = {}
+    for r in rows:
+        f = r["factura"]
+        bulto = {"tracking": r["tracking"], "estado": r["estado"], "entrega_programada": r["entrega_programada"]}
+        if f in out:
+            out[f]["bultos"] += 1
+            out[f]["trackings_extra"] += 1
+            out[f]["trackings"].append(r["tracking"])
+            out[f]["detalle"].append(bulto)
+        else:
+            out[f] = {
+                "bultos": 1, "trackings_extra": 0,
+                "tracking": r["tracking"], "trackings": [r["tracking"]], "detalle": [bulto],
+                "estado": r["estado"], "fecha_manifiesto": r["fecha_manifiesto"],
+                "ship_to": r["ship_to"], "servicio": r.get("servicio"),
+                "entrega_programada": r["entrega_programada"],
+            }
+    return out
+
+
+def _evaluar(courier: str, dartis_total, bultos_manifiesto) -> str:
+    """Compara el total de cajas de Dartis contra el manifiesto del courier.
+
+    El tracking en vivo ya no interviene. Antes FedEx se comparaba SOLO
+    contra el dato en vivo, asi que al apagarlo habria quedado en PENDIENTE
+    para siempre; ahora se compara contra su manifiesto, igual que UPS.
+
+    La asimetria entre UPS y FedEx se mantiene, porque no viene de donde se
+    guarda el manifiesto sino de como lo entrega cada courier:
+      - UPS manda un manifiesto ACUMULADO. Si la factura no esta, es una
+        ausencia con significado -> SIN MANIFIESTO.
+      - FedEx manda un PDF por despacho. La ausencia solo dice que ese PDF
+        todavia no se cargo -> PENDIENTE.
+    """
+    if bultos_manifiesto is None:
+        return "SIN MANIFIESTO" if courier == "UPS" else "PENDIENTE"
+    return "OK" if dartis_total == bultos_manifiesto else "DISCREPANCIA"
+
+
+def _armar_fila(r: dict, manifiesto: Optional[dict]) -> dict:
+    """Fila del tablero para una factura de UPS o FedEx.
+
+    `bultos_csv` y `cajas_manifiesto` son ahora el mismo numero —el conteo de
+    bultos del manifiesto—; se guardan los dos porque el tablero lee cada uno
+    en un lugar distinto.
+    """
+    bultos = manifiesto["bultos"] if manifiesto else None
+    return {
+        **r,
+        "tracking": manifiesto["tracking"] if manifiesto else "",
+        "trackings": manifiesto["trackings"] if manifiesto else [],
+        "detalle_bultos": manifiesto["detalle"] if manifiesto else [],
+        "trackings_extra": manifiesto["trackings_extra"] if manifiesto else 0,
+        "bultos_csv": bultos,
+        "estado_csv": manifiesto["estado"] if manifiesto else None,
+        "fecha_manifiesto": manifiesto["fecha_manifiesto"] if manifiesto else None,
+        "servicio": manifiesto["servicio"] if manifiesto else None,
+        "entrega_programada": manifiesto["entrega_programada"] if manifiesto else None,
+        "cajas_manifiesto": bultos,
+        # El estado ya no se consulta en vivo: es el que declara el manifiesto.
+        "estado_vivo": ((manifiesto["estado"] or "SIN ESTADO") if manifiesto
+                        else "SIN MANIFIESTO"),
+        "entrega_estimada": (manifiesto["entrega_programada"] or "") if manifiesto else "",
+        "ubicacion": "",
+        "conciliacion": _evaluar(r["courier"], r["cajas_dartis"], bultos),
+        "diferencia": (r["cajas_dartis"] - bultos) if bultos is not None else None,
+        "fecha_entrega_real": None, "foto_url": None, "cliente_confirmado_ocr": False,
+    }
+
+
+def _resumen(cajas: list[dict]) -> dict:
+    def agg(filtro=None):
+        rows = [c for c in cajas if filtro is None or filtro(c)]
+        return {
+            "guias": len(rows),
+            "vendidas": sum(c["cajas_dartis"] for c in rows),
+            "manifiesto": sum(c["cajas_manifiesto"] or 0 for c in rows),
+            "ok": sum(1 for c in rows if c["conciliacion"] == "OK"),
+            "discrepancias": sum(1 for c in rows if c["conciliacion"] == "DISCREPANCIA"),
+            "pendientes": sum(1 for c in rows if c["conciliacion"] == "PENDIENTE"),
+            "sin_manifiesto": sum(1 for c in rows if c["conciliacion"] == "SIN MANIFIESTO"),
+            "no_en_dartis": sum(1 for c in rows if c["conciliacion"] == "NO EN DARTIS"),
         }
-    return out
+    return {
+        "total": agg(),
+        "UPS": agg(lambda c: c["courier"] == "UPS"),
+        "FEDEX": agg(lambda c: c["courier"] == "FEDEX"),
+    }
 
 
-async def track(trackings: list[str]) -> dict[str, dict]:
-    if DEMO_MODE:
-        return _demo(trackings)
-    out: dict[str, dict] = {}
-    async with httpx.AsyncClient(timeout=30) as client:
-        token = await _get_token(client)
-        for t in trackings:
-            try:
-                r = await client.get(
-                    f"{_base_url()}/api/track/v1/details/{t}",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "transId": f"sys-{int(datetime.now(UTC).timestamp())}",
-                        "transactionSrc": "blis-torre-control",
-                    },
-                )
-                r.raise_for_status()
-                shp = r.json()["trackResponse"]["shipment"][0]
-                pkg = shp.get("package", [])
-                act = (pkg[0].get("activity") or [{}])[0] if pkg else {}
-                out[t] = {
-                    "estado": (act.get("status") or {}).get("description", "SIN DATOS"),
-                    "cajas_manifiesto": len(pkg) or None,
-                    "ultimo_evento": (act.get("location") or {}).get("address", {}).get("city", ""),
-                    "ts": datetime.now(UTC).isoformat(),
-                }
-            except Exception as e:
-                out[t] = {
-                    "estado": f"ERROR: {e.__class__.__name__}",
-                    "cajas_manifiesto": None, "ultimo_evento": "",
-                    "ts": datetime.now(UTC).isoformat(),
-                }
-    return out
-```
-
-### services/courier_fedex_client.py — OAuth2 + Track API de FedEx
-
-`backend/app/services/courier_fedex_client.py`
-```python
-"""Cliente OAuth2 + Track API de FedEx.
-
-Clonado de REPORTEUPSFEDEX (clase FedExConnector + _consultar_estado_real_fedex).
-Token cacheado en memoria a nivel de modulo, igual que el UPS client.
-"""
-
-import os
-import random
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-
-import httpx
-
-UTC = timezone.utc
-DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
-
-_token: Optional[str] = None
-_token_exp: datetime = datetime.min.replace(tzinfo=UTC)
+def obtener_snapshot() -> dict:
+    """Lee el snapshot persistido (courier_reconciliation) — no dispara
+    ninguna llamada en vivo, solo lo que dejo el ultimo refrescar()."""
+    with engine.connect() as conn:
+        cajas = [dict(r) for r in conn.execute(text(
+            "SELECT * FROM courier_reconciliation ORDER BY (conciliacion != 'DISCREPANCIA'), factura"
+        )).mappings().all()]
+    return {
+        "cajas": cajas,
+        "resumen": _resumen(cajas) if cajas else {},
+        "actualizado": _ultimo_refresh,
+        "error": _ultimo_error,
+        "omitidas_agencias_locales": _ultimo_omitidas,
+    }
 
 
-def _base_url() -> str:
-    return os.getenv("FEDEX_BASE_URL", "https://apis.fedex.com")
+def obtener_discrepancias() -> list[dict]:
+    with engine.connect() as conn:
+        return [dict(r) for r in conn.execute(text("""
+            SELECT * FROM courier_reconciliation
+            WHERE conciliacion IN ('DISCREPANCIA', 'SIN MANIFIESTO', 'NO EN DARTIS')
+            ORDER BY factura
+        """)).mappings().all()]
 
 
-async def _get_token(client: httpx.AsyncClient) -> str:
-    global _token, _token_exp
-    if _token and datetime.now(UTC) < _token_exp:
-        return _token
-    r = await client.post(
-        f"{_base_url()}/oauth/token",
-        data={
-            "grant_type": "client_credentials",
-            "client_id": os.getenv("FEDEX_CLIENT_ID", ""),
-            "client_secret": os.getenv("FEDEX_CLIENT_SECRET", ""),
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    r.raise_for_status()
-    j = r.json()
-    _token = j["access_token"]
-    _token_exp = datetime.now(UTC) + timedelta(seconds=int(j.get("expires_in", 3600)) - 60)
-    return _token
+async def refrescar() -> dict:
+    global _ultimo_error, _ultimo_refresh, _ultimo_omitidas
+    async with _lock:
+        error = None
+        try:
+            base = await asyncio.to_thread(_obtener_base_dartis)
+        except Exception as e:
+            base, error = [], str(e)
 
+        try:
+            manif_ups = await asyncio.to_thread(_obtener_manifiesto_ups)
+        except Exception as e:
+            manif_ups, error = {}, (error + " | " if error else "") + f"Manifiesto UPS: {e}"
 
-def _demo(trackings: list[str]) -> dict[str, dict]:
-    estados = ["IN TRANSIT", "DELIVERED", "AT CUSTOMS", "PICKED UP", "OUT FOR DELIVERY"]
-    out = {}
-    for t in trackings:
-        rnd = random.Random(t + "fx")
-        out[t] = {
-            "estado": rnd.choice(estados),
-            "cajas_manifiesto": None,
-            "ultimo_evento": rnd.choice(["Memphis, TN", "Miami, FL", "Quito, EC"]),
-            "ts": datetime.now(UTC).isoformat(),
+        try:
+            manif_fdx = await asyncio.to_thread(_obtener_manifiesto_fedex)
+        except Exception as e:
+            manif_fdx, error = {}, (error + " | " if error else "") + f"Manifiesto FedEx: {e}"
+
+        # Las agencias de carga locales quedan fuera del proceso. Se cuenta
+        # cuantas se omiten para que la exclusion sea visible en el tablero y
+        # no un hueco silencioso.
+        omitidas = sum(1 for r in base if r["courier"] not in COURIERS)
+        base = [r for r in base if r["courier"] in COURIERS]
+
+        facturas_dartis = {r["factura"] for r in base}
+        extras_ups = [f for f in manif_ups if f not in facturas_dartis]
+        extras_fdx = [f for f in manif_fdx if f not in facturas_dartis and f not in manif_ups]
+
+        cajas = [
+            _armar_fila(
+                r,
+                (manif_fdx if r["courier"] == "FEDEX" else manif_ups).get(r["factura"]),
+            )
+            for r in base
+        ]
+
+        for courier, manifiesto, extras in (("UPS", manif_ups, extras_ups),
+                                            ("FEDEX", manif_fdx, extras_fdx)):
+            for f in extras:
+                m = manifiesto[f]
+                r = {"factura": f, "courier": courier, "courier_raw": courier, "empresa": "",
+                     "cliente": m.get("ship_to", ""), "destinatario": m.get("ship_to", ""),
+                     "vendedor_cliente": None, "cajas_dartis": 0, "fecha_dartis": None}
+                fila = _armar_fila(r, m)
+                fila["conciliacion"] = "NO EN DARTIS"
+                cajas.append(fila)
+
+        await asyncio.to_thread(_persistir, cajas)
+        _ultimo_error = error
+        _ultimo_refresh = datetime.now(UTC).isoformat()
+        _ultimo_omitidas = omitidas
+
+        return {
+            "resumen": _resumen(cajas),
+            "actualizado": _ultimo_refresh,
+            "error": _ultimo_error,
+            "total_facturas": len(cajas),
+            "omitidas_agencias_locales": omitidas,
         }
-    return out
 
 
-async def track(trackings: list[str]) -> dict[str, dict]:
-    if DEMO_MODE:
-        return _demo(trackings)
-    out: dict[str, dict] = {}
-    async with httpx.AsyncClient(timeout=30) as client:
-        token = await _get_token(client)
-        for i in range(0, len(trackings), 30):  # FedEx: max 30 guias por llamada
-            lote = trackings[i:i + 30]
-            try:
-                r = await client.post(
-                    f"{_base_url()}/track/v1/trackingnumbers",
-                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                    json={"includeDetailedScans": True,
-                          "trackingInfo": [{"trackingNumberInfo": {"trackingNumber": t}} for t in lote]},
-                )
-                r.raise_for_status()
-                for res in r.json()["output"]["completeTrackResults"]:
-                    t = res["trackingNumber"]
-                    tr = (res.get("trackResults") or [{}])[0]
-                    latest = tr.get("latestStatusDetail", {}) or {}
-                    pkg = tr.get("packageDetails", {}) or {}
-                    cnt = pkg.get("count") or (pkg.get("packagingDescription") or {}).get("count")
-                    ends_raw = (tr.get("standardTransitTimeWindow") or {}).get("window", {}).get("ends", "")
-                    entrega_est = ends_raw[:10] if ends_raw else ""
-                    out[t] = {
-                        "estado": latest.get("description", "SIN DATOS"),
-                        "entrega_estimada": entrega_est,
-                        "cajas_manifiesto": int(cnt) if cnt else None,
-                        "ultimo_evento": (latest.get("scanLocation") or {}).get("city", ""),
-                        "ts": datetime.now(UTC).isoformat(),
-                    }
-            except Exception as e:
-                for t in lote:
-                    out.setdefault(t, {
-                        "estado": f"ERROR: {e.__class__.__name__}",
-                        "cajas_manifiesto": None, "ultimo_evento": "",
-                        "ts": datetime.now(UTC).isoformat(),
-                    })
-    return out
+_PERSISTIR_COLUMNAS = [
+    "factura", "courier", "courier_raw", "empresa", "cliente", "destinatario", "vendedor_cliente",
+    "cajas_dartis", "fecha_dartis", "tracking", "trackings", "detalle_bultos", "trackings_extra",
+    "bultos_csv", "estado_csv", "fecha_manifiesto", "servicio", "entrega_programada",
+    "cajas_manifiesto", "estado_vivo", "entrega_estimada", "ubicacion", "conciliacion", "diferencia",
+    "fecha_entrega_real", "foto_url", "cliente_confirmado_ocr",
+]
 
 
-async def consultar_estado_real(trackings: list[str]) -> dict[str, dict]:
-    """Consulta SIEMPRE la API real de FedEx (sin importar DEMO_MODE) —
-    usada tras subir un manifiesto PDF para refrescar estado/fecha de
-    entrega de los envios acumulados en courier_fedex_envios."""
-    if not trackings:
-        return {}
-    client_id = os.getenv("FEDEX_CLIENT_ID", "")
-    client_secret = os.getenv("FEDEX_CLIENT_SECRET", "")
-    if not (client_id and client_secret):
-        return {}
-    base = _base_url()
-    out: dict[str, dict] = {}
-    async with httpx.AsyncClient(timeout=30) as client:
-        token_r = await client.post(
-            f"{base}/oauth/token",
-            data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+def _persistir(cajas: list[dict]) -> None:
+    """Reemplaza el snapshot completo (igual semantica que el original:
+    siempre refleja el ultimo refresco, no un merge incremental).
+
+    Insercion masiva via execute_values (mismo patron que dartis_import.py):
+    con miles de facturas, insertar fila por fila tarda minutos por la
+    latencia de red hacia Supabase (~200ms/round-trip medido); en batch es
+    una sola ida y vuelta por lote."""
+    from psycopg2.extras import execute_values
+
+    tuples = [
+        (
+            c["factura"], c["courier"], c["courier_raw"], c["empresa"], c["cliente"], c["destinatario"],
+            c["vendedor_cliente"], c["cajas_dartis"], c["fecha_dartis"], c["tracking"],
+            json.dumps(c["trackings"]), json.dumps(c["detalle_bultos"]), c["trackings_extra"],
+            c["bultos_csv"], c["estado_csv"], c["fecha_manifiesto"], c["servicio"], c["entrega_programada"],
+            c["cajas_manifiesto"], c["estado_vivo"], c["entrega_estimada"], c["ubicacion"],
+            c["conciliacion"], c["diferencia"], c["fecha_entrega_real"], c["foto_url"],
+            c["cliente_confirmado_ocr"],
         )
-        token_r.raise_for_status()
-        token = token_r.json()["access_token"]
+        for c in cajas
+    ]
 
-        for i in range(0, len(trackings), 30):
-            lote = trackings[i:i + 30]
-            try:
-                r = await client.post(
-                    f"{base}/track/v1/trackingnumbers",
-                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                    json={"includeDetailedScans": False,
-                          "trackingInfo": [{"trackingNumberInfo": {"trackingNumber": t}} for t in lote]},
-                )
-                r.raise_for_status()
-                for res in r.json().get("output", {}).get("completeTrackResults", []):
-                    t = res.get("trackingNumber", "")
-                    tr = (res.get("trackResults") or [{}])[0]
-                    latest = tr.get("latestStatusDetail", {}) or {}
-                    fecha_entrega = next(
-                        (dt.get("dateTime", "")[:10] for dt in tr.get("dateAndTimes", [])
-                         if dt.get("type") == "ACTUAL_DELIVERY"), "")
-                    if not fecha_entrega:
-                        fecha_entrega = (
-                            (tr.get("estimatedDeliveryTimeWindow") or {}).get("window", {}).get("ends", "")[:10]
-                            or (tr.get("standardTransitTimeWindow") or {}).get("window", {}).get("ends", "")[:10]
-                        )
-                    out[t] = {
-                        "estado_fedex": latest.get("description", ""),
-                        "fecha_entrega_fedex": fecha_entrega,
-                    }
-            except Exception:
-                continue
-    return out
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE courier_reconciliation"))
+        if not tuples:
+            return
+        raw = conn.connection.cursor()
+        execute_values(raw, f"""
+            INSERT INTO courier_reconciliation ({", ".join(_PERSISTIR_COLUMNAS)}) VALUES %s
+        """, tuples, page_size=1000)
 ```
 
-### services/courier_parsers.py — parseo de manifiesto UPS (.csv) y FedEx (.pdf)
+### courier_parsers.py — parseo de manifiestos: CSV de UPS y PDF de FedEx
 
 `backend/app/services/courier_parsers.py`
 ```python
@@ -3170,11 +3272,17 @@ def _extraer_po(referencia: str) -> str:
     return m.group(1) if m else ""
 
 
-def parse_ups_csv(contenido: bytes) -> list[dict]:
-    """Devuelve una fila por bulto: {factura, tracking, estado,
+def parse_ups_csv(contenido: bytes) -> tuple[list[dict], int]:
+    """Devuelve (filas, descartadas).
+
+    Cada fila es un bulto: {factura, tracking, referencia, estado,
     fecha_manifiesto, ship_to, destino, servicio, entrega_programada}.
-    Filas sin token PO:<numero> en 'Reference Number(s)' se descartan
-    (no se puede cruzar con dartis_ventas.id_pedido)."""
+
+    Las filas sin token PO:<numero> en 'Reference Number(s)' no se pueden
+    cruzar contra dartis_ventas.id_pedido, asi que se descartan — pero se
+    CUENTAN y se informan, en vez de desaparecer en silencio: en el archivo
+    real son decenas, y sin ese numero parece que el manifiesto llego
+    incompleto."""
     texto = contenido.decode("utf-8-sig", errors="replace")
     muestra = texto[:4096]
     delim = "\t" if muestra.count("\t") > muestra.count(",") else ","
@@ -3194,11 +3302,13 @@ def parse_ups_csv(contenido: bytes) -> list[dict]:
         return str(fila[idx[k]]).strip() if idx[k] is not None and idx[k] < len(fila) else ""
 
     filas = []
+    descartadas = 0
     for fila in lector:
         if not fila or not cel(fila, "tracking"):
             continue
         po = _extraer_po(cel(fila, "referencia"))
         if not po:
+            descartadas += 1
             continue
         filas.append({
             "factura": int(po),
@@ -3211,7 +3321,7 @@ def parse_ups_csv(contenido: bytes) -> list[dict]:
             "servicio": cel(fila, "servicio"),
             "entrega_programada": cel(fila, "entrega"),
         })
-    return filas
+    return filas, descartadas
 
 
 def parse_fedex_pdf(contenido: bytes) -> list[dict]:
@@ -3248,257 +3358,7 @@ def parse_fedex_pdf(contenido: bytes) -> list[dict]:
     return filas
 ```
 
-### services/courier_entregas_locales.py — entregas de agencias locales (Google Sheet + fuzzy match)
-
-`backend/app/services/courier_entregas_locales.py`
-```python
-"""Entregas de agencias de carga locales (courier distinto de UPS/FedEx),
-via la hoja publica de Google Sheets del bot "EntregasLocales" (OCR +
-Telegram) y su cruce con las facturas de dartis_ventas.
-
-Clonado de REPORTEUPSFEDEX (EntregasLocalesConnector + funciones de
-emparejamiento). El mapeo "texto crudo en la Sheet" -> "nombre canonico
-DARTIS" ahora vive en la tabla courier_agency_mapping (antes un CSV).
-"""
-
-import difflib
-import io
-import os
-import re
-import unicodedata
-from datetime import date, datetime
-from typing import Optional
-
-import httpx
-from sqlalchemy import text
-
-from app.database.connection import engine
-
-ENTREGAS_SHEET_URL = os.getenv(
-    "ENTREGAS_SHEET_URL",
-    "https://docs.google.com/spreadsheets/d/1QmMrXu_LVAIQBFmyl7MyvteaEMKoteNJjBfpWnlAjDM/export?format=csv",
-)
-GOOGLE_SHEETS_ID = "1QmMrXu_LVAIQBFmyl7MyvteaEMKoteNJjBfpWnlAjDM"
-GOOGLE_SHEETS_API_KEY = os.getenv("GOOGLE_SHEETS_API_KEY", "")
-
-_COLUMNAS = {
-    "fecha_documento": ["fechadocumento"],
-    "empresa_logistica": ["empresalogistica"],
-    "cliente": ["nombredelcliente"],
-    "finca_exportador": ["fincaexportador"],
-    "ocr_texto": ["textocompletoocr"],
-}
-
-FOTO_HYPERLINK_RE = re.compile(r'HYPERLINK\(\s*"([^"]+)"', re.IGNORECASE)
-AGENCIA_OCULTA_RE = re.compile(
-    r'AGENCIA\s*:?\s*\n?\s*(?:\d+\s*\n?)?([A-Z][A-Z.\s]{2,30}?)\s*\n?\s*FINCA', re.IGNORECASE
-)
-
-_cache: list[dict] = []
-
-
-def _norm_header(v) -> str:
-    s = unicodedata.normalize("NFKD", str(v or "")).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]", "", s.lower())
-
-
-def normalizar_texto(v, quitar_espacios: bool = False) -> str:
-    s = unicodedata.normalize("NFKD", str(v or "")).encode("ascii", "ignore").decode()
-    s = s.upper()
-    s = re.sub(r"\bCIA\.?\s*LTDA\.?\b", "", s)
-    s = re.sub(r"\bS\.?A\.?S?\.?\b", "", s)
-    s = re.sub(r"[.\-+/,&|]", " ", s)
-    s = re.sub(r"\s+", "" if quitar_espacios else " ", s).strip()
-    return s
-
-
-def coincide_texto(a: str, b: str) -> bool:
-    """Contencion de substring normalizado; si no hay contencion exacta,
-    cae a similitud difusa (difflib) para tolerar ruido de OCR — umbral 0.75."""
-    if not a or not b or len(a) < 4 or len(b) < 4:
-        return False
-    if a in b or b in a:
-        return True
-    if len(a) >= 10 and len(b) >= 10:
-        ratio = difflib.SequenceMatcher(None, a.replace(" ", ""), b.replace(" ", "")).ratio()
-        return ratio >= 0.75
-    return False
-
-
-def cargar_mapeo_agencias() -> dict[str, str]:
-    with engine.connect() as conn:
-        rows = conn.execute(text(
-            "SELECT variante_en_sheet, mapeo_propuesto_dartis FROM courier_agency_mapping"
-        )).all()
-    return {normalizar_texto(v, quitar_espacios=True): d for v, d in rows}
-
-
-def _agencia_oculta_en_ocr(ocr_texto: str) -> str:
-    m = AGENCIA_OCULTA_RE.search((ocr_texto or "").upper())
-    return m.group(1).strip() if m else ""
-
-
-def _agencia_embebida_en_cliente(texto_cliente: str, agencias_dartis: set[str]) -> Optional[str]:
-    texto_norm = normalizar_texto(texto_cliente)
-    if not texto_norm:
-        return None
-    for agencia in agencias_dartis:
-        primera_palabra = normalizar_texto(agencia).split(" ")[0]
-        if len(primera_palabra) >= 8 and texto_norm.startswith(primera_palabra):
-            return agencia
-    return None
-
-
-def _parsear_fecha(valor: str) -> Optional[date]:
-    try:
-        return datetime.strptime((valor or "").strip(), "%d/%m/%Y").date()
-    except ValueError:
-        return None
-
-
-def _parsear(texto_csv: str) -> list[dict]:
-    import csv
-
-    mapa_agencias = cargar_mapeo_agencias()
-    agencias_dartis_conocidas = set(mapa_agencias.values())
-    lector = csv.reader(io.StringIO(texto_csv))
-    encabezados = next(lector, [])
-    hnorm = [_norm_header(h) for h in encabezados]
-    idx = {}
-    for logico, alias in _COLUMNAS.items():
-        idx[logico] = next((i for i, h in enumerate(hnorm) if h in alias), None)
-    if idx["empresa_logistica"] is None or idx["cliente"] is None:
-        return []
-
-    def cel(fila, k):
-        return fila[idx[k]].strip() if idx[k] is not None and idx[k] < len(fila) else ""
-
-    out = []
-    for fila_sheet, fila in enumerate(lector, start=2):
-        if not fila:
-            continue
-        agencia_raw = cel(fila, "empresa_logistica")
-        if not agencia_raw:
-            continue
-        ocr_texto_crudo = cel(fila, "ocr_texto")
-        agencia_para_mapeo = agencia_raw
-        if ("/" not in agencia_raw and "|" not in agencia_raw
-                and normalizar_texto(agencia_raw, quitar_espacios=True).startswith("FLORALTECH")):
-            oculta = _agencia_oculta_en_ocr(ocr_texto_crudo)
-            if oculta:
-                agencia_para_mapeo = oculta
-        clientes = [c.strip() for c in cel(fila, "cliente").split("|") if c.strip()]
-        fincas = [c.strip() for c in cel(fila, "finca_exportador").split("|") if c.strip()]
-        agencia_dartis_default = mapa_agencias.get(normalizar_texto(agencia_para_mapeo, quitar_espacios=True))
-
-        lineas = []
-        for i, finca in enumerate(fincas):
-            cliente_i = clientes[i] if i < len(clientes) else ""
-            agencia_linea = (_agencia_embebida_en_cliente(cliente_i, agencias_dartis_conocidas)
-                              or agencia_dartis_default)
-            lineas.append({"finca_norm": normalizar_texto(finca), "agencia_dartis": agencia_linea})
-        out.append({
-            "fila_sheet": fila_sheet,
-            "fecha_documento": _parsear_fecha(cel(fila, "fecha_documento")),
-            "agencia_raw": agencia_raw,
-            "agencia_dartis": agencia_dartis_default,
-            "clientes": clientes,
-            "fincas": fincas,
-            "lineas": lineas,
-            "ocr_norm": normalizar_texto(ocr_texto_crudo),
-        })
-    return out
-
-
-async def _fetch_fotos(client: httpx.AsyncClient) -> dict[int, str]:
-    if not GOOGLE_SHEETS_API_KEY:
-        return {}
-    try:
-        r = await client.get(
-            f"https://sheets.googleapis.com/v4/spreadsheets/{GOOGLE_SHEETS_ID}/values/P2:P",
-            params={"valueRenderOption": "FORMULA", "key": GOOGLE_SHEETS_API_KEY},
-        )
-        r.raise_for_status()
-        valores = r.json().get("values", [])
-    except Exception:
-        return {}
-    fotos = {}
-    for i, fila in enumerate(valores, start=2):
-        texto = str(fila[0]) if fila else ""
-        m = FOTO_HYPERLINK_RE.search(texto)
-        if m:
-            fotos[i] = m.group(1)
-    return fotos
-
-
-async def fetch() -> list[dict]:
-    """Nunca lanza excepcion: si falla la red, devuelve el ultimo cache
-    bueno (o [] si nunca hubo). No se gatea por DEMO_MODE."""
-    global _cache
-    if not ENTREGAS_SHEET_URL:
-        return []
-    try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            r = await client.get(ENTREGAS_SHEET_URL)
-            r.raise_for_status()
-            entregas = _parsear(r.text)
-            fotos = await _fetch_fotos(client)
-            for e in entregas:
-                e["foto_url"] = fotos.get(e["fila_sheet"])
-            _cache = entregas
-    except Exception:
-        pass
-    return _cache
-
-
-def indexar_entregas_por_agencia(entregas: list[dict]) -> dict[str, list[dict]]:
-    indice: dict[str, list[dict]] = {}
-    for entrega in entregas:
-        agencias_vistas = {l["agencia_dartis"].upper() for l in entrega["lineas"] if l["agencia_dartis"]}
-        if not agencias_vistas and entrega.get("agencia_dartis"):
-            agencias_vistas = {entrega["agencia_dartis"].upper()}
-        for agencia in agencias_vistas:
-            indice.setdefault(agencia, []).append(entrega)
-    return indice
-
-
-def emparejar_entrega_local(fila_dartis: dict, entregas_por_agencia: dict[str, list[dict]]) -> Optional[dict]:
-    """Los TRES datos son obligatorios: agencia, finca (misma linea del
-    recibo) y fecha exacta. El cliente es una senal opcional para desempatar."""
-    agencia_dartis = (fila_dartis.get("courier_raw") or "").strip().upper()
-    candidatos_agencia = entregas_por_agencia.get(agencia_dartis) if agencia_dartis else None
-    if not candidatos_agencia:
-        return None
-    finca = normalizar_texto(fila_dartis.get("empresa"))
-    cliente = normalizar_texto(fila_dartis.get("cliente"))
-    destinatario = normalizar_texto(fila_dartis.get("destinatario"))
-    fecha_dartis = fila_dartis.get("fecha_dartis")
-    if not fecha_dartis:
-        return None
-    if isinstance(fecha_dartis, str):
-        try:
-            fecha_dartis = date.fromisoformat(fecha_dartis)
-        except ValueError:
-            return None
-
-    candidatos = []
-    for entrega in candidatos_agencia:
-        if entrega["fecha_documento"] != fecha_dartis:
-            continue
-        if not any(coincide_texto(finca, l["finca_norm"]) and (l["agencia_dartis"] or "").upper() == agencia_dartis
-                   for l in entrega["lineas"]):
-            continue
-        ocr = entrega.get("ocr_norm", "")
-        cliente_en_ocr = bool((cliente and cliente in ocr) or (destinatario and destinatario in ocr))
-        candidatos.append((not cliente_en_ocr, entrega, cliente_en_ocr))
-    if not candidatos:
-        return None
-    candidatos.sort(key=lambda x: x[0])
-    mejor = candidatos[0]
-    return {**mejor[1], "cliente_confirmado_ocr": mejor[2]}
-```
-
-### services/courier_duoplane.py — sincronización de shipments con Duoplane
+### courier_duoplane.py — sincronizacion con Duoplane
 
 `backend/app/services/courier_duoplane.py`
 ```python
@@ -3610,385 +3470,50 @@ async def sincronizar() -> dict:
     }
 ```
 
-### services/courier_reconciliation.py — motor de conciliación (equivalente a `Conciliador` del original)
-
-**Nota de rendimiento**: la primera versión de `_persistir()` insertaba fila por fila (~200ms/round-trip a Supabase medido en pruebas), lo que tardaba ~38 minutos con los ~10,700 facturas reales — parecía que el servidor se colgaba al arrancar. Corregido con `execute_values` (bulk insert, mismo patrón que `dartis_import.py`); un refresco completo tarda ~12-16s ahora.
-
-`backend/app/services/courier_reconciliation.py`
-```python
-"""Motor de conciliacion: cruza dartis_ventas (agrupado por id_pedido) vs
-manifiesto UPS/FedEx vs estado en vivo vs entregas de agencias locales.
-
-Clonado de REPORTEUPSFEDEX (clase Conciliador). Diferencia principal: no
-hay un Excel Dartis propio que subir — dartis_ventas ya provee esa
-informacion (ver hallazgo en el plan de la Fase 3), y el resultado se
-persiste en la tabla courier_reconciliation (en vez de vivir solo en
-memoria) para sobrevivir reinicios/redeploys.
-"""
-
-import asyncio
-import json
-from datetime import datetime, timezone
-from typing import Optional
-
-from sqlalchemy import text
-
-from app.database.connection import engine
-from app.services import courier_entregas_locales as entregas_locales
-from app.services import courier_fedex_client as fedex_client
-from app.services import courier_ups_client as ups_client
-
-UTC = timezone.utc
-
-_lock = asyncio.Lock()
-_ultimo_error: Optional[str] = None
-_ultimo_refresh: Optional[str] = None
-
-
-def _normalizar_courier(courier_raw: str) -> str:
-    c = (courier_raw or "").strip().upper()
-    if "UPS" in c:
-        return "UPS"
-    if "FEDEX" in c or "FDX" in c or "FED EX" in c:
-        return "FEDEX"
-    return c or "OTRO"
-
-
-def _obtener_base_dartis() -> list[dict]:
-    """dartis_ventas agrupado por id_pedido — reemplaza al Excel Dartis
-    del proyecto original (ver hallazgo del plan de la Fase 3)."""
-    with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT id_pedido AS factura, agencia_carga AS courier_raw, empresa, cliente,
-                   destinatario, vendedor AS vendedor_cliente, fecha AS fecha_dartis,
-                   SUM(total_piezas) AS cajas_dartis
-            FROM dartis_ventas
-            WHERE agencia_carga IS NOT NULL
-            GROUP BY id_pedido, agencia_carga, empresa, cliente, destinatario, vendedor, fecha
-        """)).mappings().all()
-
-    base = []
-    for r in rows:
-        base.append({
-            "factura": r["factura"],
-            "courier": _normalizar_courier(r["courier_raw"]),
-            "courier_raw": (r["courier_raw"] or "").strip(),
-            "empresa": r["empresa"],
-            "cliente": r["cliente"],
-            "destinatario": r["destinatario"],
-            "vendedor_cliente": r["vendedor_cliente"],
-            "fecha_dartis": r["fecha_dartis"].isoformat() if r["fecha_dartis"] else None,
-            "cajas_dartis": round(float(r["cajas_dartis"] or 0)),
-        })
-    return base
-
-
-def _obtener_manifiesto_ups() -> dict[int, dict]:
-    with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT factura, tracking, estado, fecha_manifiesto, ship_to, servicio, entrega_programada
-            FROM courier_ups_manifest ORDER BY factura, id
-        """)).mappings().all()
-    return _agrupar_por_factura(rows)
-
-
-def _obtener_manifiesto_fedex() -> dict[int, dict]:
-    with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT factura, tracking, estado_fedex AS estado, fecha_envio AS fecha_manifiesto,
-                   destinatario AS ship_to, fecha_entrega_fedex AS entrega_programada
-            FROM courier_fedex_envios WHERE factura IS NOT NULL ORDER BY factura, id
-        """)).mappings().all()
-    return _agrupar_por_factura(rows)
-
-
-def _agrupar_por_factura(rows) -> dict[int, dict]:
-    out: dict[int, dict] = {}
-    for r in rows:
-        f = r["factura"]
-        bulto = {"tracking": r["tracking"], "estado": r["estado"], "entrega_programada": r["entrega_programada"]}
-        if f in out:
-            out[f]["bultos"] += 1
-            out[f]["trackings_extra"] += 1
-            out[f]["trackings"].append(r["tracking"])
-            out[f]["detalle"].append(bulto)
-        else:
-            out[f] = {
-                "bultos": 1, "trackings_extra": 0,
-                "tracking": r["tracking"], "trackings": [r["tracking"]], "detalle": [bulto],
-                "estado": r["estado"], "fecha_manifiesto": r["fecha_manifiesto"],
-                "ship_to": r["ship_to"], "servicio": r.get("servicio"),
-                "entrega_programada": r["entrega_programada"],
-            }
-    return out
-
-
-def _evaluar(courier: str, dartis_total, bultos_csv, manif_api) -> str:
-    if courier == "UPS":
-        if bultos_csv is None:
-            return "SIN MANIFIESTO"
-        if dartis_total != bultos_csv:
-            return "DISCREPANCIA"
-        if manif_api is not None and manif_api != dartis_total:
-            return "DISCREPANCIA"
-        return "OK"
-    if manif_api is None:
-        return "PENDIENTE"
-    return "OK" if dartis_total == manif_api else "DISCREPANCIA"
-
-
-def _armar_fila(r: dict, csv_m: Optional[dict], live: dict, con_vivo: bool) -> dict:
-    bultos_csv = csv_m["bultos"] if csv_m else None
-    manif_api = live.get("cajas_manifiesto")
-    return {
-        **r,
-        "tracking": csv_m["tracking"] if csv_m else "",
-        "trackings": csv_m["trackings"] if csv_m else [],
-        "detalle_bultos": csv_m["detalle"] if csv_m else [],
-        "trackings_extra": csv_m["trackings_extra"] if csv_m else 0,
-        "bultos_csv": bultos_csv,
-        "estado_csv": csv_m["estado"] if csv_m else None,
-        "fecha_manifiesto": csv_m["fecha_manifiesto"] if csv_m else None,
-        "servicio": csv_m["servicio"] if csv_m else None,
-        "entrega_programada": csv_m["entrega_programada"] if csv_m else None,
-        "cajas_manifiesto": manif_api,
-        "estado_vivo": live.get("estado", "PENDIENTE") if con_vivo else "SIN COBERTURA",
-        "entrega_estimada": live.get("entrega_estimada", ""),
-        "ubicacion": live.get("ultimo_evento", ""),
-        "conciliacion": _evaluar(r["courier"], r["cajas_dartis"], bultos_csv, manif_api),
-        "diferencia": (r["cajas_dartis"] - bultos_csv) if bultos_csv is not None
-                      else ((r["cajas_dartis"] - manif_api) if manif_api is not None else None),
-        "fecha_entrega_real": None, "foto_url": None, "cliente_confirmado_ocr": False,
-    }
-
-
-def _armar_fila_otro(r: dict, match: Optional[dict]) -> dict:
-    base = {
-        **r,
-        "tracking": "", "trackings": [], "detalle_bultos": [], "trackings_extra": 0,
-        "bultos_csv": None, "fecha_manifiesto": None, "servicio": None,
-        "cajas_manifiesto": None, "ubicacion": "", "fecha_entrega_real": None,
-        "foto_url": None, "cliente_confirmado_ocr": False,
-    }
-    if not match:
-        return {**base, "estado_csv": None, "entrega_programada": None,
-                "estado_vivo": "PENDIENTE", "entrega_estimada": "",
-                "conciliacion": "PENDIENTE", "diferencia": None}
-    fecha_entrega = match["fecha_documento"].isoformat() if match["fecha_documento"] else None
-    return {
-        **base,
-        "estado_csv": "Entregado", "entrega_programada": fecha_entrega,
-        "cajas_manifiesto": r["cajas_dartis"],
-        "estado_vivo": "Entregado", "entrega_estimada": fecha_entrega,
-        "fecha_entrega_real": fecha_entrega,
-        "foto_url": match.get("foto_url"),
-        "cliente_confirmado_ocr": bool(match.get("cliente_confirmado_ocr")),
-        "conciliacion": "OK", "diferencia": 0,
-    }
-
-
-def _resumen(cajas: list[dict]) -> dict:
-    def agg(filtro=None):
-        rows = [c for c in cajas if filtro is None or filtro(c)]
-        return {
-            "guias": len(rows),
-            "vendidas": sum(c["cajas_dartis"] for c in rows),
-            "manifiesto": sum(c["cajas_manifiesto"] or 0 for c in rows),
-            "ok": sum(1 for c in rows if c["conciliacion"] == "OK"),
-            "discrepancias": sum(1 for c in rows if c["conciliacion"] == "DISCREPANCIA"),
-            "pendientes": sum(1 for c in rows if c["conciliacion"] == "PENDIENTE"),
-            "sin_manifiesto": sum(1 for c in rows if c["conciliacion"] == "SIN MANIFIESTO"),
-            "no_en_dartis": sum(1 for c in rows if c["conciliacion"] == "NO EN DARTIS"),
-        }
-    return {
-        "total": agg(),
-        "UPS": agg(lambda c: c["courier"] == "UPS"),
-        "FEDEX": agg(lambda c: c["courier"] == "FEDEX"),
-        "OTRO": agg(lambda c: c["courier"] not in ("UPS", "FEDEX")),
-    }
-
-
-def obtener_snapshot() -> dict:
-    """Lee el snapshot persistido (courier_reconciliation) — no dispara
-    ninguna llamada en vivo, solo lo que dejo el ultimo refrescar()."""
-    with engine.connect() as conn:
-        cajas = [dict(r) for r in conn.execute(text(
-            "SELECT * FROM courier_reconciliation ORDER BY (conciliacion != 'DISCREPANCIA'), factura"
-        )).mappings().all()]
-    return {
-        "cajas": cajas,
-        "resumen": _resumen(cajas) if cajas else {},
-        "actualizado": _ultimo_refresh,
-        "error": _ultimo_error,
-    }
-
-
-def obtener_discrepancias() -> list[dict]:
-    with engine.connect() as conn:
-        return [dict(r) for r in conn.execute(text("""
-            SELECT * FROM courier_reconciliation
-            WHERE conciliacion IN ('DISCREPANCIA', 'SIN MANIFIESTO', 'NO EN DARTIS')
-            ORDER BY factura
-        """)).mappings().all()]
-
-
-async def refrescar() -> dict:
-    global _ultimo_error, _ultimo_refresh
-    async with _lock:
-        error = None
-        try:
-            base = _obtener_base_dartis()
-        except Exception as e:
-            base, error = [], str(e)
-
-        try:
-            manif_ups = _obtener_manifiesto_ups()
-        except Exception as e:
-            manif_ups, error = {}, (error + " | " if error else "") + f"Manifiesto UPS: {e}"
-
-        try:
-            manif_fdx = _obtener_manifiesto_fedex()
-        except Exception as e:
-            manif_fdx, error = {}, (error + " | " if error else "") + f"Manifiesto FedEx: {e}"
-
-        facturas_dartis = {r["factura"] for r in base}
-        extras_ups = [f for f in manif_ups if f not in facturas_dartis]
-        extras_fdx = [f for f in manif_fdx if f not in facturas_dartis and f not in manif_ups]
-
-        guias_ups = [manif_ups[r["factura"]]["tracking"] for r in base
-                     if r["courier"] == "UPS" and r["factura"] in manif_ups]
-        guias_ups += [manif_ups[f]["tracking"] for f in extras_ups]
-        guias_fdx = [manif_fdx[r["factura"]]["tracking"] for r in base
-                     if r["courier"] == "FEDEX" and r["factura"] in manif_fdx]
-        guias_fdx += [manif_fdx[f]["tracking"] for f in extras_fdx]
-
-        try:
-            vivo_ups, vivo_fdx, entregas = await asyncio.gather(
-                ups_client.track(guias_ups), fedex_client.track(guias_fdx), entregas_locales.fetch()
-            )
-        except Exception as e:
-            vivo_ups, vivo_fdx, entregas = {}, {}, []
-            error = (error + " | " if error else "") + f"Track API: {e}"
-        vivo = {**vivo_ups, **vivo_fdx}
-        entregas_por_agencia = entregas_locales.indexar_entregas_por_agencia(entregas)
-
-        cajas = []
-        for r in base:
-            if r["courier"] not in ("UPS", "FEDEX"):
-                match = entregas_locales.emparejar_entrega_local(r, entregas_por_agencia)
-                cajas.append(_armar_fila_otro(r, match))
-                continue
-            m = manif_fdx.get(r["factura"]) if r["courier"] == "FEDEX" else manif_ups.get(r["factura"])
-            t = m["tracking"] if m else ""
-            cajas.append(_armar_fila(r, m, vivo.get(t, {}), t in vivo))
-
-        for f in extras_ups:
-            m = manif_ups[f]
-            t = m["tracking"]
-            r = {"factura": f, "courier": "UPS", "courier_raw": "UPS", "empresa": "",
-                 "cliente": m.get("ship_to", ""), "destinatario": m.get("ship_to", ""),
-                 "vendedor_cliente": None, "cajas_dartis": 0, "fecha_dartis": None}
-            fila = _armar_fila(r, m, vivo.get(t, {}), t in vivo)
-            fila["conciliacion"] = "NO EN DARTIS"
-            cajas.append(fila)
-
-        for f in extras_fdx:
-            m = manif_fdx[f]
-            t = m["tracking"]
-            r = {"factura": f, "courier": "FEDEX", "courier_raw": "FEDEX", "empresa": "",
-                 "cliente": m.get("ship_to", ""), "destinatario": m.get("ship_to", ""),
-                 "vendedor_cliente": None, "cajas_dartis": 0, "fecha_dartis": None}
-            fila = _armar_fila(r, m, vivo.get(t, {}), t in vivo)
-            fila["conciliacion"] = "NO EN DARTIS"
-            cajas.append(fila)
-
-        _persistir(cajas)
-        _ultimo_error = error
-        _ultimo_refresh = datetime.now(UTC).isoformat()
-
-        return {
-            "resumen": _resumen(cajas),
-            "actualizado": _ultimo_refresh,
-            "error": _ultimo_error,
-            "total_facturas": len(cajas),
-        }
-
-
-_PERSISTIR_COLUMNAS = [
-    "factura", "courier", "courier_raw", "empresa", "cliente", "destinatario", "vendedor_cliente",
-    "cajas_dartis", "fecha_dartis", "tracking", "trackings", "detalle_bultos", "trackings_extra",
-    "bultos_csv", "estado_csv", "fecha_manifiesto", "servicio", "entrega_programada",
-    "cajas_manifiesto", "estado_vivo", "entrega_estimada", "ubicacion", "conciliacion", "diferencia",
-    "fecha_entrega_real", "foto_url", "cliente_confirmado_ocr",
-]
-
-
-def _persistir(cajas: list[dict]) -> None:
-    """Reemplaza el snapshot completo (igual semantica que el original:
-    siempre refleja el ultimo refresco, no un merge incremental).
-
-    Insercion masiva via execute_values (mismo patron que dartis_import.py):
-    con miles de facturas, insertar fila por fila tarda minutos por la
-    latencia de red hacia Supabase (~200ms/round-trip medido); en batch es
-    una sola ida y vuelta por lote."""
-    from psycopg2.extras import execute_values
-
-    tuples = [
-        (
-            c["factura"], c["courier"], c["courier_raw"], c["empresa"], c["cliente"], c["destinatario"],
-            c["vendedor_cliente"], c["cajas_dartis"], c["fecha_dartis"], c["tracking"],
-            json.dumps(c["trackings"]), json.dumps(c["detalle_bultos"]), c["trackings_extra"],
-            c["bultos_csv"], c["estado_csv"], c["fecha_manifiesto"], c["servicio"], c["entrega_programada"],
-            c["cajas_manifiesto"], c["estado_vivo"], c["entrega_estimada"], c["ubicacion"],
-            c["conciliacion"], c["diferencia"], c["fecha_entrega_real"], c["foto_url"],
-            c["cliente_confirmado_ocr"],
-        )
-        for c in cajas
-    ]
-
-    with engine.begin() as conn:
-        conn.execute(text("TRUNCATE courier_reconciliation"))
-        if not tuples:
-            return
-        raw = conn.connection.cursor()
-        execute_values(raw, f"""
-            INSERT INTO courier_reconciliation ({", ".join(_PERSISTIR_COLUMNAS)}) VALUES %s
-        """, tuples, page_size=1000)
-```
-
-### api/torre_control.py
+### torre_control.py — endpoints y subida de manifiestos
 
 `backend/app/api/torre_control.py`
 ```python
-"""API del modulo Torre de Control: conciliacion de cajas dartis_ventas
-vs manifiestos de UPS/FedEx y entregas de agencias locales.
+"""API del modulo Torre de Control: conciliacion de cajas de dartis_ventas
+contra los manifiestos de UPS y FedEx.
 
-Clonado de REPORTEUPSFEDEX (app.py). El scraping/reconciliacion en vivo
-se mueve a app.services.courier_reconciliation; este router solo expone
-los endpoints y las subidas de archivo (que aqui parsean directo a
-Postgres, sin el hack de persistir vía `git commit` del original).
+Clonado de REPORTEUPSFEDEX (app.py). La conciliacion vive en
+app.services.courier_reconciliation; este router solo expone los endpoints
+y las subidas de archivo (que aqui parsean directo a Postgres, sin el hack
+de persistir via `git commit` del original).
+
+Alcance: solo UPS y FedEx. No se consulta tracking en vivo y las agencias de
+carga locales quedan fuera del proceso — ver courier_reconciliation.
 """
 
-from datetime import date, datetime, timedelta, timezone
+import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from psycopg2.extras import execute_values
 from sqlalchemy import text
 
 from app.database.connection import engine
-from app.services import courier_duoplane, courier_fedex_client
+from app.services import courier_duoplane
 from app.services import courier_parsers
 from app.services import courier_reconciliation as motor
 
 router = APIRouter(prefix="/torre-control", tags=["Torre de Control"])
 
 UTC = timezone.utc
-FEDEX_DIAS_REFRESCO_ESTADO = 5
 
 
 @router.get("/estado")
 def estado():
-    return motor.obtener_snapshot()
+    """Snapshot completo: resumen + detalle de cajas (lo consume el tablero).
+
+    `refresh_seconds` se agrega aqui (no vive en el snapshot persistido)
+    porque el tablero lo usa solo para calcular la cuenta regresiva del
+    proximo refresco automatico, que es un dato de configuracion del
+    scheduler (app.main), no del resultado de la conciliacion.
+    """
+    return {**motor.obtener_snapshot(),
+            "refresh_seconds": int(os.getenv("REFRESH_SECONDS", "300"))}
 
 
 @router.get("/discrepancias")
@@ -4012,23 +3537,58 @@ async def subir_ups(archivo: UploadFile):
         raise HTTPException(status_code=400, detail="Se esperaba un archivo .csv")
     contenido = await archivo.read()
     try:
-        filas = courier_parsers.parse_ups_csv(contenido)
+        filas, descartadas = courier_parsers.parse_ups_csv(contenido)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if not filas:
+        raise HTTPException(
+            status_code=400,
+            detail="El CSV no trajo ninguna fila con token 'PO:<numero>' en "
+                   "'Reference Number(s)'. Sin ese token no hay como cruzar contra Dartis.")
+
+    # Deduplica dentro del propio archivo: un UPSERT no admite la misma clave
+    # dos veces en el mismo lote.
+    por_tracking = {f["tracking"]: f for f in filas if f["tracking"]}
 
     columnas = ["factura", "tracking", "referencia", "estado", "fecha_manifiesto",
-                "ship_to", "destino", "servicio", "entrega_programada"]
-    tuples = [tuple(f[c] for c in columnas) for f in filas]
+                "ship_to", "destino", "servicio", "entrega_programada", "archivo"]
+    tuples = [tuple(f.get(c) if c != "archivo" else archivo.filename for c in columnas)
+              for f in por_tracking.values()]
 
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE courier_ups_manifest"))
+        previos = {r[0] for r in conn.execute(text(
+            "SELECT tracking FROM courier_ups_manifest")).all()}
         if tuples:
             raw = conn.connection.cursor()
+            # UPSERT, no TRUNCATE. El manifiesto de UPS es acumulativo y se
+            # vuelve a subir entero: vaciar la tabla antes de insertar borraba
+            # todo el historial anterior y dejaba solo el ultimo archivo.
             execute_values(raw, f"""
                 INSERT INTO courier_ups_manifest ({", ".join(columnas)}) VALUES %s
+                ON CONFLICT (tracking) DO UPDATE SET
+                    factura            = EXCLUDED.factura,
+                    referencia         = EXCLUDED.referencia,
+                    estado             = EXCLUDED.estado,
+                    fecha_manifiesto   = EXCLUDED.fecha_manifiesto,
+                    ship_to            = EXCLUDED.ship_to,
+                    destino            = EXCLUDED.destino,
+                    servicio           = EXCLUDED.servicio,
+                    entrega_programada = EXCLUDED.entrega_programada,
+                    archivo            = EXCLUDED.archivo,
+                    actualizado_at     = now()
             """, tuples, page_size=1000)
 
-    return {"ok": True, "archivo": archivo.filename, "bultos_importados": len(filas)}
+    nuevos = sum(1 for t in por_tracking if t not in previos)
+    return {
+        "ok": True,
+        "archivo": archivo.filename,
+        "bultos_importados": len(por_tracking),
+        "nuevos": nuevos,
+        "actualizados": len(por_tracking) - nuevos,
+        "descartados_sin_po": descartadas,
+        "duplicados_en_archivo": len(filas) - len(por_tracking),
+        "facturas": len({f["factura"] for f in por_tracking.values()}),
+    }
 
 
 @router.post("/subir-fedex")
@@ -4041,66 +3601,47 @@ async def subir_fedex(archivo: UploadFile):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No se pudo leer el PDF: {e}")
 
-    nuevos = 0
+    # Un envio sin token "PO:" no se puede cruzar contra Dartis: se descarta,
+    # pero se cuenta.
+    sin_po = sum(1 for f in filas if f["tracking"] and f["factura"] is None)
+    por_tracking = {f["tracking"]: f for f in filas
+                    if f["tracking"] and f["factura"] is not None}
+
+    columnas = ["tracking", "factura", "referencia", "destinatario", "ciudad",
+                "awb", "fecha_envio", "fecha_registro", "archivo"]
+    ahora = datetime.now(UTC)
+    tuples = [
+        (f["tracking"], f["factura"], f["referencia"], f["destinatario"],
+         f["ciudad"], f["awb"], f["fecha_envio"], ahora, archivo.filename)
+        for f in por_tracking.values()
+    ]
+
     with engine.begin() as conn:
-        for f in filas:
-            if not f["tracking"]:
-                continue
-            existe = conn.execute(text(
-                "SELECT 1 FROM courier_fedex_envios WHERE tracking = :t"
-            ), {"t": f["tracking"]}).first()
-            if existe:
-                continue
-            conn.execute(text("""
-                INSERT INTO courier_fedex_envios
-                    (tracking, factura, referencia, destinatario, ciudad, awb, fecha_envio)
-                VALUES (:tracking, :factura, :referencia, :destinatario, :ciudad, :awb, :fecha_envio)
-            """), f)
-            nuevos += 1
+        previos = {r[0] for r in conn.execute(text(
+            "SELECT tracking FROM courier_fedex_envios")).all()}
+        if tuples:
+            # Insercion en lote: fila por fila costaba dos round-trips por
+            # envio (~195 ms cada uno contra Supabase), minutos para un PDF
+            # grande. Cada PDF es un despacho puntual y sus datos no cambian
+            # despues, asi que un tracking ya cargado no se vuelve a escribir.
+            raw = conn.connection.cursor()
+            execute_values(raw, f"""
+                INSERT INTO courier_fedex_envios ({", ".join(columnas)}) VALUES %s
+                ON CONFLICT (tracking) DO NOTHING
+            """, tuples, page_size=1000)
 
-    # Refresca estado real (API de FedEx) de los recien subidos + todo lo
-    # despachado dentro de +/- FEDEX_DIAS_REFRESCO_ESTADO dias de hoy.
-    hoy = datetime.now(UTC).date()
-    limite_atras = hoy - timedelta(days=FEDEX_DIAS_REFRESCO_ESTADO)
-    limite_adelante = hoy + timedelta(days=FEDEX_DIAS_REFRESCO_ESTADO)
-    with engine.connect() as conn:
-        candidatos = conn.execute(text(
-            "SELECT tracking, fecha_envio, fecha_registro FROM courier_fedex_envios"
-        )).all()
-
-    a_consultar = {f["tracking"] for f in filas if f["tracking"]}
-    for tracking, fecha_envio, fecha_registro in candidatos:
-        fecha = _parsear_fecha_fedex(fecha_envio) or _parsear_fecha_fedex(str(fecha_registro) if fecha_registro else "")
-        if fecha is None or limite_atras <= fecha <= limite_adelante:
-            a_consultar.add(tracking)
-
-    estados = await courier_fedex_client.consultar_estado_real(sorted(a_consultar))
-    if estados:
-        with engine.begin() as conn:
-            for tracking, info in estados.items():
-                conn.execute(text("""
-                    UPDATE courier_fedex_envios
-                    SET estado_fedex = :estado_fedex, fecha_entrega_fedex = :fecha_entrega_fedex
-                    WHERE tracking = :tracking
-                """), {"tracking": tracking, **info})
-
+    nuevos = sum(1 for t in por_tracking if t not in previos)
     return {
-        "ok": True, "archivo": archivo.filename,
-        "envios_en_pdf": len(filas), "nuevos": nuevos, "duplicados": len(filas) - nuevos,
-        "estados_actualizados": len(estados),
+        "ok": True,
+        "archivo": archivo.filename,
+        "envios_en_pdf": len(filas),
+        "nuevos": nuevos,
+        "duplicados": len(por_tracking) - nuevos,
+        "descartados_sin_po": sin_po,
+        "facturas": len({f["factura"] for f in por_tracking.values()}),
     }
-
-
-def _parsear_fecha_fedex(valor: str):
-    for fmt in ("%m/%d/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime((valor or "").strip()[:19], fmt).date()
-        except ValueError:
-            continue
-    return None
 ```
 
----
 
 ## 12. Backend — módulo Auditoría de Etiquetas
 
@@ -7065,7 +6606,19 @@ $("#form-posteo").addEventListener("submit", (e) => {
 });
 ```
 
-### pages/torre-control.html + .js (Fase 3)
+### pages/torre-control.html + .js — "Fedex-Ups See" (Fase 3)
+
+**Rediseñado el 2026-09-05** para verse como el dashboard de producción de
+REPORTEUPSFEDEX (`reporte-ups-fedex.onrender.com`), su fuente original: header
+verde con pulso "EN VIVO", filtros de fecha/courier/estado del courier
+(checklist auto-completado con los valores vistos)/entrega a tiempo-retraso/
+conciliación, tabla con una fila por bulto y enlaces directos de consulta a
+UPS/FedEx. Se agregó la columna **Destinatario** (antes solo se mostraba
+Cliente) y se quitaron las tarjetas KPI, que el original no tiene. El sidebar
+de BLIS se conservó — quitarlo habría roto la navegación a los otros 20
+módulos —, así que el diseño vive en estilos propios de la página (clases
+`torre-*`, mismo patrón que `prov-*` en `proveedores.html`) en vez de
+reemplazar el shell completo.
 
 `frontend/pages/torre-control.html`
 ```html
@@ -7076,113 +6629,383 @@ $("#form-posteo").addEventListener("submit", (e) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BLIS · Fedex-Ups See</title>
   <link rel="stylesheet" href="/css/styles.css" />
+  <style>
+    /* ─── Fedex-Ups See ───────────────────────────────────────────────────
+       Alineado al sistema de diseño de BLIS (el mismo de Cotizaciones): hero
+       con el gradiente de marca, tipografia Outfit heredada de styles.css y
+       tabla con el tratamiento de .cot-tabla. Antes tenia paleta propia
+       (oliva #6F7F1F sobre papel #F6F6F1) y sus propias fuentes (Archivo +
+       IBM Plex Mono), portadas de REPORTEUPSFEDEX.
+
+       Los nombres de clase "torre-" se conservan a proposito: torre-control.js
+       los genera al pintar cada fila. Cambia el estilo, no el marcado. */
+    :root {
+      /* colores de marca de cada courier: identifican, no decoran */
+      --torre-ups: #8a6500;
+      --torre-fedex: #4d148c;
+    }
+
+    body[data-page="torre-control"] .content { background: var(--bg); }
+    body[data-page="torre-control"] .page-header { display: none; }
+
+    /* cifras de ancho fijo, igual que el resto del sistema */
+    .torre-mono { font-variant-numeric: tabular-nums; }
+
+    /* ── Hero ────────────────────────────────────────────────────────── */
+    .torre-header {
+      background: linear-gradient(135deg, #14532d 0%, #1d7a4c 60%, #2f9c66 100%);
+      color: #fff;
+      padding: 28px 32px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      align-items: center;
+      justify-content: space-between;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .torre-header > * { position: relative; z-index: 1; }
+    .torre-header::before {
+      content: "";
+      position: absolute;
+      width: 320px; height: 320px;
+      border: 52px solid rgba(255, 255, 255, .05);
+      border-radius: 50%;
+      right: -80px; top: -150px;
+      pointer-events: none;
+    }
+
+    .torre-header h1 {
+      font-size: 23px;
+      font-weight: 600;
+      letter-spacing: -.35px;
+      margin: 0;
+      text-transform: none;
+    }
+    .torre-header h1 small {
+      display: block;
+      font-weight: 400;
+      font-size: 12.5px;
+      letter-spacing: .2px;
+      opacity: .8;
+      margin-top: 5px;
+      text-transform: none;
+    }
+
+    .torre-live {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+    }
+    .torre-pulse {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #7ee2a8;
+      animation: torrePulse 1.6s infinite;
+      flex: 0 0 auto;
+    }
+    @keyframes torrePulse { 50% { opacity: .25; } }
+    @media (prefers-reduced-motion: reduce) { .torre-pulse { animation: none; } }
+    .torre-live .torre-when { opacity: .8; }
+
+    .torre-live .btn {
+      font-size: 12.5px;
+      font-weight: 500;
+      padding: 7px 13px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .torre-live .btn-primary {
+      background: #fff;
+      border: 1px solid #fff;
+      color: var(--primary-dark);
+      box-shadow: none;
+    }
+    .torre-live .btn-primary:hover { background: #eef7f1; border-color: #eef7f1; }
+    .torre-live .btn-secondary {
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .35);
+      color: #fff;
+    }
+    .torre-live .btn-secondary:hover { background: rgba(255, 255, 255, .22); }
+    .torre-live .btn:disabled { opacity: .5; cursor: wait; }
+
+    /* ── Filtros ─────────────────────────────────────────────────────── */
+    .torre-filtros {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+    .torre-filtros input,
+    .torre-filtros select {
+      font: inherit;
+      font-size: 13px;
+      padding: 8px 11px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--card-bg);
+      color: var(--text);
+    }
+    .torre-filtros input:focus-visible,
+    .torre-filtros select:focus-visible {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: var(--focus-ring);
+    }
+    .torre-filtros input[type="search"] { min-width: 240px; }
+    .torre-filtros label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--text-muted); font-weight: 500;
+    }
+
+    .torre-multiselect { position: relative; }
+    .torre-ms-btn {
+      font: inherit; font-size: 13px; padding: 8px 11px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card-bg); cursor: pointer; color: var(--text);
+    }
+    .torre-ms-btn:hover { border-color: var(--primary); }
+    .torre-ms-panel {
+      position: absolute; top: calc(100% + 4px); left: 0;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-lg);
+      padding: 10px 14px; z-index: 20;
+      display: flex; flex-direction: column; gap: 8px; white-space: nowrap;
+    }
+    .torre-ms-panel[hidden] { display: none; }
+    .torre-ms-panel label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer;
+    }
+
+    /* ── Tabla: mismo tratamiento que .cot-tabla ─────────────────────── */
+    .torre-tabla-wrap {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: auto;
+      max-height: 620px;
+    }
+    .torre-tabla-wrap table {
+      width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1080px;
+      font-variant-numeric: tabular-nums;
+    }
+    .torre-tabla-wrap thead th {
+      position: sticky; top: 0; z-index: 1;
+      background: var(--card-bg);
+      color: var(--text-muted);
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      /* con border-collapse el borde del th pegajoso se pierde al hacer
+         scroll; el inset lo dibuja igual */
+      box-shadow: inset 0 -1px 0 var(--border);
+    }
+    .torre-tabla-wrap tbody td {
+      padding: 11px 10px;
+      border-top: 1px solid var(--border-subtle);
+      vertical-align: middle;
+    }
+    .torre-tabla-wrap tbody tr:hover { background: var(--bg); }
+
+    /* ── Chips y estados ─────────────────────────────────────────────── */
+    .torre-courier {
+      font-weight: 600; font-size: 11px; letter-spacing: .3px;
+      padding: 3px 9px; border-radius: 999px; display: inline-block;
+      border: 1px solid transparent;
+    }
+    .torre-courier.UPS { background: #fdf3dc; color: var(--torre-ups); border-color: #ecd9a4; }
+    .torre-courier.FEDEX { background: #f2e9fa; color: var(--torre-fedex); border-color: #ddcaf0; }
+
+    .torre-riel { display: flex; align-items: center; gap: 6px; }
+    .torre-riel .n {
+      min-width: 42px; text-align: center; padding: 4px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-2); border: 1px solid var(--border);
+      font-weight: 600; font-size: 12px;
+    }
+    .torre-riel .sep { color: var(--text-muted); font-size: 11px; }
+    .torre-riel.mal .n:not(:first-child) {
+      border-color: #f0c9c5; background: var(--danger-light); color: var(--danger);
+    }
+    .torre-riel.ok .n { border-color: #cfe6da; background: var(--primary-light); }
+
+    .torre-estado {
+      display: inline-block;
+      font-weight: 600; font-size: 11px; letter-spacing: .2px;
+      padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+      border: 1px solid transparent;
+    }
+    .torre-estado.OK { color: #15603c; background: var(--primary-light); border-color: #cfe6da; }
+    .torre-estado.DISCREPANCIA { color: var(--danger); background: var(--danger-light); border-color: #f5d5d2; }
+    .torre-estado.PENDIENTE { color: #475569; background: #f1f5f9; border-color: #dde3ea; }
+    .torre-estado.SINMAN { color: #8a6100; background: #fff8e6; border-color: #f0d9a0; }
+    .torre-estado.NODARTIS { color: #6b21a8; background: #f5ecfc; border-color: #e2cff2; }
+
+    .torre-dif { font-weight: 600; }
+    .torre-dif.neg { color: var(--danger); }
+
+    td.torre-bulto-cell { padding: 0; vertical-align: top; }
+    .torre-bulto-cell .torre-bulto-line {
+      padding: 10px; min-height: 38px; display: flex; align-items: center; gap: 8px;
+    }
+    .torre-bulto-cell .torre-bulto-line + .torre-bulto-line { border-top: 1px solid var(--border-subtle); }
+    tr.torre-bulto-row td { border-top: 1px solid var(--border-subtle); }
+    /* separador mas marcado donde empieza cada factura */
+    tr.torre-factura-inicio td { border-top: 1px solid var(--border); }
+    td.torre-dato-factura { vertical-align: middle; }
+    td.torre-tracking-cell { white-space: nowrap; }
+
+    .torre-tag {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-weight: 500; font-size: 12px;
+      color: var(--text); white-space: nowrap;
+    }
+    .torre-tag .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+
+    .torre-btn-consulta {
+      display: inline-block; background: var(--primary); color: #fff;
+      font-weight: 500; font-size: 11.5px; padding: 5px 11px;
+      border-radius: var(--radius-sm);
+      text-decoration: none; white-space: nowrap;
+    }
+    .torre-btn-consulta:hover { background: var(--primary-hover); }
+
+    .torre-vacio {
+      padding: 32px 8px; text-align: center;
+      color: var(--text-muted); font-size: 13.5px;
+    }
+
+    .torre-info-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .torre-info-tag {
+      font-size: 11px; font-weight: 600; letter-spacing: .2px;
+      background: #fff8e6; border: 1px solid #f0d9a0; color: #8a6100;
+      padding: 3px 10px; border-radius: 999px; display: none;
+    }
+    .torre-info-tag.ok { background: var(--primary-light); border-color: #cfe6da; color: #15603c; }
+    .torre-info-tag.err { background: var(--danger-light); border-color: #f5d5d2; color: var(--danger); }
+
+    .torre-footer {
+      font-size: 12px; color: var(--text-muted); margin-top: 14px; line-height: 1.6;
+    }
+
+    @media (max-width: 640px) { .torre-header { padding: 20px 18px; } }
+  </style>
 </head>
 <body data-page="torre-control">
   <div id="sidebar" class="sidebar"></div>
 
   <main class="content" id="content">
-    <div class="page-header">
-      <h1><i class="ph ph-radar"></i> Fedex-Ups See</h1>
-      <p class="page-subtitle">Concilia las cajas de dartis_ventas contra los manifiestos de UPS, FedEx y agencias locales.</p>
-    </div>
 
-    <div class="import-card">
-      <div class="import-actions" style="justify-content: flex-start; gap: .75rem; flex-wrap: wrap;">
-        <button id="btnRefrescar" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> Actualizar ahora</button>
-        <button id="btnDuoplane" class="btn btn-secondary"><i class="ph ph-package"></i> Sincronizar Duoplane</button>
+    <div class="torre-header">
+      <h1>Cajas vendidas y despachadas
+        <small>Bellaflor DARTIS × UPS × FEDEX — Departamento de Logística</small>
+      </h1>
+      <div class="torre-live">
+        <span class="torre-pulse" aria-hidden="true"></span>
+        <span>EN VIVO · <span class="torre-when" id="when">cargando…</span></span>
+        <span id="count" class="torre-when"></span>
         <label class="btn btn-secondary" style="cursor:pointer;">
-          <i class="ph ph-upload-simple"></i> Subir manifiesto UPS (.csv)
-          <input type="file" id="fileUps" accept=".csv" style="display:none;" />
+          <span id="labelFileUps">Subir manifiesto UPS (.csv)</span>
+          <input type="file" id="fileUps" accept=".csv" hidden />
         </label>
         <label class="btn btn-secondary" style="cursor:pointer;">
-          <i class="ph ph-upload-simple"></i> Subir manifiesto FedEx (.pdf)
-          <input type="file" id="fileFedex" accept=".pdf" style="display:none;" />
+          <span id="labelFileFedex">Subir manifiesto FedEx (.pdf)</span>
+          <input type="file" id="fileFedex" accept=".pdf" hidden />
         </label>
-        <span id="actualizado" class="page-subtitle"></span>
+        <button id="btnDuoplane" type="button" class="btn btn-secondary">Sincronizar Duoplane</button>
+        <button id="btnRefrescar" type="button" class="btn btn-primary">Actualizar ahora</button>
       </div>
-      <div id="resultado" class="resultado"></div>
     </div>
 
-    <div class="card-grid" id="kpis" style="margin-top: 1.5rem;">
-      <div class="summary-card"><span class="summary-card-value" id="kpi-guias">0</span><span class="summary-card-label">Facturas</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-ok">0</span><span class="summary-card-label">OK</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-discrepancias">0</span><span class="summary-card-label">Discrepancias</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-pendientes">0</span><span class="summary-card-label">Pendientes</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-sin-manifiesto">0</span><span class="summary-card-label">Sin manifiesto</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-no-en-dartis">0</span><span class="summary-card-label">No en Dartis</span></div>
+    <div class="torre-filtros">
+      <input id="q" type="search" placeholder="Buscar guía, cliente, factura o destinatario…" aria-label="Buscar" />
+      <label>Fecha de salida desde
+        <input id="fDesde" type="date" aria-label="Fecha de salida desde" />
+      </label>
+      <label>hasta
+        <input id="fHasta" type="date" aria-label="Fecha de salida hasta" />
+      </label>
+      <select id="fCourier" aria-label="Filtrar por courier">
+        <option value="">Todos los couriers</option>
+        <option value="UPS">UPS</option>
+        <option value="FEDEX">FedEx</option>
+      </select>
+      <div class="torre-multiselect" id="fEstadoCourier">
+        <button type="button" class="torre-ms-btn" aria-haspopup="true" aria-expanded="false">Estado courier ▾</button>
+        <div class="torre-ms-panel" hidden>
+          <label><input type="checkbox" value="In Transit" checked /> In Transit</label>
+          <label><input type="checkbox" value="Manifest" checked /> Manifest</label>
+          <label><input type="checkbox" value="Exception" checked /> Exception</label>
+          <label><input type="checkbox" value="" checked /> Sin estado</label>
+          <label><input type="checkbox" value="Delivered" checked /> Delivered</label>
+        </div>
+      </div>
+      <select id="fPlanif" aria-label="Filtrar por entrega planificación">
+        <option value="">Todos - Entrega Planificación</option>
+        <option value="A TIEMPO">A tiempo</option>
+        <option value="RETRASO">Retraso</option>
+      </select>
+      <select id="fEstado" aria-label="Filtrar por conciliación">
+        <option value="">Todos los estados de conciliación</option>
+        <option value="DISCREPANCIA">Solo discrepancias</option>
+        <option value="SIN MANIFIESTO">Sin manifiesto UPS</option>
+        <option value="NO EN DARTIS">En manifiesto, no en Dartis</option>
+        <option value="OK" selected>Solo OK</option>
+        <option value="PENDIENTE">Solo pendientes</option>
+      </select>
     </div>
 
-    <nav class="subtabs" style="margin-top: 1.5rem;">
-      <button class="subtab active" data-tab="principal">Principal (UPS / FedEx)</button>
-      <button class="subtab" data-tab="locales">Agencias locales</button>
-    </nav>
+    <div id="resultado" class="resultado"></div>
 
-    <section id="panel-principal" class="subpanel active">
-      <div class="import-card">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Estado</label>
-            <select id="filtroEstado">
-              <option value="">Todos</option>
-              <option value="OK">OK</option>
-              <option value="DISCREPANCIA">Discrepancia</option>
-              <option value="SIN MANIFIESTO">Sin manifiesto</option>
-              <option value="NO EN DARTIS">No en Dartis</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Courier</label>
-            <select id="filtroCourier">
-              <option value="">Ambos</option>
-              <option value="UPS">UPS</option>
-              <option value="FEDEX">FedEx</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Buscar</label>
-            <input type="search" id="filtroBuscar" placeholder="factura, cliente, tracking..." />
-          </div>
-        </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Factura</th><th>Courier</th><th>Empresa</th><th>Cliente</th>
-              <th>Cajas Dartis</th><th>Manifiesto</th><th>Diferencia</th>
-              <th>Estado vivo</th><th>Ubicación</th><th>Conciliación</th>
-            </tr>
-          </thead>
-          <tbody id="tablaPrincipal"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
-        </table>
-      </div>
-    </section>
+    <div class="torre-tabla-wrap" id="tablaDetallada">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha de salida</th>
+            <th>Courier</th>
+            <th>Vendedor</th>
+            <th>Empresa</th>
+            <th>Cliente / Factura</th>
+            <th>Destinatario</th>
+            <th>Tracking / CRN</th>
+            <th>Estado Courier</th>
+            <th>Entrega Planificación</th>
+            <th>Consulta</th>
+            <th title="Total Dartis → bultos en el manifiesto del courier">Dartis → Manifiesto</th>
+            <th>Dif.</th>
+            <th>Conciliación</th>
+          </tr>
+        </thead>
+        <tbody id="cuerpo">
+          <tr><td colspan="13" class="torre-vacio">Cargando información…</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-    <section id="panel-locales" class="subpanel">
-      <div class="import-card">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Estado</label>
-            <select id="filtroEstadoLocal">
-              <option value="">Todos</option>
-              <option value="OK">OK</option>
-              <option value="PENDIENTE">Pendiente</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Buscar</label>
-            <input type="search" id="filtroBuscarLocal" placeholder="factura, agencia, cliente..." />
-          </div>
-        </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Factura</th><th>Agencia</th><th>Empresa</th><th>Cliente</th>
-              <th>Fecha Dartis</th><th>Cajas</th><th>Entrega real</th><th>Conciliación</th>
-            </tr>
-          </thead>
-          <tbody id="tablaLocales"><tr><td colspan="8" class="loading">Cargando...</td></tr></tbody>
-        </table>
-      </div>
-    </section>
+    <div class="torre-info-tags">
+      <span class="torre-info-tag" id="fuenteTag"></span>
+      <span class="torre-info-tag" id="duoplaneTag" style="display:none"></span>
+    </div>
+
+    <p class="torre-footer">Cruce: dartis_ventas (agrupado por id_pedido, total de cajas) contra el manifiesto de
+      cada courier (courier_ups_manifest: CSV acumulado de UPS · courier_fedex_envios: PDF por despacho de FedEx).
+      No se consulta tracking en línea: la conciliación se resuelve entre esos dos documentos. Las agencias de
+      carga locales (courier "OTRO") quedan fuera del proceso — no existe manifiesto electrónico contra el cual
+      cruzarlas. "SIN MANIFIESTO" = la factura está en Dartis pero su PO no aparece en el manifiesto de UPS;
+      "PENDIENTE" (FedEx) = el PO todavía no llegó en ningún PDF; "NO EN DARTIS" = el PO está en un manifiesto
+      pero ninguna factura de Dartis lo referencia.</p>
+
   </main>
 
   <script type="module" src="/js/layout.js"></script>
@@ -7193,195 +7016,296 @@ $("#form-posteo").addEventListener("submit", (e) => {
 
 `frontend/pages/torre-control.js`
 ```javascript
+/* ─── Torre de Control ("Fedex-Ups See") ───────────────────────────────────
+   Portado de REPORTEUPSFEDEX (static/dashboard.html, script inline) a un
+   módulo ES para seguir la convención del resto de BLIS. Misma lógica de
+   filtrado, misma tabla por bulto, mismos colores — adaptado a los
+   endpoints /api/torre-control/* y al modelo de datos de
+   courier_reconciliation (sin id_comercializadora, sin fuente_excel/csv/
+   fedex: la fuente aquí siempre es dartis_ventas + las tablas de
+   manifiesto, no archivos).
+   ─────────────────────────────────────────────────────────────────────── */
+
 import { apiGet, apiPost } from "/js/api.js";
 
-const BADGE = {
-  OK: "badge-green",
-  DISCREPANCIA: "badge-red",
-  PENDIENTE: "badge-gray",
-  "SIN MANIFIESTO": "badge-orange",
-  "NO EN DARTIS": "badge-red",
-};
-
-let snapshot = { cajas: [], resumen: {} };
+let DATA = { cajas: [], resumen: {} };
+let refreshMs = 300000, timerUI = null, nextAt = null;
 
 const $ = (sel) => document.querySelector(sel);
-
-// ---------- Sub-pestanas ----------
-document.querySelectorAll(".subtab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".subtab").forEach((t) => t.classList.remove("active"));
-    document.querySelectorAll(".subpanel").forEach((p) => p.classList.remove("active"));
-    tab.classList.add("active");
-    $(`#panel-${tab.dataset.tab}`).classList.add("active");
-  });
-});
+const fmt = (n) => (n == null ? "—" : n.toLocaleString ? n.toLocaleString("es-EC") : n);
 
 // ---------- Carga de datos ----------
-async function cargarEstado() {
-  snapshot = await apiGet("/torre-control/estado");
-  renderKpis();
-  renderTablaPrincipal();
-  renderTablaLocales();
-  if (snapshot.actualizado) {
-    $("#actualizado").textContent = `Actualizado ${new Date(snapshot.actualizado).toLocaleString("es-EC")}`;
+async function cargar(forzar = false) {
+  try {
+    if (forzar) { $("#btnRefrescar").disabled = true; await apiPost("/torre-control/refrescar", {}); }
+    DATA = await apiGet("/torre-control/estado");
+    refreshMs = (DATA.refresh_seconds || 300) * 1000;
+
+    const omitidas = DATA.omitidas_agencias_locales
+      ? `${DATA.omitidas_agencias_locales} facturas de agencias locales fuera del proceso`
+      : "";
+    const fuenteTag = $("#fuenteTag");
+    fuenteTag.style.display = "inline-block";
+    fuenteTag.className = "torre-info-tag ok";
+    fuenteTag.textContent = [
+      "Fuente: dartis_ventas + manifiestos (courier_ups_manifest / courier_fedex_envios)",
+      omitidas,
+    ].filter(Boolean).join("  ·  ");
+
+    if (DATA.error) {
+      $("#cuerpo").innerHTML = `<tr><td colspan="13" class="torre-vacio">${DATA.error}</td></tr>`;
+    }
+    $("#when").textContent = DATA.actualizado ? new Date(DATA.actualizado).toLocaleTimeString("es-EC") : "—";
+    sincronizarFiltroEstadoCourier();
+    pintarTabla();
+  } catch (e) {
+    $("#cuerpo").innerHTML = `<tr><td colspan="13" class="torre-vacio">No se pudo conectar con el backend (${e.message}).</td></tr>`;
+  } finally {
+    $("#btnRefrescar").disabled = false;
+    nextAt = Date.now() + refreshMs;
   }
 }
 
-function renderKpis() {
-  const t = snapshot.resumen?.total || {};
-  $("#kpi-guias").textContent = t.guias ?? 0;
-  $("#kpi-ok").textContent = t.ok ?? 0;
-  $("#kpi-discrepancias").textContent = t.discrepancias ?? 0;
-  $("#kpi-pendientes").textContent = t.pendientes ?? 0;
-  $("#kpi-sin-manifiesto").textContent = t.sin_manifiesto ?? 0;
-  $("#kpi-no-en-dartis").textContent = t.no_en_dartis ?? 0;
+function sincronizarFiltroEstadoCourier() {
+  // El filtro "Estado courier" arranca con valores típicos de UPS, pero
+  // FedEx puede traer cualquier texto de su propio manifiesto. En vez de
+  // mantener la lista a mano, se agrega automáticamente cualquier valor
+  // nuevo visto en los datos (marcado por defecto).
+  const panel = document.querySelector("#fEstadoCourier .torre-ms-panel");
+  const existentes = new Set([...panel.querySelectorAll('input[type="checkbox"]')].map((cb) => cb.value));
+  const vistos = new Set((DATA.cajas || []).map((c) => (c.estado_csv || "").trim()));
+  vistos.forEach((valor) => {
+    if (existentes.has(valor)) return;
+    const label = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = valor;
+    cb.checked = true;
+    cb.addEventListener("change", pintarTabla);
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" " + (valor || "Sin estado")));
+    panel.appendChild(label);
+    existentes.add(valor);
+  });
 }
 
-function renderTablaPrincipal() {
-  const estado = $("#filtroEstado").value;
-  const courier = $("#filtroCourier").value;
-  const texto = $("#filtroBuscar").value.trim().toLowerCase();
+function estadoCourierSeleccionados() {
+  return [...document.querySelectorAll('#fEstadoCourier input[type="checkbox"]:checked')]
+    .map((cb) => (cb.value || "").trim().toUpperCase());
+}
 
-  const filas = snapshot.cajas.filter((c) => {
-    if (!["UPS", "FEDEX"].includes(c.courier)) return false;
-    if (estado && c.conciliacion !== estado) return false;
-    if (courier && c.courier !== courier) return false;
-    if (texto) {
-      const heno = `${c.factura} ${c.cliente || ""} ${c.empresa || ""} ${c.tracking || ""}`.toLowerCase();
-      if (!heno.includes(texto)) return false;
-    }
+function filtrarFilas() {
+  const q = $("#q").value.trim().toLowerCase();
+  const fc = $("#fCourier").value, fe = $("#fEstado").value, fp = $("#fPlanif").value;
+  const estadosCourier = estadoCourierSeleccionados();
+  const desde = $("#fDesde").value, hasta = $("#fHasta").value;
+  return (DATA.cajas || []).filter((c) => {
+    if (c.courier !== "UPS" && c.courier !== "FEDEX") return false;
+    if (fc && c.courier !== fc) return false;
+    const estadoCsv = (c.estado_csv || "").trim().toUpperCase();
+    if (estadosCourier.length && !estadosCourier.includes(estadoCsv)) return false;
+    if (fp && entregaPlanificacion(c) !== fp) return false;
+    if (fe && c.conciliacion !== fe) return false;
+    if (desde && (!c.fecha_dartis || c.fecha_dartis < desde)) return false;
+    if (hasta && (!c.fecha_dartis || c.fecha_dartis > hasta)) return false;
+    const trackings = (c.detalle_bultos && c.detalle_bultos.length) ? c.detalle_bultos.map((b) => b.tracking) : [c.tracking];
+    if (q && ![...trackings, c.cliente, c.factura, c.destinatario, c.empresa].join(" ").toLowerCase().includes(q)) return false;
     return true;
   });
-
-  const tbody = $("#tablaPrincipal");
-  if (!filas.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty">Sin resultados</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = filas.slice(0, 500).map((c) => `
-    <tr>
-      <td>${c.factura}</td>
-      <td>${c.courier}</td>
-      <td>${c.empresa || ""}</td>
-      <td>${c.cliente || ""}</td>
-      <td>${c.cajas_dartis ?? ""}</td>
-      <td>${c.bultos_csv ?? c.cajas_manifiesto ?? "-"}</td>
-      <td>${c.diferencia ?? "-"}</td>
-      <td>${c.estado_vivo || ""}</td>
-      <td>${c.ubicacion || ""}</td>
-      <td><span class="badge ${BADGE[c.conciliacion] || "badge-gray"}">${c.conciliacion}</span></td>
-    </tr>
-  `).join("");
-  if (filas.length > 500) {
-    tbody.innerHTML += `<tr><td colspan="10" class="conteo">Mostrando 500 de ${filas.length} — afina el filtro para ver el resto.</td></tr>`;
-  }
 }
 
-function renderTablaLocales() {
-  const estado = $("#filtroEstadoLocal").value;
-  const texto = $("#filtroBuscarLocal").value.trim().toLowerCase();
+// Día de salida -> días hábiles hasta la entrega esperada
+//   Lunes->Jueves(+3) Martes->Viernes(+3) Miércoles->Lunes sig.(+5)
+//   Jueves->Lunes sig.(+4) Viernes->Martes sig.(+4) Sábado->Miércoles sig.(+4)
+const OFFSET_ENTREGA = { 1: 3, 2: 3, 3: 5, 4: 4, 5: 4, 6: 4 };
 
-  const filas = snapshot.cajas.filter((c) => {
-    if (["UPS", "FEDEX"].includes(c.courier)) return false;
-    if (estado && c.conciliacion !== estado) return false;
-    if (texto) {
-      const heno = `${c.factura} ${c.courier_raw || ""} ${c.cliente || ""} ${c.empresa || ""}`.toLowerCase();
-      if (!heno.includes(texto)) return false;
-    }
-    return true;
-  });
-
-  const tbody = $("#tablaLocales");
-  if (!filas.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">Sin resultados</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = filas.slice(0, 500).map((c) => `
-    <tr>
-      <td>${c.factura}</td>
-      <td>${c.courier_raw || ""}</td>
-      <td>${c.empresa || ""}</td>
-      <td>${c.cliente || ""}</td>
-      <td>${c.fecha_dartis || ""}</td>
-      <td>${c.cajas_dartis ?? ""}</td>
-      <td>${c.fecha_entrega_real || "-"}</td>
-      <td><span class="badge ${BADGE[c.conciliacion] || "badge-gray"}">${c.conciliacion}</span></td>
-    </tr>
-  `).join("");
-  if (filas.length > 500) {
-    tbody.innerHTML += `<tr><td colspan="8" class="conteo">Mostrando 500 de ${filas.length} — afina el filtro para ver el resto.</td></tr>`;
-  }
+function entregaPlanificacion(c) {
+  if (!c.fecha_dartis || !c.entrega_programada) return "—";
+  const [ys, ms, ds] = c.fecha_dartis.split("-").map(Number);
+  const salida = new Date(ys, ms - 1, ds);
+  const offset = OFFSET_ENTREGA[salida.getDay()];
+  if (offset === undefined) return "—";
+  const esperada = new Date(salida);
+  esperada.setDate(esperada.getDate() + offset);
+  const [me, de, ye] = c.entrega_programada.split("/").map(Number);
+  if (!me || !de || !ye) return "—";
+  const real = new Date(ye, me - 1, de);
+  return real.getTime() > esperada.getTime() ? "RETRASO" : "A TIEMPO";
 }
 
-["filtroEstado", "filtroCourier", "filtroBuscar"].forEach((id) =>
-  $(`#${id}`).addEventListener("input", renderTablaPrincipal)
-);
-["filtroEstadoLocal", "filtroBuscarLocal"].forEach((id) =>
-  $(`#${id}`).addEventListener("input", renderTablaLocales)
-);
+// Paleta ejecutiva Bellaflor para indicadores de estado/planificación
+const COLOR_ESTADO = {
+  "Delivered": "#6F7F1F",
+  "In Transit": "#4A5C6B",
+  "Out For Delivery": "#3D6E63",
+  "Manifest": "#8A6D2E",
+  "Exception": "#8C2F2F",
+};
+const COLOR_PLANIF = { "A TIEMPO": "#6F7F1F", "RETRASO": "#8C2F2F" };
+function colorEstado(estado) { return COLOR_ESTADO[estado] || "#8A6D2E"; }
+function tag(texto, color) {
+  return `<span class="torre-tag"><span class="dot" style="background:${color}"></span>${texto}</span>`;
+}
 
-// ---------- Acciones ----------
+function pintarTabla() {
+  const rows = filtrarFilas();
+  if (!rows.length) {
+    $("#cuerpo").innerHTML = `<tr><td colspan="13" class="torre-vacio">Sin resultados con los filtros aplicados. Limpia la búsqueda para ver todas las guías.</td></tr>`;
+    return;
+  }
+  $("#cuerpo").innerHTML = rows.map((c) => {
+    const cls = c.conciliacion === "OK" ? "ok" : (c.conciliacion === "DISCREPANCIA" || c.conciliacion === "NO EN DARTIS") ? "mal" : "";
+    const dif = c.diferencia == null ? "—" : (c.diferencia > 0 ? "−" + c.diferencia : (c.diferencia < 0 ? "+" + (-c.diferencia) : "0"));
+    const bultos = (c.detalle_bultos && c.detalle_bultos.length)
+      ? c.detalle_bultos
+      : (c.tracking ? [{ tracking: c.tracking, estado: c.estado_csv, entrega_programada: c.entrega_programada }] : []);
+    const filas = bultos.map((b) => {
+      const p = entregaPlanificacion({ fecha_dartis: c.fecha_dartis, entrega_programada: b.entrega_programada });
+      const colorP = COLOR_PLANIF[p];
+      return {
+        tracking: b.tracking || "—",
+        estadoHtml: (() => {
+          const estadoTxt = b.estado || c.estado_vivo || "Sin estado";
+          const entregaTxt = b.entrega_programada || c.entrega_estimada || "";
+          const colorE2 = colorEstado(estadoTxt);
+          return `${tag(estadoTxt, colorE2)}${entregaTxt ? `<br><span class="torre-mono" style="color:#5d6b78;font-size:.74rem">entrega est. ${entregaTxt}</span>` : ""}`;
+        })(),
+        planifHtml: colorP ? tag(p, colorP) : "—",
+        consultaHtml: b.tracking
+          ? `<a class="torre-btn-consulta" target="_blank" rel="noopener" href="${c.courier === "FEDEX" ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(b.tracking)}` : `https://www.ups.com/track?track=yes&trackNums=${encodeURIComponent(b.tracking)}&loc=en_US&requester=ST/trackdetails`}">Consultar</a>`
+          : "—",
+      };
+    });
+    if (!filas.length) filas.push({ tracking: "—", estadoHtml: "—", planifHtml: "—", consultaHtml: "—" });
+    const rowspan = filas.length;
+    const estadoConciliacion = ({ OK: "OK", DISCREPANCIA: "DISCREPANCIA", PENDIENTE: "PENDIENTE", "SIN MANIFIESTO": "SINMAN", "NO EN DARTIS": "NODARTIS" })[c.conciliacion] || "PENDIENTE";
+    return filas.map((f, i) => `<tr class="torre-bulto-row ${i === 0 ? "torre-factura-inicio" : ""}">
+      ${i === 0 ? `
+      <td rowspan="${rowspan}" class="torre-mono torre-dato-factura">${c.fecha_dartis || "—"}</td>
+      <td rowspan="${rowspan}" class="torre-dato-factura"><span class="torre-courier ${c.courier}">${c.courier}</span></td>
+      <td rowspan="${rowspan}" class="torre-dato-factura" style="font-size:.76rem">${c.vendedor_cliente || "—"}</td>
+      <td rowspan="${rowspan}" class="torre-dato-factura" style="font-size:.76rem">${c.empresa || "—"}</td>
+      <td rowspan="${rowspan}" class="torre-dato-factura"><b>${c.cliente || "—"}</b><br><span class="torre-mono" style="font-size:.72rem;color:#5d6b78">${c.factura}</span></td>
+      <td rowspan="${rowspan}" class="torre-dato-factura">${c.destinatario || "—"}</td>` : ""}
+      <td class="torre-mono torre-tracking-cell">${f.tracking}</td>
+      <td>${f.estadoHtml}</td>
+      <td>${f.planifHtml}</td>
+      <td>${f.consultaHtml}</td>
+      ${i === 0 ? `
+      <td rowspan="${rowspan}" class="torre-dato-factura"><span class="torre-riel ${cls}">
+        <span class="n torre-mono" title="Total Dartis">${fmt(c.cajas_dartis)}</span><span class="sep">→</span>
+        <span class="n torre-mono" title="Bultos en el manifiesto del courier">${c.cajas_manifiesto ?? "—"}</span></span></td>
+      <td rowspan="${rowspan}" class="torre-dif ${c.diferencia ? "neg" : ""} torre-mono torre-dato-factura">${dif}</td>
+      <td rowspan="${rowspan}" class="torre-dato-factura"><span class="torre-estado ${estadoConciliacion}">${c.conciliacion}</span></td>` : ""}
+    </tr>`).join("");
+  }).join("");
+}
+
+function fechaISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const hoy = new Date();
+const hace15 = new Date(); hace15.setDate(hoy.getDate() - 15);
+$("#fDesde").value = fechaISO(hace15);
+$("#fHasta").value = fechaISO(hoy);
+$("#fCourier").value = "";
+// Se fija explícitamente en vez de dejarlo al atributo `selected` del HTML:
+// al recargar, el navegador restaura el valor que tenía el select.
+$("#fEstado").value = "OK";
+
+["q", "fDesde", "fHasta", "fCourier", "fPlanif", "fEstado"].forEach((id) => $("#" + id).addEventListener("input", pintarTabla));
+$("#btnRefrescar").addEventListener("click", () => cargar(true));
+
+// ---------- Subida de manifiestos ----------
 function mostrarResultado(msg, clase = "msg-ok") {
   $("#resultado").innerHTML = `<p class="${clase}">${msg}</p>`;
 }
 
-$("#btnRefrescar").addEventListener("click", async () => {
-  const btn = $("#btnRefrescar");
-  btn.disabled = true;
-  mostrarResultado("Actualizando (dartis_ventas + manifiestos + tracking en vivo)...", "msg-info");
-  try {
-    const r = await apiPost("/torre-control/refrescar", {});
-    mostrarResultado(`Actualizado: ${r.total_facturas} facturas procesadas.`);
-    await cargarEstado();
-  } catch (err) {
-    mostrarResultado(err.message, "msg-error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-$("#btnDuoplane").addEventListener("click", async () => {
-  const btn = $("#btnDuoplane");
-  btn.disabled = true;
-  mostrarResultado("Sincronizando con Duoplane...", "msg-info");
-  try {
-    const r = await apiPost("/torre-control/sincronizar-duoplane", {});
-    if (!r.ok) {
-      mostrarResultado(r.error, "msg-error");
-    } else {
-      mostrarResultado(`Duoplane: ${r.revisadas} POs revisadas, ${r.creados.length} shipments creados, ${r.pendientes.length} pendientes, ${r.errores.length} errores.`);
-    }
-  } catch (err) {
-    mostrarResultado(err.message, "msg-error");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-async function subirArchivo(input, path) {
+async function subirArchivo(input, ruta, etiqueta, labelId, textoLabel) {
   const file = input.files[0];
   if (!file) return;
-  mostrarResultado(`Subiendo ${file.name}...`, "msg-info");
+  const labelSpan = $(`#${labelId}`);
+  labelSpan.closest("label").style.opacity = ".6";
+  labelSpan.textContent = "Subiendo…";
+  mostrarResultado(`Subiendo ${file.name}…`, "msg-info");
   const form = new FormData();
   form.append("archivo", file);
   try {
-    const res = await fetch(`/api${path}`, { method: "POST", body: form });
+    const res = await fetch(`/api/torre-control/${ruta}`, { method: "POST", body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Error al subir el archivo");
-    mostrarResultado(`${file.name}: ${JSON.stringify(data)}`);
-    await cargarEstado();
+    const partes = [`"${data.archivo}" subido correctamente.`];
+    if (ruta === "subir-ups") {
+      partes.push(`${data.bultos_importados} bulto(s) (${data.nuevos} nuevos, ${data.actualizados} actualizados) en ${data.facturas} factura(s).`);
+      if (data.descartados_sin_po) partes.push(`${data.descartados_sin_po} fila(s) descartadas sin token PO:<numero>.`);
+    } else {
+      partes.push(`${data.nuevos} envío(s) nuevo(s) de ${data.envios_en_pdf} en el PDF (${data.duplicados} ya estaban registrados) en ${data.facturas} factura(s).`);
+      if (data.descartados_sin_po) partes.push(`${data.descartados_sin_po} envío(s) descartados sin token PO:<numero>.`);
+    }
+    mostrarResultado(partes.join(" "));
+    await cargar(true);
   } catch (err) {
-    mostrarResultado(err.message, "msg-error");
+    mostrarResultado(`No se pudo subir ${etiqueta}: ${err.message}`, "msg-error");
   } finally {
+    labelSpan.closest("label").style.opacity = "";
+    labelSpan.textContent = textoLabel;
     input.value = "";
   }
 }
 
-$("#fileUps").addEventListener("change", (e) => subirArchivo(e.target, "/torre-control/subir-ups"));
-$("#fileFedex").addEventListener("change", (e) => subirArchivo(e.target, "/torre-control/subir-fedex"));
+$("#fileUps").addEventListener("change", (e) =>
+  subirArchivo(e.target, "subir-ups", "el manifiesto de UPS", "labelFileUps", "Subir manifiesto UPS (.csv)"));
+$("#fileFedex").addEventListener("change", (e) =>
+  subirArchivo(e.target, "subir-fedex", "el manifiesto de FedEx", "labelFileFedex", "Subir manifiesto FedEx (.pdf)"));
 
-cargarEstado();
+// ---------- Duoplane ----------
+$("#btnDuoplane").addEventListener("click", async () => {
+  const tagEl = $("#duoplaneTag");
+  $("#btnDuoplane").disabled = true;
+  $("#btnDuoplane").textContent = "Sincronizando…";
+  tagEl.className = "torre-info-tag";
+  tagEl.style.display = "inline-block";
+  tagEl.textContent = "Consultando Duoplane…";
+  try {
+    const data = await apiPost("/torre-control/sincronizar-duoplane", {});
+    if (!data.ok) throw new Error(data.error || "Error desconocido");
+    const nCreados = data.creados.length, nPendientes = data.pendientes.length, nErrores = data.errores.length;
+    tagEl.classList.add(nErrores ? "err" : "ok");
+    tagEl.textContent = `Duoplane: ${data.revisadas} PO revisadas · ${nCreados} shipment(s) creado(s) · ${nPendientes} sin tracking aún` + (nErrores ? ` · ${nErrores} error(es)` : "");
+    mostrarResultado(`Sincronización con Duoplane completada: ${nCreados} shipment(s) creado(s) de ${data.revisadas} PO revisadas.`);
+  } catch (e) {
+    tagEl.classList.add("err");
+    tagEl.textContent = "Duoplane: error — " + e.message;
+    mostrarResultado(`No se pudo sincronizar con Duoplane: ${e.message}`, "msg-error");
+  } finally {
+    $("#btnDuoplane").disabled = false;
+    $("#btnDuoplane").textContent = "Sincronizar Duoplane";
+  }
+});
+
+// ---------- Multiselect "Estado courier" ----------
+const msBtn = document.querySelector("#fEstadoCourier .torre-ms-btn");
+const msPanel = document.querySelector("#fEstadoCourier .torre-ms-panel");
+msBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const abierto = !msPanel.hidden;
+  msPanel.hidden = abierto;
+  msBtn.setAttribute("aria-expanded", String(!abierto));
+});
+document.addEventListener("click", (e) => {
+  if (!$("#fEstadoCourier").contains(e.target)) { msPanel.hidden = true; msBtn.setAttribute("aria-expanded", "false"); }
+});
+msPanel.querySelectorAll('input[type="checkbox"]').forEach((cb) => cb.addEventListener("change", pintarTabla));
+
+// ---------- Cuenta regresiva del próximo refresco ----------
+timerUI = setInterval(() => {
+  if (!nextAt) return;
+  const s = Math.max(0, Math.round((nextAt - Date.now()) / 1000));
+  $("#count").textContent = `· próximo refresco en ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  if (s === 0) { nextAt = null; cargar(); }
+}, 1000);
+
+cargar();
 ```
 
 ### pages/auditoria-etiquetas.html + .js (Fase 4) — dashboard de solo lectura, la carga de datos es vía Telegram
@@ -7756,7 +7680,7 @@ El endpoint legacy de LAG usado por "Posteo de Inventario" (`PlaceOrder/ordernew
 | `ON CONFLICT command cannot affect row a second time` | Duplicados en el Excel con misma clave | Deduplicar con dict Python antes del bulk insert (ya implementado) |
 | Un refresco/import tarda minutos con volúmenes grandes | Insert fila por fila en un loop | Usar `execute_values` (bulk insert) — ver arriba |
 | GAS no responde en 120s | Cold start de GAS | Normal en primera carga del día — reintentar |
-| Torre de Control muestra todo "SIN MANIFIESTO"/"PENDIENTE" | No se ha subido el manifiesto UPS/FedEx del día | Subir el CSV/PDF desde la pestaña, o esperar credenciales reales (`DEMO_MODE=false`) |
+| Torre de Control muestra todo "SIN MANIFIESTO"/"PENDIENTE" | No se ha subido el manifiesto UPS/FedEx del día — ya no hay tracking en línea que lo compense | Subir el CSV/PDF desde la pestaña; revisar `courier_ups_manifest`/`courier_fedex_envios` en Supabase |
 | Auditoría de Etiquetas no muestra despachos | No hay ventas de clientes especiales para la fecha, o `es_cliente_especial` no está marcado en `customers` | Usar el botón "Generar despachos de hoy"; revisar `customers.es_cliente_especial` |
 
 ### Frontend

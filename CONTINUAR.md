@@ -1,12 +1,78 @@
-# Dónde retomar — 2026-09-05
+# Dónde retomar — 2026-09-06
 
-**Reforma de la vista**, primera tanda. Commiteado y subido (`7c55709`).
-Antes de eso, el módulo **Agrocalidad** y la importación de Dartis, que siguen
-como quedaron el 2026-09-04 y se describen más abajo.
+**Torre de Control cambió de proceso**, commiteado y subido (`50cc383`, y
+`0d8b2c4` antes). Antes de eso, la **reforma de la vista** del 2026-09-05
+(`7c55709`) y, antes aún, **Agrocalidad** y la importación de Dartis del
+2026-09-04. Todo sigue descrito más abajo, del más reciente al más viejo.
 
 ---
 
-## Lo último: reforma de la vista (2026-09-05)
+## Lo último: Torre de Control — manifiestos a Supabase, sin tracking en vivo (2026-09-06)
+
+Pedido del usuario: dejar de guardar los manifiestos de UPS/FedEx como
+archivos, apagar la consulta de tracking en vivo y sacar del proceso a las
+agencias de carga locales. Se hizo en **los dos proyectos a la vez** — BLIS y
+el original REPORTEUPSFEDEX — porque comparten las tablas de manifiesto.
+
+**Hecho:**
+
+1. **Los manifiestos ya no viven en `datos/*.csv`** (REPORTEUPSFEDEX) sino en
+   `courier_ups_manifest` y `courier_fedex_envios` de Supabase — las mismas
+   tablas que ya usaba el clon de BLIS. Una carga alimenta a los dos sistemas.
+   UPS es UPSERT por tracking (el manifiesto es acumulativo); FedEx es INSERT
+   de solo los trackings nuevos (cada PDF es un despacho puntual).
+
+2. **Se apagó el tracking en vivo.** La rama FedEx de `_evaluar` comparaba
+   SOLO contra el Track API: apagarlo sin más habría dejado FedEx en
+   PENDIENTE para siempre. Ahora compara contra el conteo de bultos de su
+   propio manifiesto, igual que UPS. Verificado con datos reales: FedEx pasó
+   de 0 conciliadas a 63 OK / 1 discrepancia (BLIS) y 27 OK / 1 discrepancia
+   (REPORTEUPSFEDEX). La asimetría UPS (`SIN MANIFIESTO`) vs FedEx
+   (`PENDIENTE`) se mantuvo a propósito — no es de dónde se guarda el
+   manifiesto sino de cómo lo entrega cada courier.
+
+3. **Las agencias de carga locales (courier "OTRO") quedaron fuera de la
+   conciliación.** Se eliminaron `courier_ups_client.py`,
+   `courier_fedex_client.py` y `courier_entregas_locales.py` de BLIS
+   (recuperables en git), y la sub-pestaña "Agencias locales" del frontend.
+   El snapshot informa `omitidas_agencias_locales` para que la exclusión sea
+   visible.
+
+4. **Bug encontrado y corregido de paso:** `/subir-ups` de BLIS hacía
+   `TRUNCATE` antes de insertar — cada carga borraba todo el histórico y
+   dejaba solo el último archivo (por eso la tabla estaba congelada en el
+   21/08). Ahora es UPSERT. `/subir-fedex` insertaba fila por fila con un
+   SELECT previo por envío (~195 ms/round-trip, minutos por PDF); ahora va en
+   lote con `execute_values`.
+
+5. **La pantalla de Torre de Control se rediseñó** para verse como la de
+   producción de REPORTEUPSFEDEX: header verde con pulso "EN VIVO", filtros
+   de fecha/courier/estado/planificación, tabla con una fila por bulto,
+   columna **Destinatario** agregada (antes solo Cliente). Sidebar de BLIS
+   intacto.
+
+6. **Duoplane no tenía credenciales en BLIS** — se copiaron de
+   REPORTEUPSFEDEX al `.env` local. Falta cargarlas también en el panel de
+   Render de `blis-api` para que funcione en producción.
+
+**Verificado contra datos reales** (Supabase, no solo lectura de código):
+subida real de un manifiesto de UPS más fresco (26 nuevos, 771 actualizados
+de 797 tocados, sin duplicados — `courier_ups_manifest_tracking_key`
+sostiene la unicidad).
+
+**Pendiente:**
+- Agregar `DUOPLANE_API_KEY`/`DUOPLANE_API_PASSWORD`/`DUOPLANE_BASE_URL` en
+  el panel de Render de BLIS (producción).
+- Ver si conviene declarar `DUOPLANE_BASE_URL` (no es secreta) en
+  `render.yaml` de BLIS, igual que en REPORTEUPSFEDEX — preguntado, sin
+  respuesta todavía.
+- `BLIS_DOCUMENTACION.md` sección 11 (Torre de Control) y su contraparte de
+  frontend, actualizadas con el código nuevo — revisar que sigan
+  reflejando la realidad si el módulo vuelve a cambiar.
+
+---
+
+## Lo anterior: reforma de la vista (2026-09-05)
 
 Se trabaja **poco a poco**, confirmando cada tanda con el usuario antes de
 seguir. Todo lo hecho es de presentación: no toca APIs, datos ni migraciones.
