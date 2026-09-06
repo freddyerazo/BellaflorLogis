@@ -380,7 +380,7 @@ def _buscar_id(catalogo: dict, valor: str):
     return None
 
 
-def interpretar_pendientes(limite: int = 25, recientes_primero: bool = True) -> dict:
+def interpretar_pendientes(limite: int = 25) -> dict:
     """Procesa filas de `entregas_locales_raw` que aun no tienen interpretacion.
 
     Va de a lotes chicos a proposito: son ~3.500 recibos, cada llamada al
@@ -388,22 +388,37 @@ def interpretar_pendientes(limite: int = 25, recientes_primero: bool = True) -> 
     horas que ningun timeout de Render sobrevive. La pantalla llama a este
     endpoint repetidamente hasta que `pendientes` llega a 0.
 
-    Arranca por los recibos MAS RECIENTES por defecto: el Sheet tiene
-    historia desde febrero 2026, pero `dartis_ventas` solo desde junio, asi
-    que procesar de viejo a nuevo gasta llamadas al modelo en recibos que
-    todavia no tienen contra que cruzarse. Al reves, cada lote empieza a
-    aportar cruces reales desde el primero.
+    Prioriza por FECHA REAL del recibo (columna `fecha_documento`, texto
+    crudo del Sheet), no por numero de fila: verificado que las dos cosas
+    NO se corresponden -- hay recibos de junio-septiembre (el rango que
+    cubre dartis_ventas) mezclados por toda la hoja, no agrupados al final.
+    Ordenar solo por fila_sheet dejaba ~1.449 de los 3.449 pendientes
+    intercalados sin poder saltarlos.
+
+    El texto de fecha puede venir invalido de varias formas, todas reales:
+    formato imposible ("37/03/2026", dia 37 -- el filtro de formato lo
+    descarta antes de convertir, para no reventar la consulta), año mal
+    leido por el OCR ("07/05/2078", "10/10/2028" -- se acota a 2025-2027,
+    el proyecto opera en 2026), o una fecha futura respecto a hoy
+    ("08/12/2026" leido cuando aun no llega esa fecha -- ningun recibo
+    puede documentar una entrega que todavia no paso). Cualquiera de estos
+    tres casos se trata como fecha desconocida (va al final, no al frente).
     """
-    orden = "DESC" if recientes_primero else "ASC"
     with engine.connect() as conn:
-        pendientes = conn.execute(text(f"""
+        pendientes = conn.execute(text("""
             SELECT r.id, r.fila_sheet, r.texto_ocr, r.ver_foto_url
             FROM entregas_locales_raw r
             LEFT JOIN entregas_locales e ON e.raw_id = r.id
             WHERE e.id IS NULL
               AND r.texto_ocr IS NOT NULL
               AND length(r.texto_ocr) > 30
-            ORDER BY r.fila_sheet {orden}
+            ORDER BY
+              (CASE
+                WHEN r.fecha_documento ~ '^(0?[1-9]|[12][0-9]|3[01])/(0?[1-9]|1[0-2])/202[5-7]$'
+                     AND to_date(r.fecha_documento, 'DD/MM/YYYY') <= CURRENT_DATE
+                THEN to_date(r.fecha_documento, 'DD/MM/YYYY')
+              END) DESC NULLS LAST,
+              r.fila_sheet DESC
             LIMIT :limite
         """), {"limite": limite}).mappings().all()
 
