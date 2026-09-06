@@ -1,11 +1,57 @@
-# Dónde retomar — 2026-09-04
+# Dónde retomar — 2026-09-05
 
-Módulo **Agrocalidad** y la importación de Dartis. Todo lo de abajo está
-commiteado, subido y aplicado en Supabase. Árbol limpio.
+**Reforma de la vista**, primera tanda. Commiteado y subido (`7c55709`).
+Antes de eso, el módulo **Agrocalidad** y la importación de Dartis, que siguen
+como quedaron el 2026-09-04 y se describen más abajo.
 
 ---
 
-## Lo que quedó funcionando
+## Lo último: reforma de la vista (2026-09-05)
+
+Se trabaja **poco a poco**, confirmando cada tanda con el usuario antes de
+seguir. Todo lo hecho es de presentación: no toca APIs, datos ni migraciones.
+
+**Hecho:**
+
+1. **Capa base**, en `frontend/css/styles.css` — aplica a las 21 páginas.
+   Paleta verde nueva (`#1d7a4c`/`#14532d`/`#e7f3ec`) en reemplazo del
+   `#2e7d32` de Material 2014, tokens de superficie/borde/radio/sombra, y
+   tablas con cifras tabulares, zebra y encabezados neutros en versalitas.
+
+2. **Tabla "Consultas guardadas" de Agrocalidad.** Estaba suelta en una
+   `.import-card` de `max-width: 860px` y se desbordaba por la derecha: la
+   columna de acciones quedaba fuera de la tarjeta. Pasó a `.cot-tabla` dentro
+   de `.ag-tabla-scroll`, el patrón que ya usaban las otras tres tablas de la
+   página. Arranca filtrada en **Estados Unidos** y ordenada por especie.
+
+3. **Torre de Control se muestra como "Fedex-Ups See".** Solo el rótulo, en
+   `sidebar.html` y `torre-control.html`. La ruta `/api/torre-control`, los
+   nombres de archivo y las tablas `courier_*` no se tocaron.
+
+4. **El sidebar lleva el nombre completo**: BLIS · Business Logistic
+   Intelligence Systems.
+
+**Lo que sigue**, por orden de lo que más rinde:
+
+1. **Sidebar** — 230px de verde plano con 21 enlaces; es lo que más pesa al
+   entrar. Agrupar por área y hacerlo colapsable.
+2. **Dashboard** — el hero con gradiente y las metric cards.
+3. **Aplicar `.num`** a las columnas numéricas de cada módulo: la clase existe
+   y casi nadie la usa, así que las cifras siguen alineadas a la izquierda.
+4. **Cotizaciones** — el wizard tiene su propio sistema de estilos.
+5. **Responsive** — hoy `body{display:flex}` deja la sidebar de 230px fija
+   también en celular. No hay menú móvil.
+
+**Ojo:** sigue sin haber prueba automatizada del frontend. Esta tanda se
+verificó levantando el servidor local y consultando el HTML/CSS servido, más
+las tablas contra datos reales; no hay recorrido en navegador salvo el que
+hizo el usuario.
+
+---
+
+## Lo anterior: Agrocalidad y Dartis (2026-09-04)
+
+### Lo que quedó funcionando
 
 **La pestaña Agrocalidad tiene dos sub-pestañas.**
 

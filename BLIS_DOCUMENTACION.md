@@ -1,5 +1,17 @@
-# BLIS — Bellaflor Logistics Intelligence System
+# BLIS — Business Logistic Intelligence Systems
 ## Documentación Técnica Completa con Código · v2.1 · Agosto 2026
+
+> **Estado al 2026-09-05.** El documento se regeneró completo por última vez el
+> 2026-08-22; desde entonces se actualiza por partes.
+> **Al día:** nombre del proyecto, `components/sidebar.html`,
+> `pages/agrocalidad.html` y `pages/torre-control.html` — que en pantalla ahora
+> se llama **Fedex-Ups See** (solo el rótulo: ruta, archivos y tablas siguen
+> siendo `torre-control`/`courier_*`).
+> **Sin actualizar:** falta el módulo Armellini Post; el código de
+> `pages/agrocalidad.js` que se reproduce más abajo es anterior a las
+> sub-pestañas; y ningún fragmento refleja la reforma visual del CSS del
+> 2026-09-05 (paleta, tokens y sistema de tablas — está descrita en
+> `CLAUDE.md`). Falta una regeneración completa.
 
 ---
 
@@ -4857,7 +4869,7 @@ Un `<a>` por módulo, con `data-page` para que `layout.js` marque el activo. Los
 ```html
 <div class="sidebar-header">
   <span class="sidebar-logo">BLIS</span>
-  <span class="sidebar-subtitle">Logistics Intelligence</span>
+  <span class="sidebar-subtitle">Business Logistic<br />Intelligence Systems</span>
 </div>
 <nav class="sidebar-nav">
   <a href="/pages/dashboard.html" data-page="dashboard"><i class="ph ph-house-simple"></i>Dashboard</a>
@@ -4866,7 +4878,7 @@ Un `<a>` por módulo, con `data-page` para que `layout.js` marque el activo. Los
   <a href="/pages/ingresos-locales.html" data-page="ingresos-locales"><i class="ph ph-truck"></i>Ingresos Locales</a>
   <a href="/pages/agrocalidad.html" data-page="agrocalidad"><i class="ph ph-leaf"></i>Agrocalidad</a>
   <a href="/pages/inventario-lag.html" data-page="inventario-lag"><i class="ph ph-warehouse"></i>Inventario LAG</a>
-  <a href="/pages/torre-control.html" data-page="torre-control"><i class="ph ph-radar"></i>Torre de Control</a>
+  <a href="/pages/torre-control.html" data-page="torre-control"><i class="ph ph-radar"></i>Fedex-Ups See</a>
   <a href="/pages/auditoria-etiquetas.html" data-page="auditoria-etiquetas"><i class="ph ph-clipboard-text"></i>Auditoría de Etiquetas</a>
 
   <details class="nav-group" id="navgroup-config">
@@ -5535,9 +5547,17 @@ function showError(msg) {
 
   <main class="content" id="content">
     <div class="page-header">
-      <h1><i class="ph ph-leaf"></i> Consulta Agrocalidad</h1>
-      <p class="page-subtitle">Requisitos fitosanitarios de exportación por especie y país de destino.</p>
+      <h1><i class="ph ph-leaf"></i> Agrocalidad</h1>
+      <p class="page-subtitle">Requisitos fitosanitarios de exportación.</p>
     </div>
+
+    <nav class="subtabs">
+      <button class="subtab active" data-tab="consulta">Consulta de requisitos</button>
+      <button class="subtab" data-tab="comparacion">Agrocalidad vs Ventas vs VUE</button>
+    </nav>
+
+    <!-- CONSULTA DE REQUISITOS -->
+    <section id="panel-consulta" class="subpanel active">
 
     <div class="import-card">
       <form id="consultaForm">
@@ -5545,13 +5565,17 @@ function showError(msg) {
           <div class="form-group">
             <label for="species_id">Especie</label>
             <select id="species_id" required></select>
+            <small class="ag-nota" id="nota_especies"></small>
           </div>
           <div class="form-group">
             <label for="country_id">País de destino</label>
-            <select id="country_id" required></select>
+            <select id="country_id" required disabled>
+              <option value="">Elige una especie primero…</option>
+            </select>
+            <small class="ag-nota" id="nota_paises"></small>
           </div>
           <div class="form-group">
-            <label for="trade_type">Tipo de trámite</label>
+            <label for="trade_type">Movimiento</label>
             <select id="trade_type" required></select>
           </div>
           <div class="form-group">
@@ -5564,50 +5588,110 @@ function showError(msg) {
           <button type="submit" id="btnConsultar" class="btn btn-primary">
             <i class="ph ph-magnifying-glass"></i> Consultar
           </button>
+          <span class="ag-hint">La consulta va directo a Agrocalidad y tarda unos segundos.</span>
         </div>
       </form>
-
-      <div id="progressSection" class="hidden">
-        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
-        <p id="progressMsg" class="progress-msg">Consultando en Agrocalidad (puede tardar hasta 90 segundos)...</p>
-      </div>
 
       <div id="resultSection" class="hidden"></div>
     </div>
 
     <div class="page-header" style="margin-top: 2rem;">
-      <h2><i class="ph ph-clock-counter-clockwise"></i> Historial de consultas</h2>
+      <h2><i class="ph ph-globe-hemisphere-west"></i> Consulta por país</h2>
+      <p class="page-subtitle">Todo el catálogo de especies contra un mismo destino.</p>
     </div>
 
     <div class="import-card">
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="filter_species">Filtrar por especie</label>
-          <select id="filter_species"><option value="">Todas</option></select>
+      <form id="paisForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="pais_country_id">País de destino</label>
+            <select id="pais_country_id" required></select>
+          </div>
+          <div class="form-group">
+            <label for="pais_trade_type">Movimiento</label>
+            <select id="pais_trade_type" required></select>
+          </div>
+          <div class="form-group">
+            <label for="pais_area_code">Área</label>
+            <select id="pais_area_code" required></select>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="filter_country">Filtrar por país</label>
-          <select id="filter_country"><option value="">Todos</option></select>
+
+        <div class="import-actions">
+          <button type="submit" id="btnConsultarPais" class="btn btn-primary">
+            <i class="ph ph-list-magnifying-glass"></i> Consultar todo el catálogo
+          </button>
+          <button type="button" id="btnCancelarPais" class="btn btn-secondary hidden">
+            <i class="ph ph-x"></i> Cancelar
+          </button>
+          <span class="ag-hint" id="pais_hint"></span>
         </div>
+      </form>
+
+      <div id="paisProgreso" class="hidden">
+        <div class="progress-bar"><div id="paisProgresoFill" class="progress-fill"></div></div>
+        <p class="progress-msg" id="paisProgresoMsg"></p>
       </div>
-      <table class="data-table">
+
+      <div id="paisResultado" class="hidden"></div>
+    </div>
+
+    <div class="page-header" style="margin-top: 2rem;">
+      <h2><i class="ph ph-clock-counter-clockwise"></i> Consultas guardadas</h2>
+    </div>
+
+    <div class="form-grid ag-filtros">
+      <div class="form-group">
+        <label for="filter_species">Filtrar por especie</label>
+        <select id="filter_species"><option value="">Todas</option></select>
+      </div>
+      <div class="form-group">
+        <label for="filter_country">Filtrar por país</label>
+        <select id="filter_country"><option value="">Todos</option></select>
+      </div>
+    </div>
+
+    <div class="ag-tabla-scroll">
+      <table class="cot-tabla">
         <thead>
           <tr>
             <th>Especie</th>
             <th>País</th>
-            <th>Tipo</th>
-            <th>Área</th>
-            <th>Estado</th>
-            <th>Código Agrocalidad</th>
+            <th>Movimiento</th>
+            <th class="num">Requisitos</th>
             <th>Partida</th>
+            <th>Código</th>
             <th>Consultado</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="historyBody">
-          <tr><td colspan="8" class="loading">Cargando...</td></tr>
+          <tr><td colspan="8" class="loading">Cargando…</td></tr>
         </tbody>
       </table>
     </div>
+    </section>
+
+    <!-- AGROCALIDAD vs VENTAS vs VUE -->
+    <section id="panel-comparacion" class="subpanel">
+
+      <div class="page-header">
+        <h2><i class="ph ph-shield-warning"></i> Verificación de despachos</h2>
+        <p class="page-subtitle">Lo que sale estos días contra lo verificado en Agrocalidad.</p>
+      </div>
+      <div class="import-card">
+        <div id="verifEstado"></div>
+      </div>
+
+      <div class="page-header" style="margin-top: 2rem;">
+        <h2><i class="ph ph-chart-bar"></i> Cobertura general</h2>
+        <p class="page-subtitle">Todas las combinaciones especie+país exportadas.</p>
+      </div>
+      <div class="import-card">
+        <div id="compEstado"></div>
+      </div>
+    </section>
+
   </main>
 
   <script type="module" src="/js/layout.js"></script>
@@ -6990,7 +7074,7 @@ $("#form-posteo").addEventListener("submit", (e) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BLIS · Torre de Control</title>
+  <title>BLIS · Fedex-Ups See</title>
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body data-page="torre-control">
@@ -6998,7 +7082,7 @@ $("#form-posteo").addEventListener("submit", (e) => {
 
   <main class="content" id="content">
     <div class="page-header">
-      <h1><i class="ph ph-radar"></i> Torre de Control</h1>
+      <h1><i class="ph ph-radar"></i> Fedex-Ups See</h1>
       <p class="page-subtitle">Concilia las cajas de dartis_ventas contra los manifiestos de UPS, FedEx y agencias locales.</p>
     </div>
 

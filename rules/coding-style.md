@@ -65,6 +65,28 @@ document.addEventListener('DOMContentLoaded', init);
 - IDs de modales: `modal-especie`, `modal-variedad`, etc.
 - Clases CSS reutilizables del archivo `styles.css` global
 
+### Convenciones CSS (desde el 2026-09-05)
+- **Usar los tokens de `:root`, no hex nuevos.** Están definidos para color
+  (`--primary`, `--primary-dark`, `--primary-light`, `--primary-hover`),
+  superficie (`--card-bg`, `--surface-2`, `--surface-zebra`), borde
+  (`--border`, `--border-subtle`), texto (`--text`, `--text-muted`), radio
+  (`--radius-sm`, `--radius`, `--radius-lg`) y sombra (`--shadow-sm`,
+  `--shadow`, `--shadow-lg`). Meter un hex suelto es lo que hizo que
+  convivieran dos familias de verde hasta que hubo que unificar 20 valores.
+- **Una tabla nunca va suelta dentro de una tarjeta.** Siempre dentro de un
+  contenedor con `overflow`, o se desborda: `.import-card` tiene
+  `max-width: 860px` y la tabla de Consultas guardadas se salía por la derecha.
+  Hay dos patrones válidos:
+  - `.data-table` dentro de `.table-wrapper` — es el que genera `crud-page.js`
+    para las páginas de catálogo.
+  - `.cot-tabla` dentro de `.ag-tabla-scroll` — encabezado fijo al hacer
+    scroll, para tablas largas. Usado por Cotizaciones y Agrocalidad.
+- **`.cot-tabla` da por hecho un fondo blanco** (su `th` es blanco y su hover
+  es gris `--bg`): nació dentro del modal de Cotizaciones. Su contenedor tiene
+  que traer superficie propia o el hover no se ve.
+- Columnas numéricas: `class="num"` en el `th` **y** en el `td`, para alinear a
+  la derecha. Las cifras ya salen tabulares por defecto en ambas tablas.
+
 ## Backend — módulos con lógica externa (services/)
 Desde las Fases 1-4, `backend/app/services/` deja de estar vacío. Patrón: `api/<modulo>.py` solo maneja rutas/HTTP; toda la lógica de negocio (clientes de APIs externas, parseo de archivos, motores de conciliación) vive en `services/<algo>.py`, importado por el router. Ejemplos: `services/lag_client.py` (Inventario LAG), `services/courier_reconciliation.py` (Torre de Control), `services/telegram_bot.py` (Auditoría de Etiquetas).
 

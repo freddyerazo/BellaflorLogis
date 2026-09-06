@@ -10,9 +10,9 @@ Equipo mixto de Bellaflor Group (exportadora de flores, Ecuador): coordinadores 
 
 ## Product Purpose
 
-BLIS (Bellaflor Logistics Intelligence System) es el sistema de apoyo logístico y comercial de Bellaflor Group. Simula costos de exportación floral, gestiona datos maestros (especies, variedades, aeropuertos, aerolíneas, clientes) y genera cotizaciones detalladas por ruta. No es un ERP financiero — su foco exclusivo es logística, simulación de costos y análisis operativo de exportaciones florales.
+BLIS (Business Logistic Intelligence Systems) es el sistema de apoyo logístico y comercial de Bellaflor Group. Simula costos de exportación floral, gestiona datos maestros (especies, variedades, aeropuertos, aerolíneas, clientes) y genera cotizaciones detalladas por ruta. No es un ERP financiero — su foco exclusivo es logística, simulación de costos y análisis operativo de exportaciones florales.
 
-Desde agosto de 2026, BLIS absorbió 4 herramientas que antes vivían como proyectos dispersos: consulta de requisitos fitosanitarios de exportación (Agrocalidad), inventario en tiempo real de la bodega de Miami (Inventario LAG), conciliación de cajas despachadas contra los manifiestos de UPS/FedEx/agencias locales (Torre de Control), y auditoría física de despachos de clientes especiales vía el bot de Telegram del auditor de poscosecha (Auditoría de Etiquetas). Un solo lugar reemplaza cinco sistemas distintos que antes vivían en repos, Google Sheets y bases de datos separadas.
+Desde agosto de 2026, BLIS absorbió 4 herramientas que antes vivían como proyectos dispersos: consulta de requisitos fitosanitarios de exportación (Agrocalidad), inventario en tiempo real de la bodega de Miami (Inventario LAG), conciliación de cajas despachadas contra los manifiestos de UPS/FedEx/agencias locales (Fedex-Ups See), y auditoría física de despachos de clientes especiales vía el bot de Telegram del auditor de poscosecha (Auditoría de Etiquetas). Un solo lugar reemplaza cinco sistemas distintos que antes vivían en repos, Google Sheets y bases de datos separadas.
 
 ## Brand Personality
 
@@ -30,7 +30,7 @@ El sistema debe sentirse como una herramienta de precisión: rápida de usar, si
 
 1. **Velocidad operativa primero** — cada pantalla tiene una tarea principal; la UI la hace obvia y rápida, sin clics extra
 2. **Los datos son el héroe** — números, rutas y costos están al frente; el chrome del sistema se retira
-3. **Verde como identidad, no como decoración** — el color verde de la marca aparece con propósito (estado, acción, jerarquía), no como relleno decorativo
+3. **Verde como identidad, no como decoración** — el color verde de la marca aparece con propósito (estado, acción, jerarquía), no como relleno decorativo. La paleta viva desde el 2026-09-05 es `#1d7a4c` (primario), `#14532d` (oscuro, sidebar) y `#e7f3ec` (claro); reemplazó al verde `#2e7d32` de Material Design 2014, que era justo el "software legacy" de las anti-referencias
 4. **Feedback en tiempo real** — cambios se reflejan inmediatamente (el cotizador actualiza al instante); no hay estados de espera ocultos
 5. **Operacional, no corporativo** — la interfaz respeta la inteligencia del usuario; sin tooltips infantiles, sin onboarding forzado
 
