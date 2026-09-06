@@ -1,27 +1,29 @@
-"""API del modulo Torre de Control: conciliacion de cajas dartis_ventas
-vs manifiestos de UPS/FedEx y entregas de agencias locales.
+"""API del modulo Torre de Control: conciliacion de cajas de dartis_ventas
+contra los manifiestos de UPS y FedEx.
 
-Clonado de REPORTEUPSFEDEX (app.py). El scraping/reconciliacion en vivo
-se mueve a app.services.courier_reconciliation; este router solo expone
-los endpoints y las subidas de archivo (que aqui parsean directo a
-Postgres, sin el hack de persistir vía `git commit` del original).
+Clonado de REPORTEUPSFEDEX (app.py). La conciliacion vive en
+app.services.courier_reconciliation; este router solo expone los endpoints
+y las subidas de archivo (que aqui parsean directo a Postgres, sin el hack
+de persistir via `git commit` del original).
+
+Alcance: solo UPS y FedEx. No se consulta tracking en vivo y las agencias de
+carga locales quedan fuera del proceso — ver courier_reconciliation.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from psycopg2.extras import execute_values
 from sqlalchemy import text
 
 from app.database.connection import engine
-from app.services import courier_duoplane, courier_fedex_client
+from app.services import courier_duoplane
 from app.services import courier_parsers
 from app.services import courier_reconciliation as motor
 
 router = APIRouter(prefix="/torre-control", tags=["Torre de Control"])
 
 UTC = timezone.utc
-FEDEX_DIAS_REFRESCO_ESTADO = 5
 
 
 @router.get("/estado")
@@ -50,23 +52,58 @@ async def subir_ups(archivo: UploadFile):
         raise HTTPException(status_code=400, detail="Se esperaba un archivo .csv")
     contenido = await archivo.read()
     try:
-        filas = courier_parsers.parse_ups_csv(contenido)
+        filas, descartadas = courier_parsers.parse_ups_csv(contenido)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if not filas:
+        raise HTTPException(
+            status_code=400,
+            detail="El CSV no trajo ninguna fila con token 'PO:<numero>' en "
+                   "'Reference Number(s)'. Sin ese token no hay como cruzar contra Dartis.")
+
+    # Deduplica dentro del propio archivo: un UPSERT no admite la misma clave
+    # dos veces en el mismo lote.
+    por_tracking = {f["tracking"]: f for f in filas if f["tracking"]}
 
     columnas = ["factura", "tracking", "referencia", "estado", "fecha_manifiesto",
-                "ship_to", "destino", "servicio", "entrega_programada"]
-    tuples = [tuple(f[c] for c in columnas) for f in filas]
+                "ship_to", "destino", "servicio", "entrega_programada", "archivo"]
+    tuples = [tuple(f.get(c) if c != "archivo" else archivo.filename for c in columnas)
+              for f in por_tracking.values()]
 
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE courier_ups_manifest"))
+        previos = {r[0] for r in conn.execute(text(
+            "SELECT tracking FROM courier_ups_manifest")).all()}
         if tuples:
             raw = conn.connection.cursor()
+            # UPSERT, no TRUNCATE. El manifiesto de UPS es acumulativo y se
+            # vuelve a subir entero: vaciar la tabla antes de insertar borraba
+            # todo el historial anterior y dejaba solo el ultimo archivo.
             execute_values(raw, f"""
                 INSERT INTO courier_ups_manifest ({", ".join(columnas)}) VALUES %s
+                ON CONFLICT (tracking) DO UPDATE SET
+                    factura            = EXCLUDED.factura,
+                    referencia         = EXCLUDED.referencia,
+                    estado             = EXCLUDED.estado,
+                    fecha_manifiesto   = EXCLUDED.fecha_manifiesto,
+                    ship_to            = EXCLUDED.ship_to,
+                    destino            = EXCLUDED.destino,
+                    servicio           = EXCLUDED.servicio,
+                    entrega_programada = EXCLUDED.entrega_programada,
+                    archivo            = EXCLUDED.archivo,
+                    actualizado_at     = now()
             """, tuples, page_size=1000)
 
-    return {"ok": True, "archivo": archivo.filename, "bultos_importados": len(filas)}
+    nuevos = sum(1 for t in por_tracking if t not in previos)
+    return {
+        "ok": True,
+        "archivo": archivo.filename,
+        "bultos_importados": len(por_tracking),
+        "nuevos": nuevos,
+        "actualizados": len(por_tracking) - nuevos,
+        "descartados_sin_po": descartadas,
+        "duplicados_en_archivo": len(filas) - len(por_tracking),
+        "facturas": len({f["factura"] for f in por_tracking.values()}),
+    }
 
 
 @router.post("/subir-fedex")
@@ -79,60 +116,42 @@ async def subir_fedex(archivo: UploadFile):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No se pudo leer el PDF: {e}")
 
-    nuevos = 0
+    # Un envio sin token "PO:" no se puede cruzar contra Dartis: se descarta,
+    # pero se cuenta.
+    sin_po = sum(1 for f in filas if f["tracking"] and f["factura"] is None)
+    por_tracking = {f["tracking"]: f for f in filas
+                    if f["tracking"] and f["factura"] is not None}
+
+    columnas = ["tracking", "factura", "referencia", "destinatario", "ciudad",
+                "awb", "fecha_envio", "fecha_registro", "archivo"]
+    ahora = datetime.now(UTC)
+    tuples = [
+        (f["tracking"], f["factura"], f["referencia"], f["destinatario"],
+         f["ciudad"], f["awb"], f["fecha_envio"], ahora, archivo.filename)
+        for f in por_tracking.values()
+    ]
+
     with engine.begin() as conn:
-        for f in filas:
-            if not f["tracking"]:
-                continue
-            existe = conn.execute(text(
-                "SELECT 1 FROM courier_fedex_envios WHERE tracking = :t"
-            ), {"t": f["tracking"]}).first()
-            if existe:
-                continue
-            conn.execute(text("""
-                INSERT INTO courier_fedex_envios
-                    (tracking, factura, referencia, destinatario, ciudad, awb, fecha_envio)
-                VALUES (:tracking, :factura, :referencia, :destinatario, :ciudad, :awb, :fecha_envio)
-            """), f)
-            nuevos += 1
+        previos = {r[0] for r in conn.execute(text(
+            "SELECT tracking FROM courier_fedex_envios")).all()}
+        if tuples:
+            # Insercion en lote: fila por fila costaba dos round-trips por
+            # envio (~195 ms cada uno contra Supabase), minutos para un PDF
+            # grande. Cada PDF es un despacho puntual y sus datos no cambian
+            # despues, asi que un tracking ya cargado no se vuelve a escribir.
+            raw = conn.connection.cursor()
+            execute_values(raw, f"""
+                INSERT INTO courier_fedex_envios ({", ".join(columnas)}) VALUES %s
+                ON CONFLICT (tracking) DO NOTHING
+            """, tuples, page_size=1000)
 
-    # Refresca estado real (API de FedEx) de los recien subidos + todo lo
-    # despachado dentro de +/- FEDEX_DIAS_REFRESCO_ESTADO dias de hoy.
-    hoy = datetime.now(UTC).date()
-    limite_atras = hoy - timedelta(days=FEDEX_DIAS_REFRESCO_ESTADO)
-    limite_adelante = hoy + timedelta(days=FEDEX_DIAS_REFRESCO_ESTADO)
-    with engine.connect() as conn:
-        candidatos = conn.execute(text(
-            "SELECT tracking, fecha_envio, fecha_registro FROM courier_fedex_envios"
-        )).all()
-
-    a_consultar = {f["tracking"] for f in filas if f["tracking"]}
-    for tracking, fecha_envio, fecha_registro in candidatos:
-        fecha = _parsear_fecha_fedex(fecha_envio) or _parsear_fecha_fedex(str(fecha_registro) if fecha_registro else "")
-        if fecha is None or limite_atras <= fecha <= limite_adelante:
-            a_consultar.add(tracking)
-
-    estados = await courier_fedex_client.consultar_estado_real(sorted(a_consultar))
-    if estados:
-        with engine.begin() as conn:
-            for tracking, info in estados.items():
-                conn.execute(text("""
-                    UPDATE courier_fedex_envios
-                    SET estado_fedex = :estado_fedex, fecha_entrega_fedex = :fecha_entrega_fedex
-                    WHERE tracking = :tracking
-                """), {"tracking": tracking, **info})
-
+    nuevos = sum(1 for t in por_tracking if t not in previos)
     return {
-        "ok": True, "archivo": archivo.filename,
-        "envios_en_pdf": len(filas), "nuevos": nuevos, "duplicados": len(filas) - nuevos,
-        "estados_actualizados": len(estados),
+        "ok": True,
+        "archivo": archivo.filename,
+        "envios_en_pdf": len(filas),
+        "nuevos": nuevos,
+        "duplicados": len(por_tracking) - nuevos,
+        "descartados_sin_po": sin_po,
+        "facturas": len({f["factura"] for f in por_tracking.values()}),
     }
-
-
-def _parsear_fecha_fedex(valor: str):
-    for fmt in ("%m/%d/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime((valor or "").strip()[:19], fmt).date()
-        except ValueError:
-            continue
-    return None

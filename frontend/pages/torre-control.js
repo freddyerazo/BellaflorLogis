@@ -27,7 +27,6 @@ async function cargarEstado() {
   snapshot = await apiGet("/torre-control/estado");
   renderKpis();
   renderTablaPrincipal();
-  renderTablaLocales();
   if (snapshot.actualizado) {
     $("#actualizado").textContent = `Actualizado ${new Date(snapshot.actualizado).toLocaleString("es-EC")}`;
   }
@@ -83,47 +82,9 @@ function renderTablaPrincipal() {
   }
 }
 
-function renderTablaLocales() {
-  const estado = $("#filtroEstadoLocal").value;
-  const texto = $("#filtroBuscarLocal").value.trim().toLowerCase();
-
-  const filas = snapshot.cajas.filter((c) => {
-    if (["UPS", "FEDEX"].includes(c.courier)) return false;
-    if (estado && c.conciliacion !== estado) return false;
-    if (texto) {
-      const heno = `${c.factura} ${c.courier_raw || ""} ${c.cliente || ""} ${c.empresa || ""}`.toLowerCase();
-      if (!heno.includes(texto)) return false;
-    }
-    return true;
-  });
-
-  const tbody = $("#tablaLocales");
-  if (!filas.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">Sin resultados</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = filas.slice(0, 500).map((c) => `
-    <tr>
-      <td>${c.factura}</td>
-      <td>${c.courier_raw || ""}</td>
-      <td>${c.empresa || ""}</td>
-      <td>${c.cliente || ""}</td>
-      <td>${c.fecha_dartis || ""}</td>
-      <td>${c.cajas_dartis ?? ""}</td>
-      <td>${c.fecha_entrega_real || "-"}</td>
-      <td><span class="badge ${BADGE[c.conciliacion] || "badge-gray"}">${c.conciliacion}</span></td>
-    </tr>
-  `).join("");
-  if (filas.length > 500) {
-    tbody.innerHTML += `<tr><td colspan="8" class="conteo">Mostrando 500 de ${filas.length} — afina el filtro para ver el resto.</td></tr>`;
-  }
-}
 
 ["filtroEstado", "filtroCourier", "filtroBuscar"].forEach((id) =>
   $(`#${id}`).addEventListener("input", renderTablaPrincipal)
-);
-["filtroEstadoLocal", "filtroBuscarLocal"].forEach((id) =>
-  $(`#${id}`).addEventListener("input", renderTablaLocales)
 );
 
 // ---------- Acciones ----------

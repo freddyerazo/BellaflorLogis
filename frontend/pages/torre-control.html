@@ -12,7 +12,7 @@
   <main class="content" id="content">
     <div class="page-header">
       <h1><i class="ph ph-radar"></i> Fedex-Ups See</h1>
-      <p class="page-subtitle">Concilia las cajas de dartis_ventas contra los manifiestos de UPS, FedEx y agencias locales.</p>
+      <p class="page-subtitle">Concilia las cajas de dartis_ventas contra los manifiestos de UPS y FedEx.</p>
     </div>
 
     <div class="import-card">
@@ -40,11 +40,6 @@
       <div class="summary-card"><span class="summary-card-value" id="kpi-sin-manifiesto">0</span><span class="summary-card-label">Sin manifiesto</span></div>
       <div class="summary-card"><span class="summary-card-value" id="kpi-no-en-dartis">0</span><span class="summary-card-label">No en Dartis</span></div>
     </div>
-
-    <nav class="subtabs" style="margin-top: 1.5rem;">
-      <button class="subtab active" data-tab="principal">Principal (UPS / FedEx)</button>
-      <button class="subtab" data-tab="locales">Agencias locales</button>
-    </nav>
 
     <section id="panel-principal" class="subpanel active">
       <div class="import-card">
@@ -85,33 +80,6 @@
       </div>
     </section>
 
-    <section id="panel-locales" class="subpanel">
-      <div class="import-card">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Estado</label>
-            <select id="filtroEstadoLocal">
-              <option value="">Todos</option>
-              <option value="OK">OK</option>
-              <option value="PENDIENTE">Pendiente</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Buscar</label>
-            <input type="search" id="filtroBuscarLocal" placeholder="factura, agencia, cliente..." />
-          </div>
-        </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Factura</th><th>Agencia</th><th>Empresa</th><th>Cliente</th>
-              <th>Fecha Dartis</th><th>Cajas</th><th>Entrega real</th><th>Conciliación</th>
-            </tr>
-          </thead>
-          <tbody id="tablaLocales"><tr><td colspan="8" class="loading">Cargando...</td></tr></tbody>
-        </table>
-      </div>
-    </section>
   </main>
 
   <script type="module" src="/js/layout.js"></script>

@@ -33,11 +33,17 @@ def _extraer_po(referencia: str) -> str:
     return m.group(1) if m else ""
 
 
-def parse_ups_csv(contenido: bytes) -> list[dict]:
-    """Devuelve una fila por bulto: {factura, tracking, estado,
+def parse_ups_csv(contenido: bytes) -> tuple[list[dict], int]:
+    """Devuelve (filas, descartadas).
+
+    Cada fila es un bulto: {factura, tracking, referencia, estado,
     fecha_manifiesto, ship_to, destino, servicio, entrega_programada}.
-    Filas sin token PO:<numero> en 'Reference Number(s)' se descartan
-    (no se puede cruzar con dartis_ventas.id_pedido)."""
+
+    Las filas sin token PO:<numero> en 'Reference Number(s)' no se pueden
+    cruzar contra dartis_ventas.id_pedido, asi que se descartan — pero se
+    CUENTAN y se informan, en vez de desaparecer en silencio: en el archivo
+    real son decenas, y sin ese numero parece que el manifiesto llego
+    incompleto."""
     texto = contenido.decode("utf-8-sig", errors="replace")
     muestra = texto[:4096]
     delim = "\t" if muestra.count("\t") > muestra.count(",") else ","
@@ -57,11 +63,13 @@ def parse_ups_csv(contenido: bytes) -> list[dict]:
         return str(fila[idx[k]]).strip() if idx[k] is not None and idx[k] < len(fila) else ""
 
     filas = []
+    descartadas = 0
     for fila in lector:
         if not fila or not cel(fila, "tracking"):
             continue
         po = _extraer_po(cel(fila, "referencia"))
         if not po:
+            descartadas += 1
             continue
         filas.append({
             "factura": int(po),
@@ -74,7 +82,7 @@ def parse_ups_csv(contenido: bytes) -> list[dict]:
             "servicio": cel(fila, "servicio"),
             "entrega_programada": cel(fila, "entrega"),
         })
-    return filas
+    return filas, descartadas
 
 
 def parse_fedex_pdf(contenido: bytes) -> list[dict]:
