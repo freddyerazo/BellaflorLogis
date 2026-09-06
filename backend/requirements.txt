@@ -16,3 +16,12 @@ pdfplumber==0.11.10
 apscheduler==3.11.3
 # La VUE entrega su registro en .xls legacy (OLE2); openpyxl no lo lee
 xlrd==2.0.2
+# Reinterpretacion de recibos OCR (modulo Entregas Locales, cruce con Dartis)
+# -- tres proveedores para comparar calidad de extraccion antes de fijar uno
+anthropic==0.69.0
+google-genai==1.42.0
+openai==2.7.1
+# Lectura directa del Google Sheet de EntregasLocales via cuenta de servicio,
+# sin pasar por el Apps Script Web App (no se toca el proyecto original)
+google-api-python-client==2.184.0
+google-auth==2.42.1

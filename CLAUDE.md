@@ -76,7 +76,8 @@ BLIS/
 | Carriers Miami | `/api/truck-companies` (`truck_company`) | 139 — catálogo cargado desde "ID clientes.xlsx" hoja "Listado de Carriers-Miami"; usado como Carrier ID en Posteo de Inventario (Inventario LAG) |
 | Cotización (Costing Engine) | `/api/cotizacion` — wizard que combina especies, variedades, tarifas; `/api/cotizaciones` (`cotizaciones`) para guardarlas, listarlas y reabrirlas | funcional, `scenario_*` con datos de prueba |
 | Importación Dartis | `/api/dartis-import` (`dartis_ventas`, `import_species_varieties`) | 20,888 / 1,211 |
-| Ingresos locales | `/api/ingresos-locales` | — |
+| Ingresos locales | `/api/ingresos-locales` | — (proxy de solo lectura al Apps Script del bot; sin BD propia) |
+| Entregas Locales — sub-pestaña "Dartis Ventas vs Entregas" dentro de Ingresos Locales | `/api/entregas-locales` (`entregas_locales_raw`, `entregas_locales`, `entregas_locales_detalle`, `dartis_entregas_cruce`, `cargo_agencies_equivalencias`) | Reinterpreta con **Claude** el OCR crudo de los recibos de bodega (mismo Google Sheet del bot, leído con cuenta de servicio) y lo cruza contra `dartis_ventas`: **una fila por CADA `id_pedido`**, sin excepción de courier. Pipeline en 3 endpoints (`sincronizar-sheet` → `interpretar` → `cruzar`) porque son ~3.500 recibos a ~4 s cada uno. Requiere `ANTHROPIC_API_KEY` y `backend/google-sheets-sa.json` |
 | Dashboard | `/api/dashboard` | — |
 | Roles | `/api/roles` | 0 (auth pendiente) |
 | Perfiles | `/api/perfiles` | 0 (auth pendiente) |

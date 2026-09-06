@@ -41,3 +41,7 @@ backups/
 # Base de datos local
 *.sqlite
 *.db
+
+# Credenciales de cuentas de servicio de Google (Entregas Locales, lectura del Sheet)
+backend/google-sheets-sa.json
+*-sa.json

@@ -9,8 +9,96 @@
 </head>
 <body data-page="ingresos-locales">
   <div id="sidebar" class="sidebar"></div>
-  <main class="content" id="content"></main>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-truck"></i> Ingresos Locales</h1>
+      <p class="page-subtitle">Recibos de entrega en bodega y su cruce contra las ventas de Dartis.</p>
+    </div>
+
+    <nav class="subtabs">
+      <button class="subtab active" data-tab="recibos">Recibos (Google Sheets)</button>
+      <button class="subtab" data-tab="cruce">Dartis Ventas vs Entregas</button>
+    </nav>
+
+    <!-- SUB-PESTAÑA 1: el tablero de siempre, sin cambios de fondo -->
+    <section id="panel-recibos" class="subpanel active"></section>
+
+    <!-- SUB-PESTAÑA 2: el cruce nuevo contra dartis_ventas -->
+    <section id="panel-cruce" class="subpanel">
+      <div class="card-grid" id="el-resumen" style="margin-bottom:1.25rem"></div>
+
+      <div class="import-card">
+        <h3 style="margin-top:0"><i class="ph ph-arrows-left-right"></i> Cargar e interpretar recibos</h3>
+        <p class="page-subtitle" style="margin-bottom:1rem">
+          Tres pasos, en orden. El Sheet del bot de Telegram no se toca: se lee con una
+          cuenta de servicio de solo lectura, se reinterpreta el OCR con Claude y se cruza
+          contra <code>dartis_ventas</code>. Cada pedido de Dartis queda con un estado, sin excepción.
+        </p>
+        <div class="import-actions" style="justify-content:flex-start; gap:.75rem; flex-wrap:wrap">
+          <button id="btnSincronizar" class="btn btn-secondary">
+            <i class="ph ph-cloud-arrow-down"></i> 1. Traer del Sheet
+          </button>
+          <button id="btnInterpretar" class="btn btn-secondary">
+            <i class="ph ph-sparkle"></i> 2. Interpretar pendientes
+          </button>
+          <button id="btnCruzar" class="btn btn-primary">
+            <i class="ph ph-arrows-left-right"></i> 3. Recalcular cruce
+          </button>
+          <label class="form-group-checkbox" style="margin:0; display:flex; align-items:center; gap:.4rem">
+            <input type="checkbox" id="chkContinuo" />
+            <span style="font-size:13px">Interpretar hasta terminar</span>
+          </label>
+        </div>
+        <div id="elResultado" class="resultado"></div>
+      </div>
+
+      <div class="import-card" style="margin-top:1.25rem">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Estado</label>
+            <select id="elFiltroEstado">
+              <option value="">Todos</option>
+              <option value="OK">OK</option>
+              <option value="SIN RECIBO">Sin recibo</option>
+              <option value="AMBIGUO">Ambiguo</option>
+              <option value="SIN PROCESAR">Sin procesar</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Desde</label>
+            <input type="date" id="elDesde" />
+          </div>
+          <div class="form-group">
+            <label>Hasta</label>
+            <input type="date" id="elHasta" />
+          </div>
+          <div class="form-group">
+            <label>Buscar</label>
+            <input type="search" id="elBuscar" placeholder="pedido, empresa, agencia, N° ingreso..." />
+          </div>
+        </div>
+
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Pedido</th><th>Fecha Dartis</th><th>Empresa (finca)</th>
+                <th>Agencia de carga</th><th class="num">Cajas</th>
+                <th>N° Ingreso</th><th>Fecha recibo</th><th>Agencia del recibo</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="elTabla">
+              <tr><td colspan="9" class="loading">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
   <script type="module" src="/js/layout.js"></script>
-  <script type="module" src="/pages/ingresos-locales.js?v=4"></script>
+  <script type="module" src="/pages/ingresos-locales.js?v=5"></script>
 </body>
 </html>

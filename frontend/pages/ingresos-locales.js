@@ -6,7 +6,7 @@ let todosLosDatos = [];
 let datosFiltrados = [];
 
 async function init() {
-  const content = document.getElementById("content");
+  const content = document.getElementById("panel-recibos");
   content.innerHTML = `
     <div class="dashboard-loading">
       <span></span>
@@ -43,12 +43,12 @@ async function init() {
 
 /* ─── Render principal ─────────────────────────────────────────── */
 function renderPage() {
-  const content = document.getElementById("content");
+  const content = document.getElementById("panel-recibos");
   content.innerHTML = `
     <section class="il-hero">
       <div>
-        <h1><i class="ph ph-truck"></i> Ingresos Locales</h1>
-        <p>Registros de entregas en finca — datos en tiempo real desde Google Sheets.</p>
+        <h1><i class="ph ph-truck"></i> Recibos registrados</h1>
+        <p>Lo que el bot de Telegram lleva capturado — lectura en vivo del Google Sheet.</p>
       </div>
       <div class="il-hero-time">
         Actualizado: <strong id="il-updated">—</strong>
@@ -341,3 +341,173 @@ function copiarLink() {
 
 init();
 setInterval(init, 180000);
+
+/* ═══════════════════════════════════════════════════════════════════
+   SUB-PESTAÑA: Dartis Ventas vs Entregas Locales
+   ═══════════════════════════════════════════════════════════════════
+   Modulo nuevo, separado del tablero de arriba: aquel es un proxy de solo
+   lectura al Apps Script del bot; este lee el mismo Sheet con la API de
+   Google, reinterpreta el OCR con Claude y lo cruza contra dartis_ventas.
+
+   El universo lo manda Dartis, no los recibos: cada pedido aparece siempre,
+   aunque todavia no se haya procesado ("SIN PROCESAR"). Asi la cobertura
+   del 100% se ve en pantalla en vez de ser un hueco silencioso. */
+
+const $$ = (sel) => document.querySelector(sel);
+
+const BADGE_CRUCE = {
+  "OK": "badge-green",
+  "SIN RECIBO": "badge-orange",
+  "AMBIGUO": "badge-blue",
+  "SIN PROCESAR": "badge-gray",
+};
+
+/* ─── Sub-pestañas ─────────────────────────────────────────────── */
+document.querySelectorAll(".subtab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".subtab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".subpanel").forEach((p) => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+    if (tab.dataset.tab === "cruce") cargarCruce();
+  });
+});
+
+/* ─── Resumen + tabla ──────────────────────────────────────────── */
+async function cargarResumenCruce() {
+  const r = await fetch("/api/entregas-locales/resumen");
+  const d = await r.json();
+  const tarjeta = (valor, etiqueta, acento = false) => `
+    <div class="il-card${acento ? " il-card--accent" : ""}">
+      <div class="il-card-label">${etiqueta}</div>
+      <div class="il-card-valor">${(valor ?? 0).toLocaleString("es-EC")}</div>
+    </div>`;
+
+  $$("#el-resumen").innerHTML = [
+    tarjeta(d.pedidos_dartis, "Pedidos en Dartis", true),
+    tarjeta(d.ok, "Con recibo (OK)"),
+    tarjeta(d.sin_recibo, "Sin recibo"),
+    tarjeta(d.ambiguo, "Ambiguos"),
+    tarjeta(d.sin_procesar, "Sin procesar"),
+    tarjeta(d.recibos_interpretados, "Recibos interpretados"),
+  ].join("");
+
+  if (!d.sheet_configurado) {
+    mostrarEl("Falta configurar el acceso al Sheet (ENTREGAS_LOCALES_SHEET_ID o el .json de la cuenta de servicio).", "msg-error");
+  }
+  return d;
+}
+
+async function cargarCruce() {
+  await cargarResumenCruce();
+  const params = new URLSearchParams();
+  const estado = $$("#elFiltroEstado").value;
+  const texto = $$("#elBuscar").value.trim();
+  const desde = $$("#elDesde").value;
+  const hasta = $$("#elHasta").value;
+  if (estado) params.set("estado", estado);
+  if (texto) params.set("texto", texto);
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+
+  const tbody = $$("#elTabla");
+  tbody.innerHTML = `<tr><td colspan="9" class="loading">Cargando…</td></tr>`;
+  try {
+    const r = await fetch(`/api/entregas-locales/cruce?${params}`);
+    const filas = await r.json();
+    if (!filas.length) {
+      tbody.innerHTML = `<tr><td colspan="9" class="empty">Sin resultados con esos filtros.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = filas.map((f) => `
+      <tr>
+        <td><strong>${f.id_pedido}</strong></td>
+        <td>${f.fecha || "—"}</td>
+        <td>${f.empresa || "—"}</td>
+        <td>${f.agencia_carga || "—"}</td>
+        <td class="num">${f.cajas ?? "—"}</td>
+        <td>${f.numero_ingreso || "—"}</td>
+        <td>${f.fecha_documento || "—"}</td>
+        <td>${f.agencia_raw || "—"}</td>
+        <td><span class="badge ${BADGE_CRUCE[f.estado] || "badge-gray"}">${f.estado}</span></td>
+      </tr>`).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="9" class="error">${err.message}</td></tr>`;
+  }
+}
+
+["elFiltroEstado", "elDesde", "elHasta", "elBuscar"].forEach((id) =>
+  $$(`#${id}`).addEventListener("input", cargarCruce)
+);
+
+/* ─── Acciones del pipeline ────────────────────────────────────── */
+function mostrarEl(msg, clase = "msg-ok") {
+  $$("#elResultado").innerHTML = `<p class="${clase}">${msg}</p>`;
+}
+
+async function postEl(ruta) {
+  const r = await fetch(`/api/entregas-locales/${ruta}`, { method: "POST" });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail || r.statusText);
+  return d;
+}
+
+$$("#btnSincronizar").addEventListener("click", async () => {
+  const btn = $$("#btnSincronizar");
+  btn.disabled = true;
+  mostrarEl("Leyendo el Google Sheet…", "msg-info");
+  try {
+    const d = await postEl("sincronizar-sheet");
+    mostrarEl(`Sheet leído: ${d.leidas} filas (${d.nuevas} nuevas, ${d.actualizadas} actualizadas). Total en la tabla: ${d.total_en_tabla}.`);
+    await cargarResumenCruce();
+  } catch (err) {
+    mostrarEl(err.message, "msg-error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$$("#btnInterpretar").addEventListener("click", async () => {
+  const btn = $$("#btnInterpretar");
+  const continuo = $$("#chkContinuo").checked;
+  btn.disabled = true;
+  try {
+    let total = 0;
+    let vuelta = 0;
+    // En modo continuo se encadena lote tras lote: son ~3.500 recibos a ~3 s
+    // cada uno, imposible en una sola peticion sin morir por timeout.
+    do {
+      vuelta++;
+      mostrarEl(`Interpretando con Claude… (lote ${vuelta}, ${total} recibos listos)`, "msg-info");
+      const d = await postEl("interpretar?limite=25");
+      total += d.procesadas;
+      await cargarResumenCruce();
+      if (d.errores?.length) {
+        mostrarEl(`${total} recibos interpretados. ${d.errores.length} fallaron en el último lote: ${d.errores[0].error}`, "msg-error");
+      }
+      if (!continuo || d.procesadas === 0 || d.pendientes === 0) {
+        mostrarEl(`Listo: ${total} recibos interpretados en esta corrida. Quedan ${d.pendientes} pendientes.`);
+        break;
+      }
+    } while (true);
+  } catch (err) {
+    mostrarEl(err.message, "msg-error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$$("#btnCruzar").addEventListener("click", async () => {
+  const btn = $$("#btnCruzar");
+  btn.disabled = true;
+  mostrarEl("Recalculando el cruce contra dartis_ventas…", "msg-info");
+  try {
+    const d = await postEl("cruzar");
+    mostrarEl(`Cruce recalculado sobre ${d.pedidos.toLocaleString("es-EC")} pedidos: ${d.ok} con recibo, ${d.sin_recibo} sin recibo, ${d.ambiguo} ambiguos (ventana ±${d.ventana_dias} días).`);
+    await cargarCruce();
+  } catch (err) {
+    mostrarEl(err.message, "msg-error");
+  } finally {
+    btn.disabled = false;
+  }
+});
