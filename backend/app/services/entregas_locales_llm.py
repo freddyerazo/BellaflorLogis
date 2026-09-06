@@ -441,6 +441,13 @@ def interpretar_pendientes(limite: int = 25) -> dict:
             agencias, fincas = _resolver_catalogos(conn)
             agencia_raw = (datos.get("agencia_logistica") or "").strip() or "(sin identificar)"
 
+            # ON CONFLICT DO NOTHING: la pantalla permite lanzar "interpretar
+            # hasta terminar" desde el navegador Y correr un lote por script
+            # al mismo tiempo -- pasó en la practica (raw_id 3454 llego a
+            # insertarse dos veces en paralelo, la segunda tiraba
+            # UniqueViolation y tumbaba el lote entero). Con esto la segunda
+            # llamada simplemente no hace nada -- no se pierde el trabajo del
+            # LLM que ya se guardo, solo se descarta la copia redundante.
             entrega_id = conn.execute(text("""
                 INSERT INTO entregas_locales (
                     raw_id, fecha_documento, hora_documento, numero_ingreso,
@@ -452,7 +459,9 @@ def interpretar_pendientes(limite: int = 25) -> dict:
                     :agencia_id, :agencia_raw, :nombre_chofer, :cedula, :placa,
                     :temperatura_c, :observaciones, :foto_url, :calidad_ocr,
                     :modelo, now()
-                ) RETURNING id
+                )
+                ON CONFLICT (raw_id) DO NOTHING
+                RETURNING id
             """), {
                 "raw_id": fila["id"],
                 "fecha_documento": _a_fecha(datos.get("fecha_documento")),
@@ -469,6 +478,12 @@ def interpretar_pendientes(limite: int = 25) -> dict:
                 "calidad_ocr": calidad if calidad in ("alta", "media", "baja") else None,
                 "modelo": MODELO,
             }).scalar()
+
+            if entrega_id is None:
+                # Otro proceso ya interpreto este mismo raw_id primero (ver
+                # comentario del INSERT). No es un error del recibo: se
+                # descarta esta corrida y se sigue con el resto del lote.
+                continue
 
             items = datos.get("items") or []
             if not es_valido:
