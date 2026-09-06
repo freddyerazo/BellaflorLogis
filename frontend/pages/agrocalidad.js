@@ -50,6 +50,13 @@ async function initCatalogo() {
     value: "id", label: "name_es", placeholder: "Todos",
   });
 
+  /* Estados Unidos es el destino que mas se consulta: el historial arranca
+     filtrado ahi. Se busca por nombre y no por id: el UUID cambia entre
+     entornos, el nombre viene de `countries.name_es` y es estable. */
+  const eeuu = catalogo.paises.find(
+    (p) => (p.name_es || "").trim().toLowerCase() === "estados unidos");
+  if (eeuu) document.getElementById("filter_country").value = eeuu.id;
+
   initFormularioPais();
 
   const sinMapeo = catalogo.especies_sin_mapeo;
@@ -228,6 +235,13 @@ async function cargarHistorial() {
       tbody.innerHTML = `<tr><td colspan="8" class="empty">Sin consultas registradas</td></tr>`;
       return;
     }
+
+    /* Alfabetico por especie. `localeCompare` con sensitivity base para que
+       tildes y mayusculas no alteren el orden (ASTER antes que ÁSTER antes
+       que aster). Una misma especie repite fila por cada destino, asi que
+       se desempata por pais. */
+    const cmp = (a, b) => (a || "").localeCompare(b || "", "es", { sensitivity: "base" });
+    filas.sort((a, b) => cmp(a.especie, b.especie) || cmp(a.pais, b.pais));
     tbody.innerHTML = filas.map((f) => {
       /* n_requisitos viene de la vista y cubre tambien las filas del scraping
          viejo, que tienen los requisitos en texto plano y 0 items. */
@@ -242,7 +256,7 @@ async function cargarHistorial() {
           <td>${esc(f.agrocalidad_code || "—")}</td>
           <td>${new Date(f.queried_at).toLocaleDateString("es-EC")}
             ${f.fuente === "scraping" ? `<span class="ag-sub">scraping</span>` : ""}</td>
-          <td><button class="btn-link ag-ver" data-id="${f.requirement_id}">Ver</button></td>
+          <td class="cot-acciones"><button class="btn-link ag-ver" data-id="${f.requirement_id}">Ver</button></td>
         </tr>`;
     }).join("");
 

@@ -3,16 +3,39 @@
 
 :root {
   --sidebar-width: 230px;
-  --primary: #2e7d32;
-  --primary-dark: #1b5e20;
-  --primary-light: #e8f5e9;
-  --bg: #f4f6f5;
+
+  /* -- Marca (verde Bellaflor, tono mas profundo y con mejor contraste) -- */
+  --primary: #1d7a4c;
+  --primary-dark: #14532d;
+  --primary-light: #e7f3ec;
+  --primary-hover: #17633e;
+
+  /* -- Superficies ------------------------------------------------------ */
+  --bg: #f5f7f6;
   --card-bg: #ffffff;
-  --border: #dfe3e1;
-  --text: #263238;
-  --text-muted: #6b7a77;
+  --surface-2: #f2f5f3;      /* encabezados de tabla, chips */
+  --surface-zebra: #fafbfa;  /* filas pares */
+
+  /* -- Bordes ----------------------------------------------------------- */
+  --border: #dde3e0;
+  --border-subtle: #eceff0;  /* separadores dentro de una tarjeta */
+
+  /* -- Texto ------------------------------------------------------------ */
+  --text: #1b2b26;
+  --text-muted: #64756f;
+
   --danger: #c62828;
   --danger-light: #fdecea;
+
+  /* -- Radios ----------------------------------------------------------- */
+  --radius-sm: 7px;
+  --radius: 10px;
+  --radius-lg: 13px;
+
+  /* -- Sombras (escala corta, sombras suaves y de tinte verde) ---------- */
+  --shadow-sm: 0 1px 2px rgba(20, 45, 34, .05);
+  --shadow: 0 2px 8px rgba(20, 45, 34, .06);
+  --shadow-lg: 0 10px 30px rgba(20, 45, 34, .10);
 
   /* ── Easing curves (Emil Kowalski) ─────────────────────────────────── */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -81,10 +104,13 @@ body {
 
 .sidebar-subtitle {
   display: block;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 4px;
-  letter-spacing: 1px;
+  font-size: 9.5px;
+  /* el nombre completo ocupa dos lineas: sin line-height propio quedan
+     pegadas, y a .5 de opacidad el contraste no alcanzaba para leerlas */
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.62);
+  margin-top: 5px;
+  letter-spacing: .7px;
   text-transform: uppercase;
   font-weight: 500;
 }
@@ -209,26 +235,32 @@ body {
 }
 
 .page-header h1 {
-  font-size: 22px;
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -.35px;
   margin: 0;
-  color: var(--primary-dark);
+  color: var(--text);
 }
 
 .section-title {
-  font-size: 18px;
-  color: var(--primary-dark);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -.2px;
+  color: var(--text);
   margin: 28px 0 12px;
 }
 
 /* ----- Buttons ----- */
 
 .btn {
-  font-size: 14px;
-  padding: 8px 16px;
-  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 15px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
   font-family: inherit;
+  line-height: 1.4;
   transition: background 160ms var(--ease-out),
               border-color 160ms var(--ease-out),
               box-shadow 160ms var(--ease-out),
@@ -245,16 +277,18 @@ body {
 .btn-primary {
   background: var(--primary);
   color: #fff;
+  box-shadow: var(--shadow-sm);
 }
-.btn-primary:hover { background: var(--primary-dark); }
+.btn-primary:hover { background: var(--primary-hover); }
 .btn-primary:active { background: var(--primary-dark); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 
 .btn-secondary {
   background: #fff;
   border-color: var(--border);
   color: var(--text);
 }
-.btn-secondary:hover { background: #f5f7f6; border-color: #c5cec9; }
+.btn-secondary:hover { background: var(--surface-2); border-color: #c8d2cd; }
 .btn-secondary:disabled { opacity: .45; cursor: not-allowed; }
 
 .btn-link {
@@ -276,32 +310,64 @@ body {
 .table-wrapper {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow-x: auto;
+  box-shadow: var(--shadow-sm);
 }
 
 .data-table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  /* cifras de ancho fijo: las columnas de numeros quedan alineadas */
+  font-variant-numeric: tabular-nums;
 }
 
 .data-table th,
 .data-table td {
-  padding: 10px 14px;
+  padding: 9px 14px;
   text-align: left;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
 }
 
 .data-table th {
-  background: var(--primary-light);
-  color: var(--primary-dark);
+  background: var(--surface-2);
+  color: var(--text-muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* la primera columna identifica la fila: se lee primero */
+.data-table tbody td:first-child {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: var(--surface-zebra);
+}
+
+.data-table tbody tr {
+  transition: background 120ms var(--ease-out);
 }
 
 .data-table tbody tr:hover {
-  background: #fafafa;
+  background: var(--primary-light);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* columnas numericas: alinear a la derecha para comparar magnitudes */
+.data-table th.num,
+.data-table td.num {
+  text-align: right;
 }
 
 .data-table .actions-col {
@@ -324,21 +390,39 @@ body {
 /* ----- Badges ----- */
 
 .badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: .2px;
+  border: 1px solid transparent;
+}
+
+/* el punto de color evita depender solo del fondo para leer el estado;
+   solo en los badges de estado — en un contador seria ruido */
+.badge-active::before,
+.badge-inactive::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 .badge-active {
   background: var(--primary-light);
-  color: var(--primary-dark);
+  color: #15603c;
+  border-color: #cfe6da;
 }
 
 .badge-inactive {
   background: var(--danger-light);
   color: var(--danger);
+  border-color: #f5d5d2;
 }
 
 /* ----- Dialog / Modal ----- */
@@ -544,13 +628,13 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   margin-bottom: 32px;
 }
 .costing-summary-panel .panel-heading { padding-bottom: 10px; }
-.scenario-code-badge { font-size: 11px; font-weight: 700; color: #2e7d32; background: #e8f5e9; padding: 5px 10px; border-radius: 20px; }
+.scenario-code-badge { font-size: 11px; font-weight: 700; color: #1d7a4c; background: #e7f3ec; padding: 5px 10px; border-radius: 20px; }
 .costing-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px 18px 18px; }
 .kpi-item { background: #f5f8f6; border-radius: 10px; padding: 12px 14px; }
 .kpi-item span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: #7a9080; margin-bottom: 4px; }
 .kpi-item strong { font-size: 20px; font-weight: 700; color: #1b3c2c; }
-.kpi-highlight { background: #e8f5e9; grid-column: span 2; }
-.kpi-highlight strong { font-size: 26px; color: #1b5e20; }
+.kpi-highlight { background: #e7f3ec; grid-column: span 2; }
+.kpi-highlight strong { font-size: 26px; color: #14532d; }
 
 /* Desglose de costos */
 .cost-breakdown-list { padding: 6px 18px 16px; display: flex; flex-direction: column; gap: 9px; }
@@ -595,7 +679,7 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 
 /* Hero */
 .cotiz-hero {
-  background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #388e3c 100%);
+  background: linear-gradient(135deg, #14532d 0%, #1d7a4c 60%, #2f9c66 100%);
   color: #fff;
   border-radius: 16px;
   padding: 36px 40px;
@@ -655,9 +739,9 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   box-shadow: 0 4px 12px rgba(0,0,0,.1);
 }
 .step-item:hover:not(.active) .step-circle { transform: scale(1.04); }
-.step-circle.done { background: #e8f5e9; border-color: #4caf50; }
+.step-circle.done { background: #e7f3ec; border-color: #3aa46d; }
 
-.step-item.active .step-circle--green  { background:#e8f5e9; border-color:#2e7d32; }
+.step-item.active .step-circle--green  { background:#e7f3ec; border-color:#1d7a4c; }
 .step-item.active .step-circle--amber  { background:#fff3e0; border-color:#f57c00; }
 .step-item.active .step-circle--blue   { background:#e3f2fd; border-color:#1976d2; }
 .step-item.active .step-circle--violet { background:#f3e5f5; border-color:#7b1fa2; }
@@ -699,7 +783,7 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 .step-icon { font-size: 2rem; flex-shrink: 0; }
 .step-card-header h2 { margin: 0 0 2px; font-size: 1.15rem; }
 .step-card-header p  { margin: 0; font-size: .85rem; color: var(--text-muted); }
-.step-card--green  .step-card-header { background: linear-gradient(135deg, #e8f5e9, #f1f8f2); }
+.step-card--green  .step-card-header { background: linear-gradient(135deg, #e7f3ec, #f1f8f2); }
 .step-card--amber  .step-card-header { background: linear-gradient(135deg, #fff3e0, #fdf6ee); }
 .step-card--blue   .step-card-header { background: linear-gradient(135deg, #e3f2fd, #eef5fd); }
 .step-card--violet .step-card-header { background: linear-gradient(135deg, #f3e5f5, #faf1fb); }
@@ -816,7 +900,7 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 }
 .nav-dot.active { background: var(--primary); transform: scale(1.3); }
 .step-nav-dots { display: flex; gap: 8px; }
-.btn-success { background: #2e7d32 !important; }
+.btn-success { background: #1d7a4c !important; }
 
 /* ── Preview (sticky) ──────────────────────────────────────────────────── */
 .cotiz-preview {
@@ -864,7 +948,7 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 }
 .ps-row span { color: var(--text-muted); flex: 1; }
 .ps-row b    { font-weight: 700; white-space: nowrap; }
-.ps-row--green  b { color: #2e7d32; }
+.ps-row--green  b { color: #1d7a4c; }
 .ps-row--amber  b { color: #e65100; }
 .ps-row--blue   b { color: #1565c0; }
 .ps-row--violet b { color: #6a1b9a; }
@@ -909,7 +993,7 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 /* Botón guardar */
 .btn-save {
   margin: 16px 20px; padding: 12px;
-  background: linear-gradient(135deg, #2e7d32, #388e3c);
+  background: linear-gradient(135deg, #1d7a4c, #2f9c66);
   color: #fff; border: none; border-radius: 10px;
   font-size: .9rem; font-weight: 700; cursor: pointer;
   transition: opacity 160ms var(--ease-out),
@@ -1043,7 +1127,7 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
 
 /* Colores de iconos en círculos de paso */
 .step-circle { color: #b0bec5; }
-.step-item.visited .step-circle { color: #2e7d32; }
+.step-item.visited .step-circle { color: #1d7a4c; }
 .step-item.active .step-circle { color: #fff; }
 .step-circle i { font-size: 1.1rem; pointer-events: none; }
 
@@ -1092,7 +1176,7 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   position: absolute; left: 0;
   top: 50%; transform: translateY(-50%);
   height: 2px; width: 0%;
-  background: linear-gradient(to right, #00897b, #2e7d32);
+  background: linear-gradient(to right, #00897b, #1d7a4c);
   border-radius: 2px;
   transition: width .75s var(--ease-out);
 }
@@ -1103,11 +1187,11 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   font-size: 18px; color: #b0bec5; line-height: 1;
   transition: left .75s var(--ease-out), color .4s;
 }
-.rfl-plane.in-flight { left: calc(100% - 22px); color: #2e7d32; }
+.rfl-plane.in-flight { left: calc(100% - 22px); color: #1d7a4c; }
 
 /* Animación del total al actualizar */
 @keyframes totalPop {
-  0%   { transform: scale(1.07); color: #1b5e20; }
+  0%   { transform: scale(1.07); color: #14532d; }
   100% { transform: scale(1); }
 }
 .total-pop {
@@ -1995,12 +2079,22 @@ body[data-page="dashboard"] .content { padding: 34px 38px 48px; max-width: 1600p
   color: var(--primary-dark);
   font-size: 15px;
 }
+/* Los filtros no acompañan el ancho de la tabla: se leen mejor acotados */
+.ag-filtros {
+  max-width: 720px;
+}
+
 /* La tabla puede traer 86 filas: se acota el alto y scrollea sola */
 .ag-tabla-scroll {
   max-height: 460px;
   overflow: auto;
+  /* fondo propio: la tabla de Cotizaciones vive en un modal blanco y da por
+     hecho ese fondo (th blanco, hover gris). Sin esto quedaria sobre --bg y
+     el hover no se veria. */
+  background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 .ag-tabla-scroll .cot-tabla th {
   background: var(--card-bg);

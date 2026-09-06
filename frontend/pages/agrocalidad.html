@@ -104,18 +104,19 @@
       <h2><i class="ph ph-clock-counter-clockwise"></i> Consultas guardadas</h2>
     </div>
 
-    <div class="import-card">
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="filter_species">Filtrar por especie</label>
-          <select id="filter_species"><option value="">Todas</option></select>
-        </div>
-        <div class="form-group">
-          <label for="filter_country">Filtrar por país</label>
-          <select id="filter_country"><option value="">Todos</option></select>
-        </div>
+    <div class="form-grid ag-filtros">
+      <div class="form-group">
+        <label for="filter_species">Filtrar por especie</label>
+        <select id="filter_species"><option value="">Todas</option></select>
       </div>
-      <table class="data-table">
+      <div class="form-group">
+        <label for="filter_country">Filtrar por país</label>
+        <select id="filter_country"><option value="">Todos</option></select>
+      </div>
+    </div>
+
+    <div class="ag-tabla-scroll">
+      <table class="cot-tabla">
         <thead>
           <tr>
             <th>Especie</th>
