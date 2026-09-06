@@ -36,6 +36,14 @@ VENTANA_DIAS = 2
 # Un solo SQL para todo el universo en vez de un round-trip por pedido: son
 # ~11.000 pedidos y cada ida y vuelta a Supabase cuesta ~195 ms (ver
 # rules/coding-style.md). Asi el cruce completo es una sola consulta.
+#
+# `:desde` es opcional (NULL = todo el historial). Sirve para acotar el
+# recalculo mientras la interpretacion de recibos todavia no cubre todo el
+# Sheet: recalcular los ~12.000 pedidos de junio-agosto no aporta nada
+# nuevo si sus recibos ni siquiera se interpretaron todavia, y cuestan lo
+# mismo en tiempo de consulta que los que si importan ahora. No borra ni
+# toca el cruce ya calculado para pedidos anteriores a `:desde` -- solo no
+# los recalcula en esta pasada.
 SQL_CRUCE = """
 WITH pedidos AS (
     SELECT id_pedido,
@@ -44,6 +52,7 @@ WITH pedidos AS (
            MAX(agencia_carga) AS agencia_carga
     FROM dartis_ventas
     WHERE active AND agencia_carga IS NOT NULL
+      AND (CAST(:desde AS date) IS NULL OR fecha >= CAST(:desde AS date))
     GROUP BY id_pedido
 ),
 pedidos_res AS (
@@ -104,8 +113,13 @@ FROM resumen
 """
 
 
-def recalcular() -> dict:
-    """Recalcula el cruce completo y lo escribe en `dartis_entregas_cruce`.
+def recalcular(desde: str | None = None) -> dict:
+    """Recalcula el cruce y lo escribe en `dartis_entregas_cruce`.
+
+    `desde` (YYYY-MM-DD) acota que pedidos de Dartis se recalculan en esta
+    pasada -- por defecto None, todo el historial. Los pedidos anteriores a
+    `desde` NO se tocan: conservan el estado de la ultima vez que se
+    calcularon (o quedan "SIN PROCESAR" si nunca se calcularon).
 
     Se conserva `verificado_manual`: si alguien reviso y confirmo una fila a
     mano, un recalculo no puede borrar ese trabajo. Por eso es UPSERT y no
@@ -113,7 +127,7 @@ def recalcular() -> dict:
     puramente derivado, aca hay intervencion humana encima.
     """
     with engine.begin() as conn:
-        filas = conn.execute(text(SQL_CRUCE), {"ventana": VENTANA_DIAS}).mappings().all()
+        filas = conn.execute(text(SQL_CRUCE), {"ventana": VENTANA_DIAS, "desde": desde}).mappings().all()
         if not filas:
             return {"pedidos": 0, "ok": 0, "ambiguo": 0, "sin_recibo": 0}
 
@@ -138,10 +152,12 @@ def recalcular() -> dict:
     por_estado = {c["estado"]: c["n"] for c in conteo}
     return {
         "pedidos": sum(por_estado.values()),
+        "recalculados_esta_pasada": len(filas),
         "ok": por_estado.get("OK", 0),
         "ambiguo": por_estado.get("AMBIGUO", 0),
         "sin_recibo": por_estado.get("SIN RECIBO", 0),
         "ventana_dias": VENTANA_DIAS,
+        "desde": desde,
     }
 
 

@@ -98,10 +98,13 @@ def interpretar(limite: int = Query(25, ge=1, le=100)):
 
 
 @router.post("/cruzar")
-def cruzar():
-    """Paso 3: recalcula el cruce de TODOS los pedidos de Dartis.
+def cruzar(desde: str | None = Query(None, description="YYYY-MM-DD; solo recalcula pedidos desde esa fecha")):
+    """Paso 3: recalcula el cruce de los pedidos de Dartis.
 
-    Conserva `verificado_manual`: un recalculo no borra lo que alguien ya
-    reviso a mano.
+    `desde` acota el recalculo mientras la interpretacion de recibos
+    todavia no cubre todo el Sheet: recalcular pedidos viejos que ni
+    siquiera tienen su recibo interpretado no suma nada. Sin `desde`,
+    recalcula todo el historial. Conserva `verificado_manual`: un recalculo
+    no borra lo que alguien ya reviso a mano.
     """
-    return cruce.recalcular()
+    return cruce.recalcular(desde=desde)

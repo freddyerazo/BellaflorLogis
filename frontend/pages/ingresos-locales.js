@@ -499,11 +499,14 @@ $$("#btnInterpretar").addEventListener("click", async () => {
 
 $$("#btnCruzar").addEventListener("click", async () => {
   const btn = $$("#btnCruzar");
+  const desde = $$("#elCruceDesde").value;
+  const ruta = desde ? `cruzar?desde=${desde}` : "cruzar";
   btn.disabled = true;
-  mostrarEl("Recalculando el cruce contra dartis_ventas…", "msg-info");
+  mostrarEl(desde ? `Recalculando el cruce desde ${desde}…` : "Recalculando el cruce completo…", "msg-info");
   try {
-    const d = await postEl("cruzar");
-    mostrarEl(`Cruce recalculado sobre ${d.pedidos.toLocaleString("es-EC")} pedidos: ${d.ok} con recibo, ${d.sin_recibo} sin recibo, ${d.ambiguo} ambiguos (ventana ±${d.ventana_dias} días).`);
+    const d = await postEl(ruta);
+    const alcance = d.desde ? `${d.recalculados_esta_pasada} pedidos desde ${d.desde}` : `los ${d.recalculados_esta_pasada} pedidos`;
+    mostrarEl(`Cruce recalculado sobre ${alcance}. Totales acumulados: ${d.pedidos.toLocaleString("es-EC")} pedidos — ${d.ok} con recibo, ${d.sin_recibo} sin recibo, ${d.ambiguo} ambiguos (ventana ±${d.ventana_dias} días).`);
     await cargarCruce();
   } catch (err) {
     mostrarEl(err.message, "msg-error");
