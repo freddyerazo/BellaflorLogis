@@ -45,11 +45,14 @@ el original REPORTEUPSFEDEX — porque comparten las tablas de manifiesto.
    SELECT previo por envío (~195 ms/round-trip, minutos por PDF); ahora va en
    lote con `execute_values`.
 
-5. **La pantalla de Torre de Control se rediseñó** para verse como la de
-   producción de REPORTEUPSFEDEX: header verde con pulso "EN VIVO", filtros
-   de fecha/courier/estado/planificación, tabla con una fila por bulto,
-   columna **Destinatario** agregada (antes solo Cliente). Sidebar de BLIS
-   intacto.
+5. **La pantalla de Torre de Control se rediseñó, en dos pasadas.** La
+   primera portó la de producción de REPORTEUPSFEDEX: header verde con pulso
+   "EN VIVO", filtros de fecha/courier/estado/planificación, tabla con una
+   fila por bulto, columna **Destinatario** agregada (antes solo Cliente).
+   Sidebar de BLIS intacto. **La segunda (más tarde el mismo 2026-09-05) la
+   alineó al sistema de diseño de BLIS** — la primera había traído fuentes y
+   paleta propias, calcadas del original: ahora hereda Outfit y usa el hero
+   y `.cot-tabla` del resto del sistema. Detalle completo en `CLAUDE.md`.
 
 6. **Duoplane no tenía credenciales en BLIS** — se copiaron de
    REPORTEUPSFEDEX al `.env` local. Falta cargarlas también en el panel de

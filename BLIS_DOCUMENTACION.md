@@ -6608,17 +6608,28 @@ $("#form-posteo").addEventListener("submit", (e) => {
 
 ### pages/torre-control.html + .js — "Fedex-Ups See" (Fase 3)
 
-**Rediseñado el 2026-09-05** para verse como el dashboard de producción de
-REPORTEUPSFEDEX (`reporte-ups-fedex.onrender.com`), su fuente original: header
-verde con pulso "EN VIVO", filtros de fecha/courier/estado del courier
-(checklist auto-completado con los valores vistos)/entrega a tiempo-retraso/
-conciliación, tabla con una fila por bulto y enlaces directos de consulta a
-UPS/FedEx. Se agregó la columna **Destinatario** (antes solo se mostraba
-Cliente) y se quitaron las tarjetas KPI, que el original no tiene. El sidebar
-de BLIS se conservó — quitarlo habría roto la navegación a los otros 20
-módulos —, así que el diseño vive en estilos propios de la página (clases
-`torre-*`, mismo patrón que `prov-*` en `proveedores.html`) en vez de
-reemplazar el shell completo.
+**Rediseñado en dos pasadas.** La primera (2026-09-05) portó el dashboard de
+producción de REPORTEUPSFEDEX (`reporte-ups-fedex.onrender.com`), su fuente
+original: header verde con pulso "EN VIVO", filtros de fecha/courier/estado
+del courier (checklist auto-completado con los valores vistos)/entrega a
+tiempo-retraso/conciliación, tabla con una fila por bulto y enlaces directos
+de consulta a UPS/FedEx. Se agregó la columna **Destinatario** (antes solo se
+mostraba Cliente) y se quitaron las tarjetas KPI, que el original no tiene. El
+sidebar de BLIS se conservó — quitarlo habría roto la navegación a los otros
+20 módulos.
+
+Esa primera pasada trajo fuentes y paleta propias (Archivo + IBM Plex Mono,
+oliva sobre papel crema, cabecera `#2F3B2A`), calcadas del original y ajenas
+al resto de BLIS. La **segunda pasada (2026-09-05, later same day)** la alineó
+al sistema de diseño del proyecto: hereda Outfit de `styles.css`, la cabecera
+pasa a hero con el gradiente de marca (como `.cotiz-hero`), la tabla toma el
+tratamiento de `.cot-tabla` (thead claro en versalitas, celdas de 11px), y los
+estados/chips usan la paleta de badges del sistema en vez de bloques
+saturados — los colores de UPS y FedEx se conservan como chips tenues, porque
+son marcas de terceros y sirven para identificar el courier de un vistazo. Los
+nombres de clase `torre-*` se conservaron a propósito en ambas pasadas: es lo
+que genera `torre-control.js` al pintar cada fila, así que renombrarlos habría
+obligado a tocar la lógica de conciliación.
 
 `frontend/pages/torre-control.html`
 ```html
