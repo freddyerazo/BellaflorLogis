@@ -4,233 +4,278 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BLIS · Fedex-Ups See</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/styles.css" />
   <style>
-    /* ─── Torre de Control ────────────────────────────────────────────────
-       Diseño portado de REPORTEUPSFEDEX (static/dashboard.html): misma
-       paleta Bellaflor, mismos filtros, misma tabla por bulto. Clases
-       prefijadas "torre-" para no chocar con el resto de BLIS (mismo patron
-       que proveedores.html con "prov-"). Se conserva el sidebar de BLIS -
-       quitarlo rompería la navegación a los otros 20 módulos. */
+    /* ─── Fedex-Ups See ───────────────────────────────────────────────────
+       Alineado al sistema de diseño de BLIS (el mismo de Cotizaciones): hero
+       con el gradiente de marca, tipografia Outfit heredada de styles.css y
+       tabla con el tratamiento de .cot-tabla. Antes tenia paleta propia
+       (oliva #6F7F1F sobre papel #F6F6F1) y sus propias fuentes (Archivo +
+       IBM Plex Mono), portadas de REPORTEUPSFEDEX.
+
+       Los nombres de clase "torre-" se conservan a proposito: torre-control.js
+       los genera al pintar cada fila. Cambia el estilo, no el marcado. */
     :root {
-      --torre-tinta: #2F3B2A;
-      --torre-papel: #F6F6F1;
-      --torre-panel: #ffffff;
-      --torre-linea: #dde1d8;
-      --torre-ups: #b78600;
+      /* colores de marca de cada courier: identifican, no decoran */
+      --torre-ups: #8a6500;
       --torre-fedex: #4d148c;
-      --torre-ok: #6F7F1F;
-      --torre-mal: #8C2F2F;
-      --torre-pend: #7a8794;
-      --torre-acento: #6F7F1F;
     }
 
-    body[data-page="torre-control"] .content { background: var(--torre-papel); }
+    body[data-page="torre-control"] .content { background: var(--bg); }
     body[data-page="torre-control"] .page-header { display: none; }
 
-    .torre-mono { font-family: 'IBM Plex Mono', monospace; }
+    /* cifras de ancho fijo, igual que el resto del sistema */
+    .torre-mono { font-variant-numeric: tabular-nums; }
 
+    /* ── Hero ────────────────────────────────────────────────────────── */
     .torre-header {
-      background: var(--torre-tinta);
+      background: linear-gradient(135deg, #14532d 0%, #1d7a4c 60%, #2f9c66 100%);
       color: #fff;
-      padding: 18px 24px;
+      padding: 28px 32px;
       display: flex;
       flex-wrap: wrap;
-      gap: 16px;
+      gap: 18px;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 4px solid var(--torre-acento);
-      border-radius: 10px;
-      margin: -8px -8px 20px;
-      font-family: 'Archivo', sans-serif;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .torre-header > * { position: relative; z-index: 1; }
+    .torre-header::before {
+      content: "";
+      position: absolute;
+      width: 320px; height: 320px;
+      border: 52px solid rgba(255, 255, 255, .05);
+      border-radius: 50%;
+      right: -80px; top: -150px;
+      pointer-events: none;
     }
 
     .torre-header h1 {
-      font-size: 1.1rem;
-      font-weight: 800;
-      letter-spacing: .04em;
-      text-transform: uppercase;
+      font-size: 23px;
+      font-weight: 600;
+      letter-spacing: -.35px;
       margin: 0;
+      text-transform: none;
     }
-
     .torre-header h1 small {
       display: block;
       font-weight: 400;
-      font-size: .68rem;
-      letter-spacing: .16em;
-      opacity: .75;
-      margin-top: 2px;
-      text-transform: uppercase;
+      font-size: 12.5px;
+      letter-spacing: .2px;
+      opacity: .8;
+      margin-top: 5px;
+      text-transform: none;
     }
 
     .torre-live {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 14px;
-      font-size: .78rem;
-      font-family: 'Archivo', sans-serif;
+      gap: 10px;
+      font-size: 12px;
     }
-
     .torre-pulse {
-      width: 9px; height: 9px; border-radius: 50%;
-      background: #3ddc84;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #7ee2a8;
       animation: torrePulse 1.6s infinite;
       flex: 0 0 auto;
     }
     @keyframes torrePulse { 50% { opacity: .25; } }
     @media (prefers-reduced-motion: reduce) { .torre-pulse { animation: none; } }
-
-    .torre-live .torre-when { opacity: .75; }
+    .torre-live .torre-when { opacity: .8; }
 
     .torre-live .btn {
-      font-family: 'Archivo', sans-serif;
-      font-weight: 700;
-      font-size: .8rem;
-      padding: 8px 14px;
-      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      padding: 7px 13px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
       white-space: nowrap;
     }
-    .torre-live .btn-primary { background: var(--torre-acento); border: 0; color: #fff; }
-    .torre-live .btn-primary:hover { filter: brightness(1.12); }
-    .torre-live .btn-secondary { background: transparent; border: 1px solid #fff; color: #fff; }
-    .torre-live .btn-secondary:hover { background: rgba(255,255,255,.12); }
+    .torre-live .btn-primary {
+      background: #fff;
+      border: 1px solid #fff;
+      color: var(--primary-dark);
+      box-shadow: none;
+    }
+    .torre-live .btn-primary:hover { background: #eef7f1; border-color: #eef7f1; }
+    .torre-live .btn-secondary {
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .35);
+      color: #fff;
+    }
+    .torre-live .btn-secondary:hover { background: rgba(255, 255, 255, .22); }
     .torre-live .btn:disabled { opacity: .5; cursor: wait; }
 
-    /* filtros */
+    /* ── Filtros ─────────────────────────────────────────────────────── */
     .torre-filtros {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 14px;
+      gap: 9px;
+      margin-bottom: 16px;
       align-items: center;
-      font-family: 'Archivo', sans-serif;
     }
-    .torre-filtros input, .torre-filtros select {
+    .torre-filtros input,
+    .torre-filtros select {
       font: inherit;
-      font-size: .85rem;
-      padding: 8px 12px;
-      border: 1px solid var(--torre-linea);
-      border-radius: 6px;
-      background: #fff;
-      color: var(--torre-tinta);
+      font-size: 13px;
+      padding: 8px 11px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--card-bg);
+      color: var(--text);
     }
-    .torre-filtros input[type="search"] { min-width: 220px; }
+    .torre-filtros input:focus-visible,
+    .torre-filtros select:focus-visible {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: var(--focus-ring);
+    }
+    .torre-filtros input[type="search"] { min-width: 240px; }
     .torre-filtros label {
       display: flex; align-items: center; gap: 6px;
-      font-size: .78rem; color: #5d6b78; font-weight: 600;
+      font-size: 12px; color: var(--text-muted); font-weight: 500;
     }
 
     .torre-multiselect { position: relative; }
     .torre-ms-btn {
-      font: inherit; font-size: .85rem; padding: 8px 12px;
-      border: 1px solid var(--torre-linea); border-radius: 6px;
-      background: #fff; cursor: pointer; color: var(--torre-tinta);
+      font: inherit; font-size: 13px; padding: 8px 11px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card-bg); cursor: pointer; color: var(--text);
     }
-    .torre-ms-btn:hover { border-color: var(--torre-acento); }
+    .torre-ms-btn:hover { border-color: var(--primary); }
     .torre-ms-panel {
       position: absolute; top: calc(100% + 4px); left: 0;
-      background: #fff; border: 1px solid var(--torre-linea); border-radius: 6px;
-      box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 10px 14px; z-index: 20;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-lg);
+      padding: 10px 14px; z-index: 20;
       display: flex; flex-direction: column; gap: 8px; white-space: nowrap;
     }
     .torre-ms-panel[hidden] { display: none; }
     .torre-ms-panel label {
       display: flex; align-items: center; gap: 8px;
-      font-size: .82rem; font-weight: 600; color: var(--torre-tinta); cursor: pointer;
+      font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer;
     }
 
-    /* tabla */
+    /* ── Tabla: mismo tratamiento que .cot-tabla ─────────────────────── */
     .torre-tabla-wrap {
-      background: var(--torre-panel);
-      border: 1px solid var(--torre-linea);
-      border-radius: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
       overflow: auto;
+      max-height: 620px;
     }
     .torre-tabla-wrap table {
-      width: 100%; border-collapse: collapse; font-size: .83rem; min-width: 1080px;
-      font-family: 'Archivo', sans-serif;
+      width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1080px;
+      font-variant-numeric: tabular-nums;
     }
     .torre-tabla-wrap thead th {
-      position: sticky; top: 0; background: var(--torre-tinta); color: #fff;
-      text-align: left; padding: 10px 12px; font-size: .64rem;
-      letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
+      position: sticky; top: 0; z-index: 1;
+      background: var(--card-bg);
+      color: var(--text-muted);
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      /* con border-collapse el borde del th pegajoso se pierde al hacer
+         scroll; el inset lo dibuja igual */
+      box-shadow: inset 0 -1px 0 var(--border);
     }
-    .torre-tabla-wrap tbody td { padding: 10px 12px; border-top: 1px solid var(--torre-linea); vertical-align: middle; }
-    .torre-tabla-wrap tbody tr:hover { background: #F0F1E9; }
+    .torre-tabla-wrap tbody td {
+      padding: 11px 10px;
+      border-top: 1px solid var(--border-subtle);
+      vertical-align: middle;
+    }
+    .torre-tabla-wrap tbody tr:hover { background: var(--bg); }
 
+    /* ── Chips y estados ─────────────────────────────────────────────── */
     .torre-courier {
-      font-weight: 800; font-size: .7rem; letter-spacing: .06em;
-      padding: 3px 9px; border-radius: 5px; color: #fff; display: inline-block;
+      font-weight: 600; font-size: 11px; letter-spacing: .3px;
+      padding: 3px 9px; border-radius: 999px; display: inline-block;
+      border: 1px solid transparent;
     }
-    .torre-courier.UPS { background: var(--torre-ups); }
-    .torre-courier.FEDEX { background: var(--torre-fedex); }
+    .torre-courier.UPS { background: #fdf3dc; color: var(--torre-ups); border-color: #ecd9a4; }
+    .torre-courier.FEDEX { background: #f2e9fa; color: var(--torre-fedex); border-color: #ddcaf0; }
 
     .torre-riel { display: flex; align-items: center; gap: 6px; }
     .torre-riel .n {
-      min-width: 42px; text-align: center; padding: 4px 6px; border-radius: 5px;
-      background: #f0f3f6; border: 1px solid var(--torre-linea); font-weight: 600;
+      min-width: 42px; text-align: center; padding: 4px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-2); border: 1px solid var(--border);
+      font-weight: 600; font-size: 12px;
     }
-    .torre-riel .sep { color: #9aa7b3; font-size: .7rem; }
-    .torre-riel.mal .n:not(:first-child) { border-color: var(--torre-mal); background: #F5E7E6; color: var(--torre-mal); }
-    .torre-riel.ok .n { border-color: #c9d2a6; background: #EEF1E1; }
+    .torre-riel .sep { color: var(--text-muted); font-size: 11px; }
+    .torre-riel.mal .n:not(:first-child) {
+      border-color: #f0c9c5; background: var(--danger-light); color: var(--danger);
+    }
+    .torre-riel.ok .n { border-color: #cfe6da; background: var(--primary-light); }
 
     .torre-estado {
-      font-weight: 800; font-size: .7rem; letter-spacing: .05em;
-      padding: 4px 10px; border-radius: 99px; white-space: nowrap;
+      display: inline-block;
+      font-weight: 600; font-size: 11px; letter-spacing: .2px;
+      padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+      border: 1px solid transparent;
     }
-    .torre-estado.OK { color: var(--torre-ok); background: #EEF1E1; }
-    .torre-estado.DISCREPANCIA { color: #fff; background: var(--torre-mal); }
-    .torre-estado.PENDIENTE { color: #fff; background: var(--torre-pend); }
-    .torre-estado.SINMAN { color: #7a4d00; background: #ffe9c2; }
-    .torre-estado.NODARTIS { color: #fff; background: #8e44ad; }
+    .torre-estado.OK { color: #15603c; background: var(--primary-light); border-color: #cfe6da; }
+    .torre-estado.DISCREPANCIA { color: var(--danger); background: var(--danger-light); border-color: #f5d5d2; }
+    .torre-estado.PENDIENTE { color: #475569; background: #f1f5f9; border-color: #dde3ea; }
+    .torre-estado.SINMAN { color: #8a6100; background: #fff8e6; border-color: #f0d9a0; }
+    .torre-estado.NODARTIS { color: #6b21a8; background: #f5ecfc; border-color: #e2cff2; }
 
-    .torre-dif { font-weight: 800; }
-    .torre-dif.neg { color: var(--torre-mal); }
+    .torre-dif { font-weight: 600; }
+    .torre-dif.neg { color: var(--danger); }
 
     td.torre-bulto-cell { padding: 0; vertical-align: top; }
     .torre-bulto-cell .torre-bulto-line {
-      padding: 9px 12px; min-height: 38px; display: flex; align-items: center; gap: 8px;
+      padding: 10px; min-height: 38px; display: flex; align-items: center; gap: 8px;
     }
-    .torre-bulto-cell .torre-bulto-line + .torre-bulto-line { border-top: 1px solid var(--torre-linea); }
-    tr.torre-bulto-row td { border-top: 1px solid var(--torre-linea); }
-    tr.torre-factura-inicio td { border-top: 2px solid #cdd3c7; }
+    .torre-bulto-cell .torre-bulto-line + .torre-bulto-line { border-top: 1px solid var(--border-subtle); }
+    tr.torre-bulto-row td { border-top: 1px solid var(--border-subtle); }
+    /* separador mas marcado donde empieza cada factura */
+    tr.torre-factura-inicio td { border-top: 1px solid var(--border); }
     td.torre-dato-factura { vertical-align: middle; }
     td.torre-tracking-cell { white-space: nowrap; }
 
     .torre-tag {
       display: inline-flex; align-items: center; gap: 7px;
-      font-weight: 700; font-size: .72rem; letter-spacing: .03em;
-      color: var(--torre-tinta); white-space: nowrap;
+      font-weight: 500; font-size: 12px;
+      color: var(--text); white-space: nowrap;
     }
-    .torre-tag .dot { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+    .torre-tag .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 
     .torre-btn-consulta {
-      display: inline-block; background: var(--torre-acento); color: #fff;
-      font-weight: 700; font-size: .68rem; padding: 5px 12px; border-radius: 3px;
-      text-decoration: none; white-space: nowrap; letter-spacing: .06em; text-transform: uppercase;
+      display: inline-block; background: var(--primary); color: #fff;
+      font-weight: 500; font-size: 11.5px; padding: 5px 11px;
+      border-radius: var(--radius-sm);
+      text-decoration: none; white-space: nowrap;
     }
-    .torre-btn-consulta:hover { filter: brightness(1.12); }
+    .torre-btn-consulta:hover { background: var(--primary-hover); }
 
-    .torre-vacio { padding: 40px; text-align: center; color: #6a7783; font-size: .9rem; }
+    .torre-vacio {
+      padding: 32px 8px; text-align: center;
+      color: var(--text-muted); font-size: 13.5px;
+    }
 
-    .torre-info-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    .torre-info-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     .torre-info-tag {
-      font-size: .7rem; font-weight: 700; letter-spacing: .04em;
-      background: #fff3cd; border: 1px solid #e0c95e; color: #7a6200;
-      padding: 4px 10px; border-radius: 99px; display: none;
+      font-size: 11px; font-weight: 600; letter-spacing: .2px;
+      background: #fff8e6; border: 1px solid #f0d9a0; color: #8a6100;
+      padding: 3px 10px; border-radius: 999px; display: none;
     }
-    .torre-info-tag.ok { background: #e6f0d8; border-color: #8fae4a; color: #4a5c1f; }
-    .torre-info-tag.err { background: #fbe2e2; border-color: #c97a7a; color: #7a2222; }
+    .torre-info-tag.ok { background: var(--primary-light); border-color: #cfe6da; color: #15603c; }
+    .torre-info-tag.err { background: var(--danger-light); border-color: #f5d5d2; color: var(--danger); }
 
     .torre-footer {
-      font-size: .74rem; color: #7a8794; margin-top: 12px; font-family: 'Archivo', sans-serif;
+      font-size: 12px; color: var(--text-muted); margin-top: 14px; line-height: 1.6;
     }
 
-    @media (max-width: 640px) { .torre-header { padding: 14px 16px; } }
+    @media (max-width: 640px) { .torre-header { padding: 20px 18px; } }
   </style>
 </head>
 <body data-page="torre-control">
