@@ -32,6 +32,7 @@ UTC = timezone.utc
 _lock = asyncio.Lock()
 _ultimo_error: Optional[str] = None
 _ultimo_refresh: Optional[str] = None
+_ultimo_omitidas: int = 0
 
 
 def _normalizar_courier(courier_raw: str) -> str:
@@ -201,6 +202,7 @@ def obtener_snapshot() -> dict:
         "resumen": _resumen(cajas) if cajas else {},
         "actualizado": _ultimo_refresh,
         "error": _ultimo_error,
+        "omitidas_agencias_locales": _ultimo_omitidas,
     }
 
 
@@ -214,7 +216,7 @@ def obtener_discrepancias() -> list[dict]:
 
 
 async def refrescar() -> dict:
-    global _ultimo_error, _ultimo_refresh
+    global _ultimo_error, _ultimo_refresh, _ultimo_omitidas
     async with _lock:
         error = None
         try:
@@ -264,6 +266,7 @@ async def refrescar() -> dict:
         await asyncio.to_thread(_persistir, cajas)
         _ultimo_error = error
         _ultimo_refresh = datetime.now(UTC).isoformat()
+        _ultimo_omitidas = omitidas
 
         return {
             "resumen": _resumen(cajas),

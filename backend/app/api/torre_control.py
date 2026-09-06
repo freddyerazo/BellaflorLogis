@@ -10,6 +10,7 @@ Alcance: solo UPS y FedEx. No se consulta tracking en vivo y las agencias de
 carga locales quedan fuera del proceso — ver courier_reconciliation.
 """
 
+import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, UploadFile
@@ -28,7 +29,15 @@ UTC = timezone.utc
 
 @router.get("/estado")
 def estado():
-    return motor.obtener_snapshot()
+    """Snapshot completo: resumen + detalle de cajas (lo consume el tablero).
+
+    `refresh_seconds` se agrega aqui (no vive en el snapshot persistido)
+    porque el tablero lo usa solo para calcular la cuenta regresiva del
+    proximo refresco automatico, que es un dato de configuracion del
+    scheduler (app.main), no del resultado de la conciliacion.
+    """
+    return {**motor.obtener_snapshot(),
+            "refresh_seconds": int(os.getenv("REFRESH_SECONDS", "300"))}
 
 
 @router.get("/discrepancias")

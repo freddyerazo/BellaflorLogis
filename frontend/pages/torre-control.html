@@ -4,81 +4,338 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BLIS · Fedex-Ups See</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/styles.css" />
+  <style>
+    /* ─── Torre de Control ────────────────────────────────────────────────
+       Diseño portado de REPORTEUPSFEDEX (static/dashboard.html): misma
+       paleta Bellaflor, mismos filtros, misma tabla por bulto. Clases
+       prefijadas "torre-" para no chocar con el resto de BLIS (mismo patron
+       que proveedores.html con "prov-"). Se conserva el sidebar de BLIS -
+       quitarlo rompería la navegación a los otros 20 módulos. */
+    :root {
+      --torre-tinta: #2F3B2A;
+      --torre-papel: #F6F6F1;
+      --torre-panel: #ffffff;
+      --torre-linea: #dde1d8;
+      --torre-ups: #b78600;
+      --torre-fedex: #4d148c;
+      --torre-ok: #6F7F1F;
+      --torre-mal: #8C2F2F;
+      --torre-pend: #7a8794;
+      --torre-acento: #6F7F1F;
+    }
+
+    body[data-page="torre-control"] .content { background: var(--torre-papel); }
+    body[data-page="torre-control"] .page-header { display: none; }
+
+    .torre-mono { font-family: 'IBM Plex Mono', monospace; }
+
+    .torre-header {
+      background: var(--torre-tinta);
+      color: #fff;
+      padding: 18px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 4px solid var(--torre-acento);
+      border-radius: 10px;
+      margin: -8px -8px 20px;
+      font-family: 'Archivo', sans-serif;
+    }
+
+    .torre-header h1 {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    .torre-header h1 small {
+      display: block;
+      font-weight: 400;
+      font-size: .68rem;
+      letter-spacing: .16em;
+      opacity: .75;
+      margin-top: 2px;
+      text-transform: uppercase;
+    }
+
+    .torre-live {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      font-size: .78rem;
+      font-family: 'Archivo', sans-serif;
+    }
+
+    .torre-pulse {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #3ddc84;
+      animation: torrePulse 1.6s infinite;
+      flex: 0 0 auto;
+    }
+    @keyframes torrePulse { 50% { opacity: .25; } }
+    @media (prefers-reduced-motion: reduce) { .torre-pulse { animation: none; } }
+
+    .torre-live .torre-when { opacity: .75; }
+
+    .torre-live .btn {
+      font-family: 'Archivo', sans-serif;
+      font-weight: 700;
+      font-size: .8rem;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .torre-live .btn-primary { background: var(--torre-acento); border: 0; color: #fff; }
+    .torre-live .btn-primary:hover { filter: brightness(1.12); }
+    .torre-live .btn-secondary { background: transparent; border: 1px solid #fff; color: #fff; }
+    .torre-live .btn-secondary:hover { background: rgba(255,255,255,.12); }
+    .torre-live .btn:disabled { opacity: .5; cursor: wait; }
+
+    /* filtros */
+    .torre-filtros {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+      align-items: center;
+      font-family: 'Archivo', sans-serif;
+    }
+    .torre-filtros input, .torre-filtros select {
+      font: inherit;
+      font-size: .85rem;
+      padding: 8px 12px;
+      border: 1px solid var(--torre-linea);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--torre-tinta);
+    }
+    .torre-filtros input[type="search"] { min-width: 220px; }
+    .torre-filtros label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: .78rem; color: #5d6b78; font-weight: 600;
+    }
+
+    .torre-multiselect { position: relative; }
+    .torre-ms-btn {
+      font: inherit; font-size: .85rem; padding: 8px 12px;
+      border: 1px solid var(--torre-linea); border-radius: 6px;
+      background: #fff; cursor: pointer; color: var(--torre-tinta);
+    }
+    .torre-ms-btn:hover { border-color: var(--torre-acento); }
+    .torre-ms-panel {
+      position: absolute; top: calc(100% + 4px); left: 0;
+      background: #fff; border: 1px solid var(--torre-linea); border-radius: 6px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 10px 14px; z-index: 20;
+      display: flex; flex-direction: column; gap: 8px; white-space: nowrap;
+    }
+    .torre-ms-panel[hidden] { display: none; }
+    .torre-ms-panel label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: .82rem; font-weight: 600; color: var(--torre-tinta); cursor: pointer;
+    }
+
+    /* tabla */
+    .torre-tabla-wrap {
+      background: var(--torre-panel);
+      border: 1px solid var(--torre-linea);
+      border-radius: 10px;
+      overflow: auto;
+    }
+    .torre-tabla-wrap table {
+      width: 100%; border-collapse: collapse; font-size: .83rem; min-width: 1080px;
+      font-family: 'Archivo', sans-serif;
+    }
+    .torre-tabla-wrap thead th {
+      position: sticky; top: 0; background: var(--torre-tinta); color: #fff;
+      text-align: left; padding: 10px 12px; font-size: .64rem;
+      letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
+    }
+    .torre-tabla-wrap tbody td { padding: 10px 12px; border-top: 1px solid var(--torre-linea); vertical-align: middle; }
+    .torre-tabla-wrap tbody tr:hover { background: #F0F1E9; }
+
+    .torre-courier {
+      font-weight: 800; font-size: .7rem; letter-spacing: .06em;
+      padding: 3px 9px; border-radius: 5px; color: #fff; display: inline-block;
+    }
+    .torre-courier.UPS { background: var(--torre-ups); }
+    .torre-courier.FEDEX { background: var(--torre-fedex); }
+
+    .torre-riel { display: flex; align-items: center; gap: 6px; }
+    .torre-riel .n {
+      min-width: 42px; text-align: center; padding: 4px 6px; border-radius: 5px;
+      background: #f0f3f6; border: 1px solid var(--torre-linea); font-weight: 600;
+    }
+    .torre-riel .sep { color: #9aa7b3; font-size: .7rem; }
+    .torre-riel.mal .n:not(:first-child) { border-color: var(--torre-mal); background: #F5E7E6; color: var(--torre-mal); }
+    .torre-riel.ok .n { border-color: #c9d2a6; background: #EEF1E1; }
+
+    .torre-estado {
+      font-weight: 800; font-size: .7rem; letter-spacing: .05em;
+      padding: 4px 10px; border-radius: 99px; white-space: nowrap;
+    }
+    .torre-estado.OK { color: var(--torre-ok); background: #EEF1E1; }
+    .torre-estado.DISCREPANCIA { color: #fff; background: var(--torre-mal); }
+    .torre-estado.PENDIENTE { color: #fff; background: var(--torre-pend); }
+    .torre-estado.SINMAN { color: #7a4d00; background: #ffe9c2; }
+    .torre-estado.NODARTIS { color: #fff; background: #8e44ad; }
+
+    .torre-dif { font-weight: 800; }
+    .torre-dif.neg { color: var(--torre-mal); }
+
+    td.torre-bulto-cell { padding: 0; vertical-align: top; }
+    .torre-bulto-cell .torre-bulto-line {
+      padding: 9px 12px; min-height: 38px; display: flex; align-items: center; gap: 8px;
+    }
+    .torre-bulto-cell .torre-bulto-line + .torre-bulto-line { border-top: 1px solid var(--torre-linea); }
+    tr.torre-bulto-row td { border-top: 1px solid var(--torre-linea); }
+    tr.torre-factura-inicio td { border-top: 2px solid #cdd3c7; }
+    td.torre-dato-factura { vertical-align: middle; }
+    td.torre-tracking-cell { white-space: nowrap; }
+
+    .torre-tag {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-weight: 700; font-size: .72rem; letter-spacing: .03em;
+      color: var(--torre-tinta); white-space: nowrap;
+    }
+    .torre-tag .dot { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+
+    .torre-btn-consulta {
+      display: inline-block; background: var(--torre-acento); color: #fff;
+      font-weight: 700; font-size: .68rem; padding: 5px 12px; border-radius: 3px;
+      text-decoration: none; white-space: nowrap; letter-spacing: .06em; text-transform: uppercase;
+    }
+    .torre-btn-consulta:hover { filter: brightness(1.12); }
+
+    .torre-vacio { padding: 40px; text-align: center; color: #6a7783; font-size: .9rem; }
+
+    .torre-info-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    .torre-info-tag {
+      font-size: .7rem; font-weight: 700; letter-spacing: .04em;
+      background: #fff3cd; border: 1px solid #e0c95e; color: #7a6200;
+      padding: 4px 10px; border-radius: 99px; display: none;
+    }
+    .torre-info-tag.ok { background: #e6f0d8; border-color: #8fae4a; color: #4a5c1f; }
+    .torre-info-tag.err { background: #fbe2e2; border-color: #c97a7a; color: #7a2222; }
+
+    .torre-footer {
+      font-size: .74rem; color: #7a8794; margin-top: 12px; font-family: 'Archivo', sans-serif;
+    }
+
+    @media (max-width: 640px) { .torre-header { padding: 14px 16px; } }
+  </style>
 </head>
 <body data-page="torre-control">
   <div id="sidebar" class="sidebar"></div>
 
   <main class="content" id="content">
-    <div class="page-header">
-      <h1><i class="ph ph-radar"></i> Fedex-Ups See</h1>
-      <p class="page-subtitle">Concilia las cajas de dartis_ventas contra los manifiestos de UPS y FedEx.</p>
-    </div>
 
-    <div class="import-card">
-      <div class="import-actions" style="justify-content: flex-start; gap: .75rem; flex-wrap: wrap;">
-        <button id="btnRefrescar" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> Actualizar ahora</button>
-        <button id="btnDuoplane" class="btn btn-secondary"><i class="ph ph-package"></i> Sincronizar Duoplane</button>
+    <div class="torre-header">
+      <h1>Cajas vendidas y despachadas
+        <small>Bellaflor DARTIS × UPS × FEDEX — Departamento de Logística</small>
+      </h1>
+      <div class="torre-live">
+        <span class="torre-pulse" aria-hidden="true"></span>
+        <span>EN VIVO · <span class="torre-when" id="when">cargando…</span></span>
+        <span id="count" class="torre-when"></span>
         <label class="btn btn-secondary" style="cursor:pointer;">
-          <i class="ph ph-upload-simple"></i> Subir manifiesto UPS (.csv)
-          <input type="file" id="fileUps" accept=".csv" style="display:none;" />
+          <span id="labelFileUps">Subir manifiesto UPS (.csv)</span>
+          <input type="file" id="fileUps" accept=".csv" hidden />
         </label>
         <label class="btn btn-secondary" style="cursor:pointer;">
-          <i class="ph ph-upload-simple"></i> Subir manifiesto FedEx (.pdf)
-          <input type="file" id="fileFedex" accept=".pdf" style="display:none;" />
+          <span id="labelFileFedex">Subir manifiesto FedEx (.pdf)</span>
+          <input type="file" id="fileFedex" accept=".pdf" hidden />
         </label>
-        <span id="actualizado" class="page-subtitle"></span>
+        <button id="btnDuoplane" type="button" class="btn btn-secondary">Sincronizar Duoplane</button>
+        <button id="btnRefrescar" type="button" class="btn btn-primary">Actualizar ahora</button>
       </div>
-      <div id="resultado" class="resultado"></div>
     </div>
 
-    <div class="card-grid" id="kpis" style="margin-top: 1.5rem;">
-      <div class="summary-card"><span class="summary-card-value" id="kpi-guias">0</span><span class="summary-card-label">Facturas</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-ok">0</span><span class="summary-card-label">OK</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-discrepancias">0</span><span class="summary-card-label">Discrepancias</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-pendientes">0</span><span class="summary-card-label">Pendientes</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-sin-manifiesto">0</span><span class="summary-card-label">Sin manifiesto</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-no-en-dartis">0</span><span class="summary-card-label">No en Dartis</span></div>
-    </div>
-
-    <section id="panel-principal" class="subpanel active">
-      <div class="import-card">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Estado</label>
-            <select id="filtroEstado">
-              <option value="">Todos</option>
-              <option value="OK">OK</option>
-              <option value="DISCREPANCIA">Discrepancia</option>
-              <option value="SIN MANIFIESTO">Sin manifiesto</option>
-              <option value="NO EN DARTIS">No en Dartis</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Courier</label>
-            <select id="filtroCourier">
-              <option value="">Ambos</option>
-              <option value="UPS">UPS</option>
-              <option value="FEDEX">FedEx</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Buscar</label>
-            <input type="search" id="filtroBuscar" placeholder="factura, cliente, tracking..." />
-          </div>
+    <div class="torre-filtros">
+      <input id="q" type="search" placeholder="Buscar guía, cliente, factura o destinatario…" aria-label="Buscar" />
+      <label>Fecha de salida desde
+        <input id="fDesde" type="date" aria-label="Fecha de salida desde" />
+      </label>
+      <label>hasta
+        <input id="fHasta" type="date" aria-label="Fecha de salida hasta" />
+      </label>
+      <select id="fCourier" aria-label="Filtrar por courier">
+        <option value="">Todos los couriers</option>
+        <option value="UPS">UPS</option>
+        <option value="FEDEX">FedEx</option>
+      </select>
+      <div class="torre-multiselect" id="fEstadoCourier">
+        <button type="button" class="torre-ms-btn" aria-haspopup="true" aria-expanded="false">Estado courier ▾</button>
+        <div class="torre-ms-panel" hidden>
+          <label><input type="checkbox" value="In Transit" checked /> In Transit</label>
+          <label><input type="checkbox" value="Manifest" checked /> Manifest</label>
+          <label><input type="checkbox" value="Exception" checked /> Exception</label>
+          <label><input type="checkbox" value="" checked /> Sin estado</label>
+          <label><input type="checkbox" value="Delivered" checked /> Delivered</label>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Factura</th><th>Courier</th><th>Empresa</th><th>Cliente</th>
-              <th>Cajas Dartis</th><th>Manifiesto</th><th>Diferencia</th>
-              <th>Estado vivo</th><th>Ubicación</th><th>Conciliación</th>
-            </tr>
-          </thead>
-          <tbody id="tablaPrincipal"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
-        </table>
       </div>
-    </section>
+      <select id="fPlanif" aria-label="Filtrar por entrega planificación">
+        <option value="">Todos - Entrega Planificación</option>
+        <option value="A TIEMPO">A tiempo</option>
+        <option value="RETRASO">Retraso</option>
+      </select>
+      <select id="fEstado" aria-label="Filtrar por conciliación">
+        <option value="">Todos los estados de conciliación</option>
+        <option value="DISCREPANCIA">Solo discrepancias</option>
+        <option value="SIN MANIFIESTO">Sin manifiesto UPS</option>
+        <option value="NO EN DARTIS">En manifiesto, no en Dartis</option>
+        <option value="OK" selected>Solo OK</option>
+        <option value="PENDIENTE">Solo pendientes</option>
+      </select>
+    </div>
+
+    <div id="resultado" class="resultado"></div>
+
+    <div class="torre-tabla-wrap" id="tablaDetallada">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha de salida</th>
+            <th>Courier</th>
+            <th>Vendedor</th>
+            <th>Empresa</th>
+            <th>Cliente / Factura</th>
+            <th>Destinatario</th>
+            <th>Tracking / CRN</th>
+            <th>Estado Courier</th>
+            <th>Entrega Planificación</th>
+            <th>Consulta</th>
+            <th title="Total Dartis → bultos en el manifiesto del courier">Dartis → Manifiesto</th>
+            <th>Dif.</th>
+            <th>Conciliación</th>
+          </tr>
+        </thead>
+        <tbody id="cuerpo">
+          <tr><td colspan="13" class="torre-vacio">Cargando información…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="torre-info-tags">
+      <span class="torre-info-tag" id="fuenteTag"></span>
+      <span class="torre-info-tag" id="duoplaneTag" style="display:none"></span>
+    </div>
+
+    <p class="torre-footer">Cruce: dartis_ventas (agrupado por id_pedido, total de cajas) contra el manifiesto de
+      cada courier (courier_ups_manifest: CSV acumulado de UPS · courier_fedex_envios: PDF por despacho de FedEx).
+      No se consulta tracking en línea: la conciliación se resuelve entre esos dos documentos. Las agencias de
+      carga locales (courier "OTRO") quedan fuera del proceso — no existe manifiesto electrónico contra el cual
+      cruzarlas. "SIN MANIFIESTO" = la factura está en Dartis pero su PO no aparece en el manifiesto de UPS;
+      "PENDIENTE" (FedEx) = el PO todavía no llegó en ningún PDF; "NO EN DARTIS" = el PO está en un manifiesto
+      pero ninguna factura de Dartis lo referencia.</p>
 
   </main>
 
