@@ -280,12 +280,25 @@ def _cliente_anthropic():
 
 
 def interpretar(texto_ocr: str) -> dict:
-    """Una llamada al modelo por recibo. Devuelve el dict ya parseado."""
+    """Una llamada al modelo por recibo. Devuelve el dict ya parseado.
+
+    El prompt de sistema es identico en cada llamada (miles de recibos, mismo
+    texto), asi que va marcado con cache_control para que Anthropic lo
+    cachee: la primera llamada paga precio completo, las siguientes (dentro
+    de la ventana de cache, ~5 min) pagan una fraccion de ese bloque en vez
+    de recontarlo integro cada vez.
+    """
     cliente = _cliente_anthropic()
     r = cliente.messages.create(
         model=MODELO,
         max_tokens=MAX_TOKENS,
-        system=PROMPT_EXTRACCION,
+        system=[
+            {
+                "type": "text",
+                "text": PROMPT_EXTRACCION,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
         messages=[{"role": "user", "content": texto_ocr}],
     )
     return limpiar_respuesta_json(r.content[0].text)
