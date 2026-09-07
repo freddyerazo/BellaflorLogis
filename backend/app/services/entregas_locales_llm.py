@@ -426,6 +426,15 @@ def interpretar_pendientes(limite: int = 25) -> dict:
     invalidas = 0
     errores = []
 
+    # Se resuelve UNA vez por lote, no una vez por recibo: son 2 consultas
+    # (cargo_agencies + farms) que no cambian entre un recibo y el siguiente
+    # dentro del mismo lote. Medido: ~0,8 s cada vez -- en un lote de 25
+    # (como pide la pantalla) eran ~20 s solo en esto, repitiendo la misma
+    # consulta 25 veces. Si algun catalogo cambia a mitad de un lote de 25,
+    # el proximo lote lo recoge -- no vale la pena resolverlo mas seguido.
+    with engine.connect() as conn:
+        agencias, fincas = _resolver_catalogos(conn)
+
     for fila in pendientes:
         try:
             datos = interpretar(fila["texto_ocr"])
@@ -438,7 +447,6 @@ def interpretar_pendientes(limite: int = 25) -> dict:
         calidad = datos.get("calidad_ocr")
 
         with engine.begin() as conn:
-            agencias, fincas = _resolver_catalogos(conn)
             agencia_raw = (datos.get("agencia_logistica") or "").strip() or "(sin identificar)"
 
             # ON CONFLICT DO NOTHING: la pantalla permite lanzar "interpretar
