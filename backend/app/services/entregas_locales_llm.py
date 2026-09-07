@@ -393,7 +393,7 @@ def _buscar_id(catalogo: dict, valor: str):
     return None
 
 
-def interpretar_pendientes(limite: int = 25) -> dict:
+def interpretar_pendientes(limite: int = 25, fecha_documento: str | None = None) -> dict:
     """Procesa filas de `entregas_locales_raw` que aun no tienen interpretacion.
 
     Va de a lotes chicos a proposito: son ~3.500 recibos, cada llamada al
@@ -425,6 +425,7 @@ def interpretar_pendientes(limite: int = 25) -> dict:
             WHERE e.id IS NULL
               AND r.texto_ocr IS NOT NULL
               AND length(r.texto_ocr) > 30
+              AND (CAST(:fecha_documento AS text) IS NULL OR r.fecha_documento = :fecha_documento)
             ORDER BY
               (CASE
                 WHEN r.fecha_documento ~ '^(0?[1-9]|[12][0-9]|3[01])/(0?[1-9]|1[0-2])/202[5-7]$'
@@ -433,7 +434,7 @@ def interpretar_pendientes(limite: int = 25) -> dict:
               END) DESC NULLS LAST,
               r.fila_sheet DESC
             LIMIT :limite
-        """), {"limite": limite}).mappings().all()
+        """), {"limite": limite, "fecha_documento": fecha_documento}).mappings().all()
 
     procesadas = 0
     invalidas = 0
