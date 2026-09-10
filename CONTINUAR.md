@@ -1,13 +1,58 @@
-# Dónde retomar — 2026-09-06
+# Dónde retomar — 2026-09-10
 
-**Torre de Control cambió de proceso**, commiteado y subido (`50cc383`, y
-`0d8b2c4` antes). Antes de eso, la **reforma de la vista** del 2026-09-05
-(`7c55709`) y, antes aún, **Agrocalidad** y la importación de Dartis del
-2026-09-04. Todo sigue descrito más abajo, del más reciente al más viejo.
+**Torre de Control: la celda "Cliente / Factura" ahora muestra
+`id_comercializadora`**, commiteado y subido (`0f4fc42`). Antes de eso,
+**Torre de Control cambió de proceso** (`50cc383`, y `0d8b2c4` antes), la
+**reforma de la vista** del 2026-09-05 (`7c55709`) y, antes aún,
+**Agrocalidad** y la importación de Dartis del 2026-09-04. Todo sigue
+descrito más abajo, del más reciente al más viejo.
 
 ---
 
-## Lo último: Torre de Control — manifiestos a Supabase, sin tracking en vivo (2026-09-06)
+## Lo último: Torre de Control muestra id_comercializadora en vez de id_pedido (2026-09-10)
+
+Pedido del usuario: en la pestaña "Fedex-Ups See", bajo el nombre del
+cliente se veía el `id_pedido` — la clave interna que cruza cada factura de
+Dartis contra el PO del manifiesto de UPS/FedEx — y quería ver ahí el
+número de factura comercial en su lugar.
+
+**Hecho:**
+
+1. `_obtener_base_dartis()` (`backend/app/services/courier_reconciliation.py`)
+   ahora trae también `MAX(id_comercializadora)` de `dartis_ventas`, como
+   campo aparte. **El cruce contra el manifiesto no se tocó**: sigue siendo
+   por `factura` (= `id_pedido`), porque ese es el número que el courier
+   imprime como `PO:<numero>` en el manifiesto — cambiarlo habría roto la
+   conciliación completa. Mismo patrón que ya usaba el original
+   REPORTEUPSFEDEX (`id_comercializadora` para mostrar, `id_pedido` para
+   cruzar).
+2. Migración `042_courier_reconciliation_id_comercializadora.sql` —
+   `ALTER TABLE courier_reconciliation ADD COLUMN id_comercializadora`.
+   Aplicada a mano contra Supabase (no vía `scripts/migrate.py`: el runner
+   está bloqueado desde antes por un desfase entre la migración 016 y la
+   tabla `_migrations`, sin relación con este cambio — ver "Pendientes").
+3. `frontend/pages/torre-control.js`: la celda pasa a
+   `id_comercializadora ?? factura`. Las filas **NO EN DARTIS** (vienen
+   solo del manifiesto, nunca tuvieron fila de Dartis) no tienen número
+   comercial, así que siguen mostrando el `id_pedido` como respaldo — mismo
+   comportamiento que documenta el README de REPORTEUPSFEDEX para ese caso.
+   También se sumó `id_comercializadora` al buscador de texto libre.
+
+**Verificado contra datos reales:** tras el redeploy en Render y un
+`POST /torre-control/refrescar` (2.511 facturas), `id_comercializadora`
+quedó poblado con valores reales (ej. `102676`, `104764`, ...) en
+`courier_reconciliation`.
+
+**Pendiente, no de este cambio:** `scripts/migrate.py` no corre limpio —
+se detiene en la migración `016_dartis_ventas_especie_unique.sql` porque
+esa restricción ya existe en la base real pero `_migrations` no tiene el
+registro de que se aplicó. Hay que decidir si se inserta el registro
+retroactivo o se revisa qué otras migraciones tienen el mismo desfase antes
+de confiar en el runner de nuevo.
+
+---
+
+## Lo anterior: Torre de Control — manifiestos a Supabase, sin tracking en vivo (2026-09-06)
 
 Pedido del usuario: dejar de guardar los manifiestos de UPS/FedEx como
 archivos, apagar la consulta de tracking en vivo y sacar del proceso a las
