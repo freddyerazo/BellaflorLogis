@@ -91,7 +91,7 @@ function filtrarFilas() {
     if (desde && (!c.fecha_dartis || c.fecha_dartis < desde)) return false;
     if (hasta && (!c.fecha_dartis || c.fecha_dartis > hasta)) return false;
     const trackings = (c.detalle_bultos && c.detalle_bultos.length) ? c.detalle_bultos.map((b) => b.tracking) : [c.tracking];
-    if (q && ![...trackings, c.cliente, c.factura, c.destinatario, c.empresa].join(" ").toLowerCase().includes(q)) return false;
+    if (q && ![...trackings, c.cliente, c.factura, c.id_comercializadora, c.destinatario, c.empresa].join(" ").toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -167,7 +167,7 @@ function pintarTabla() {
       <td rowspan="${rowspan}" class="torre-dato-factura"><span class="torre-courier ${c.courier}">${c.courier}</span></td>
       <td rowspan="${rowspan}" class="torre-dato-factura" style="font-size:.76rem">${c.vendedor_cliente || "—"}</td>
       <td rowspan="${rowspan}" class="torre-dato-factura" style="font-size:.76rem">${c.empresa || "—"}</td>
-      <td rowspan="${rowspan}" class="torre-dato-factura"><b>${c.cliente || "—"}</b><br><span class="torre-mono" style="font-size:.72rem;color:#5d6b78">${c.factura}</span></td>
+      <td rowspan="${rowspan}" class="torre-dato-factura"><b>${c.cliente || "—"}</b><br><span class="torre-mono" style="font-size:.72rem;color:#5d6b78">${c.id_comercializadora ?? c.factura}</span></td>
       <td rowspan="${rowspan}" class="torre-dato-factura">${c.destinatario || "—"}</td>` : ""}
       <td class="torre-mono torre-tracking-cell">${f.tracking}</td>
       <td>${f.estadoHtml}</td>

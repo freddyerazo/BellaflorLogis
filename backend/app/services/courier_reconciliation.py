@@ -58,6 +58,7 @@ def _obtener_base_dartis() -> list[dict]:
             SELECT id_pedido AS factura, MAX(agencia_carga) AS courier_raw, MAX(empresa) AS empresa,
                    MAX(cliente) AS cliente, MAX(destinatario) AS destinatario,
                    MAX(vendedor) AS vendedor_cliente, MAX(fecha) AS fecha_dartis,
+                   MAX(id_comercializadora) AS id_comercializadora,
                    SUM(total_piezas) AS cajas_dartis
             FROM dartis_ventas
             WHERE agencia_carga IS NOT NULL AND active = true
@@ -75,6 +76,7 @@ def _obtener_base_dartis() -> list[dict]:
             "destinatario": r["destinatario"],
             "vendedor_cliente": r["vendedor_cliente"],
             "fecha_dartis": r["fecha_dartis"].isoformat() if r["fecha_dartis"] else None,
+            "id_comercializadora": r["id_comercializadora"],
             "cajas_dartis": round(float(r["cajas_dartis"] or 0)),
         })
     return base
@@ -258,7 +260,8 @@ async def refrescar() -> dict:
                 m = manifiesto[f]
                 r = {"factura": f, "courier": courier, "courier_raw": courier, "empresa": "",
                      "cliente": m.get("ship_to", ""), "destinatario": m.get("ship_to", ""),
-                     "vendedor_cliente": None, "cajas_dartis": 0, "fecha_dartis": None}
+                     "vendedor_cliente": None, "cajas_dartis": 0, "fecha_dartis": None,
+                     "id_comercializadora": None}
                 fila = _armar_fila(r, m)
                 fila["conciliacion"] = "NO EN DARTIS"
                 cajas.append(fila)
@@ -282,7 +285,7 @@ _PERSISTIR_COLUMNAS = [
     "cajas_dartis", "fecha_dartis", "tracking", "trackings", "detalle_bultos", "trackings_extra",
     "bultos_csv", "estado_csv", "fecha_manifiesto", "servicio", "entrega_programada",
     "cajas_manifiesto", "estado_vivo", "entrega_estimada", "ubicacion", "conciliacion", "diferencia",
-    "fecha_entrega_real", "foto_url", "cliente_confirmado_ocr",
+    "fecha_entrega_real", "foto_url", "cliente_confirmado_ocr", "id_comercializadora",
 ]
 
 
@@ -304,7 +307,7 @@ def _persistir(cajas: list[dict]) -> None:
             c["bultos_csv"], c["estado_csv"], c["fecha_manifiesto"], c["servicio"], c["entrega_programada"],
             c["cajas_manifiesto"], c["estado_vivo"], c["entrega_estimada"], c["ubicacion"],
             c["conciliacion"], c["diferencia"], c["fecha_entrega_real"], c["foto_url"],
-            c["cliente_confirmado_ocr"],
+            c["cliente_confirmado_ocr"], c["id_comercializadora"],
         )
         for c in cajas
     ]
