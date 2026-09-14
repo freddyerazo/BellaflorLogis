@@ -119,6 +119,19 @@
     </section>
   </main>
 
+  <dialog id="clientesPickerDialog" class="dialog-picker">
+    <h2>Agregar cliente a la auditoría</h2>
+    <input type="search" id="clientesPickerBuscar" class="table-input" placeholder="Buscar entre todos los clientes de BLIS..." autocomplete="off" />
+    <div id="clientesPickerLista" class="picker-lista"></div>
+    <p class="page-subtitle" style="margin: .5rem 0 0;">
+      ¿No existe todavía? <a href="#" id="clientesPickerCrearNuevo">Crear cliente completamente nuevo</a>
+    </p>
+    <div class="dialog-actions">
+      <button type="button" id="clientesPickerCancelar" class="btn btn-secondary">Cancelar</button>
+      <button type="button" id="clientesPickerConfirmar" class="btn btn-primary">Agregar seleccionados (<span id="clientesPickerContador">0</span>)</button>
+    </div>
+  </dialog>
+
   <div id="lightboxFoto" class="lightbox-foto" hidden>
     <img id="lightboxFotoImg" src="" alt="Foto de respaldo" />
   </div>

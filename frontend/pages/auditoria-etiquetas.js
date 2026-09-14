@@ -320,7 +320,10 @@ async function cargarClientes() {
 
 document.getElementById("clientesBuscar").addEventListener("input", clientesFiltrarVisibles);
 
-document.getElementById("btnClientesAgregar").addEventListener("click", () => {
+// Fila completamente en blanco, para un cliente que todavia no existe en
+// BLIS (ej. un sub-cliente DST-... nuevo). Es el flujo de respaldo del
+// picker de abajo, para cuando buscar no encuentra nada.
+function clientesAgregarFilaNueva() {
   clientesIdCounter += 1;
   const nueva = {
     _tempId: `nuevo-${clientesIdCounter}`,
@@ -329,6 +332,97 @@ document.getElementById("btnClientesAgregar").addEventListener("click", () => {
   const tbody = document.getElementById("tablaClientes");
   tbody.insertAdjacentHTML("afterbegin", clientesFilaHtml(nueva, true));
   clientesAdjuntarEventos(tbody.querySelector(`tr[data-row-id="${nueva._tempId}"]`));
+  document.getElementById("clientesBuscar").value = "";
+  clientesFiltrarVisibles();
+}
+
+// Inserta en la tabla principal un cliente que YA EXISTE en BLIS (elegido
+// del picker), marcado de una vez con el checkbox tildado. Se guarda en
+// clientesOriginales con su es_cliente_especial REAL (normalmente false),
+// para que la comparacion de "que cambio" al hacer clic en Guardar detecte
+// bien la diferencia y mande el PUT correspondiente.
+function clientesAgregarExistente(cliente) {
+  clientesOriginales.push(cliente);
+  const tbody = document.getElementById("tablaClientes");
+  tbody.insertAdjacentHTML("afterbegin", clientesFilaHtml({ ...cliente, es_cliente_especial: true }, false));
+  const tr = tbody.querySelector(`tr[data-row-id="${cliente.id}"]`);
+  clientesAdjuntarEventos(tr);
+  tr.classList.add("row-modificada");
+}
+
+/* ─── Picker: buscar entre TODOS los clientes de BLIS y agregar varios de una vez ─── */
+let clientesTodosCache = null;
+const clientesPickerSeleccionados = new Map(); // id -> objeto cliente
+
+async function clientesPickerCargar() {
+  if (clientesTodosCache) return clientesTodosCache;
+  clientesTodosCache = await apiGet("/customers");
+  return clientesTodosCache;
+}
+
+function clientesPickerRenderLista() {
+  const q = (document.getElementById("clientesPickerBuscar").value || "").trim().toLowerCase();
+  const yaListados = new Set(clientesOriginales.map((c) => String(c.id)));
+  const candidatos = (clientesTodosCache || []).filter((c) => !yaListados.has(String(c.id)));
+  const CAMPOS = ["customer_code", "customer_name", "dartis_name"];
+  const filtrados = (q
+    ? candidatos.filter((c) => CAMPOS.some((f) => (c[f] || "").toLowerCase().includes(q)))
+    : candidatos
+  ).slice(0, 200);
+
+  const lista = document.getElementById("clientesPickerLista");
+  if (!filtrados.length) {
+    lista.innerHTML = `<p class="empty" style="padding: 12px;">${q ? "Sin coincidencias." : "Escribe para buscar entre todos los clientes."}</p>`;
+    return;
+  }
+  lista.innerHTML = filtrados.map((c) => {
+    const marcado = clientesPickerSeleccionados.has(String(c.id));
+    return `
+      <label class="picker-fila">
+        <input type="checkbox" data-picker-id="${c.id}" ${marcado ? "checked" : ""} />
+        <span class="picker-code">${escapeHtml(c.customer_code)}</span>
+        <span class="picker-nombre">${escapeHtml(c.customer_name)}</span>
+        <span class="picker-dartis">${escapeHtml(c.dartis_name)}</span>
+      </label>`;
+  }).join("");
+
+  lista.querySelectorAll("[data-picker-id]").forEach((chk) => {
+    chk.addEventListener("change", () => {
+      const c = candidatos.find((x) => String(x.id) === chk.dataset.pickerId);
+      if (chk.checked) clientesPickerSeleccionados.set(String(c.id), c);
+      else clientesPickerSeleccionados.delete(chk.dataset.pickerId);
+      document.getElementById("clientesPickerContador").textContent = clientesPickerSeleccionados.size;
+    });
+  });
+}
+
+document.getElementById("btnClientesAgregar").addEventListener("click", async () => {
+  const dialog = document.getElementById("clientesPickerDialog");
+  clientesPickerSeleccionados.clear();
+  document.getElementById("clientesPickerContador").textContent = "0";
+  document.getElementById("clientesPickerBuscar").value = "";
+  document.getElementById("clientesPickerLista").innerHTML = `<p class="empty" style="padding: 12px;">Cargando clientes...</p>`;
+  dialog.showModal();
+  await clientesPickerCargar();
+  clientesPickerRenderLista();
+  document.getElementById("clientesPickerBuscar").focus();
+});
+
+document.getElementById("clientesPickerBuscar").addEventListener("input", clientesPickerRenderLista);
+
+document.getElementById("clientesPickerCancelar").addEventListener("click", () => {
+  document.getElementById("clientesPickerDialog").close();
+});
+
+document.getElementById("clientesPickerCrearNuevo").addEventListener("click", (ev) => {
+  ev.preventDefault();
+  document.getElementById("clientesPickerDialog").close();
+  clientesAgregarFilaNueva();
+});
+
+document.getElementById("clientesPickerConfirmar").addEventListener("click", () => {
+  clientesPickerSeleccionados.forEach((cliente) => clientesAgregarExistente(cliente));
+  document.getElementById("clientesPickerDialog").close();
   document.getElementById("clientesBuscar").value = "";
   clientesFiltrarVisibles();
 });

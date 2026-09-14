@@ -7,7 +7,7 @@ Sistema de apoyo logístico y comercial para Bellaflor Group (exportadora de flo
 
 ## Deploy
 - **GitHub:** [freddyerazo/BellaflorLogis](https://github.com/freddyerazo/BellaflorLogis) (privado), rama `main`
-- **Producción (Render):** https://blis-hxu1.onrender.com — plan free, autodeploy en push a `main`
+- **Producción (Render):** https://blis-hxu1.onrender.com — plan free. **El "autodeploy en push a main" no es confiable** (verificado 2026-09-14): tres pushes seguidos no se reflejaron en producción por 20+ minutos, y el panel de Render mostraba `Trigger: Manual` en TODOS los deploys visibles, sin ningún `Auto-Deploy` reciente. Se resolvió con un "Manual Deploy" → "Deploy latest commit" desde el panel. **Después de cada push a este repo, verificar que el deploy realmente se disparó** (panel de Render, o probar el endpoint/página cambiada) en vez de asumir que llega solo
 - Sin GitHub Actions / CI configurado — el único gate antes de producción es el build de Render
 
 ## Stack

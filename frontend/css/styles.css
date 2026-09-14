@@ -508,6 +508,35 @@ dialog h2 {
   color: var(--text-muted);
 }
 
+/* Modal ancho para elegir de un listado largo (ej. escoger clientes existentes con checklist) */
+dialog.dialog-picker {
+  width: 640px;
+}
+
+.picker-lista {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 10px 0;
+}
+
+.picker-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.picker-fila:last-child { border-bottom: none; }
+.picker-fila:hover { background: var(--surface-2); }
+.picker-fila .picker-code { color: var(--text-muted); font-size: 12px; min-width: 90px; }
+.picker-fila .picker-nombre { flex: 1; }
+.picker-fila .picker-dartis { color: var(--text-muted); font-size: 12px; }
+
 tr.row-nuevo {
   background: var(--primary-light);
 }

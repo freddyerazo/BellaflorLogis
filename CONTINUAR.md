@@ -1,13 +1,20 @@
 # Dónde retomar — 2026-09-14
 
-**Auditoría de Etiquetas: pestaña nueva "Clientes a auditar"** (`d77baa5`).
-Antes, en la misma sesión: **los despachos se consolidan por cliente + HAWB**
-(`a5ed939`/`d488561`). Antes de eso, **Torre de Control: la celda
-"Cliente / Factura" ahora muestra `id_comercializadora`** (`0f4fc42`), el
-cambio de proceso de Torre de Control (`50cc383`, y `0d8b2c4` antes), la
-**reforma de la vista** del 2026-09-05 (`7c55709`) y, antes aún,
-**Agrocalidad** y la importación de Dartis del 2026-09-04. Todo sigue
-descrito más abajo, del más reciente al más viejo.
+**Auditoría de Etiquetas: pestaña nueva "Clientes a auditar"**, tabla
+checklist con guardado en lote (`9899688`, tras un primer intento con modal
+en `d77baa5` que el usuario pidió rehacer). Antes, en la misma sesión: **los
+despachos se consolidan por cliente + HAWB** (`a5ed939`/`d488561`). Antes de
+eso, **Torre de Control: la celda "Cliente / Factura" ahora muestra
+`id_comercializadora`** (`0f4fc42`), el cambio de proceso de Torre de Control
+(`50cc383`, y `0d8b2c4` antes), la **reforma de la vista** del 2026-09-05
+(`7c55709`) y, antes aún, **Agrocalidad** y la importación de Dartis del
+2026-09-04. Todo sigue descrito más abajo, del más reciente al más viejo.
+
+**Ojo — el autodeploy de Render no es confiable, ver el cierre de esta
+sección.** Tres pushes seguidos tardaron 20+ minutos en reflejarse porque el
+panel no disparó ningún deploy automático; se resolvió con "Manual Deploy"
+desde el panel. Verificar SIEMPRE que un push se reflejó en producción antes
+de darlo por bueno.
 
 ---
 
@@ -33,37 +40,66 @@ actuales:
   para darle etiqueta propia a un sub-cliente puntual dentro de un
   comercializador (ej. "HRD" y "RVF", ambos destinatarios de TRADEWINDS).
 
-**Hecho:**
+**Diseño final — dos intentos, el primero se descartó a pedido del usuario:**
 
-1. Nueva sub-pestaña "Clientes a auditar" en `auditoria-etiquetas.html`
-   (patrón `.subtabs`/`.subpanel`, el mismo que ya usan Agrocalidad e
-   Inventario LAG). Reutiliza el CRUD genérico (`initCrudPage`,
-   `crud-page.js`) apuntado a `/api/customers`, sin duplicar lógica.
-2. `crud-page.js` gana `listEndpoint` (opcional, cae a `endpoint` si no se
-   pasa): el listado necesita `?es_cliente_especial=true` para filtrar,
-   pero editar/borrar arman `${endpoint}/${id}` — pasarle ahí un endpoint
-   con query string habría roto la URL (`/customers?es_cliente_especial=true/<id>`).
-   Con `listEndpoint` separado, `endpoint` se mantiene limpio.
-3. `GET /api/customers` gana un filtro opcional `?es_cliente_especial=`
+1. **Primer intento (`d77baa5`):** reutilizar el CRUD genérico
+   (`initCrudPage`/`crud-page.js`) — un modal de una fila a la vez, guardado
+   inmediato por fila. El usuario pidió explícitamente otra cosa: una tabla
+   única en modo checklist con un solo botón "Guardar" para todo. Se
+   descartó ese diseño (`crud-page.js` volvió a su estado original) y se
+   reconstruyó desde cero (`9899688`).
+2. **Diseño final:** `auditoria-etiquetas.js` carga los ~65 clientes que ya
+   auditan en una tabla editable inline (checkbox "Requiere auditoría" +
+   Código/Etiqueta/Dartis/Destinatario). Nada se manda al servidor hasta
+   "Guardar cambios" — entonces sí, todo junto: `POST /customers` para las
+   filas nuevas ("+ Agregar cliente"), `PUT /customers/{id}` solo para las
+   filas existentes que de verdad cambiaron (comparadas contra el snapshot
+   cargado). "Quitar" en una fila existente destilda el checkbox (efecto
+   real solo al guardar, no borra nada); en una fila nueva la quita del DOM
+   sin llamar al servidor.
+3. **Bug propio encontrado y corregido en el camino:** la primera versión de
+   esta tabla nueva reconstruía TODO el HTML en cada tecla de búsqueda o al
+   agregar una fila (`clientesRender()` regenerando desde los arreglos de
+   origen) — eso descartaba en silencio cualquier edición sin guardar en
+   OTRAS filas todavía visibles. Corregido: el buscador solo oculta/muestra
+   filas ya existentes en el DOM leyendo el valor ACTUAL de sus inputs (no
+   el original), y "Agregar" inserta una fila nueva sin tocar el resto —
+   ningún flujo de esta sección hace un re-render completo de la tabla.
+4. `GET /api/customers` gana un filtro opcional `?es_cliente_especial=`
    (aditivo: sin el parámetro se comporta exactamente igual que antes, la
    página general de "Clientes" no se vio afectada). `CustomerCreate` y
    `CustomerUpdate` ganan `dartis_name`, `destinatario`, `es_cliente_especial`
    — antes esos tres campos, aunque ya existían como columnas reales en
    `customers`, no se podían escribir desde ninguna API.
-4. **Sin botón "Eliminar" en esta vista.** El `DELETE /customers/{id}`
-   existente hace un soft-delete de TODO el registro
-   (`active = false, inactive_date = now()`), que afectaría a otros módulos
-   que usan ese mismo cliente (Torre de Control, cotizaciones). Para sacar
-   a alguien de la auditoría sin tocar el resto de su registro, se edita y
-   se destilda "Requiere auditoría de etiquetas" — desaparece de esta lista
-   filtrada sin desactivar el cliente.
+5. **Sin botón "Eliminar" verdadero.** El `DELETE /customers/{id}` existente
+   hace un soft-delete de TODO el registro (`active = false`), que afectaría
+   a otros módulos que usan ese mismo cliente (Torre de Control,
+   cotizaciones). "Quitar" en esta pantalla solo destilda el checkbox.
 
-**Verificado contra Supabase real** (no solo lectura de código): crear un
-cliente de prueba vía `POST /customers`, editarlo para destildar
-`es_cliente_especial` y confirmar que desaparece del listado filtrado, y
-borrar el registro de prueba al terminar. Sin migración: las tres columnas
-ya existían en `customers` desde antes (fuera de cualquier migración
-rastreada en `database/migrations/` — ver "Cosas que conviene no perder").
+**Verificado contra Supabase/producción real** (no solo lectura de código):
+crear un cliente de prueba vía `POST /customers`, confirmar que aparece en
+el filtro, destildar `es_cliente_especial` vía `PUT` y confirmar que
+desaparece, y borrar el registro de prueba — repetido dos veces: una vez
+contra el backend local y otra vez ya en `blis-hxu1.onrender.com` en
+producción, después de resolver el problema de deploy de abajo. Sin
+migración: las tres columnas ya existían en `customers` desde antes (fuera
+de cualquier migración rastreada en `database/migrations/`).
+
+**El autodeploy de Render no se disparó — episodio completo:** después de
+los pushes `d77baa5` y `72fda63`, la API y el HTML en producción no
+cambiaron durante **20+ minutos** de sondeo activo (mucho más que el 1-2 min
+que tardaron los deploys anteriores en esta misma sesión). Se descartó
+caché (Cloudflare marcaba `cf-cache-status: DYNAMIC`) y se descartó un
+error de código (el archivo correcto ya estaba en `main` en GitHub,
+verificado con `raw.githubusercontent.com`). El usuario compartió el panel
+de Render de `blis-api`: **todos los deploys visibles en la lista mostraban
+`Trigger: Manual`**, ninguno `Auto-Deploy` reciente — contradice lo que
+decían `CLAUDE.md`/`AGENTS.md`/`README.md` ("autodeploy en push a main").
+Se resolvió con un "Manual Deploy" → "Deploy latest commit" desde el panel,
+que sí desplegó `9899688` en ~1m19s. **Corregido en la documentación**: ya
+no se puede asumir que un push a este repo se despliega solo — hay que
+verificarlo (panel de Render, o probar el endpoint/página que cambió) cada
+vez, y si no llegó, usar "Manual Deploy" en vez de esperar.
 
 ---
 
