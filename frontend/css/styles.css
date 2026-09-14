@@ -492,6 +492,30 @@ dialog h2 {
   margin: 0 0 8px;
 }
 
+/* Input dentro de una celda de tabla editable (tablas tipo checklist con guardado en lote) */
+.table-input {
+  width: 100%;
+  min-width: 120px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.table-input:disabled {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+tr.row-nuevo {
+  background: var(--primary-light);
+}
+
+tr.row-modificada:not(.row-nuevo) td:first-child {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

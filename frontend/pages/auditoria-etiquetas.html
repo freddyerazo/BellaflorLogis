@@ -87,9 +87,35 @@
         Clientes cuyos despachos se generan para el bot de auditoría (columna <code>customers.es_cliente_especial</code>).
         Un mismo <b>Dartis</b> puede tener un registro general (Destinatario en blanco, aplica a todas sus ventas) y
         registros específicos por destinatario final (para darle etiqueta/seguimiento propio a un sub-cliente puntual,
-        ej. los distintos floristas que reciben en nombre de un mismo comercializador).
+        ej. los distintos floristas que reciben en nombre de un mismo comercializador). Marca o edita lo que
+        necesites y termina con <b>Guardar cambios</b> — nada se aplica hasta ese momento.
       </p>
-      <div id="content-clientes"></div>
+
+      <div class="import-card">
+        <div class="import-actions" style="justify-content: space-between; flex-wrap: wrap; gap: .75rem;">
+          <div class="form-group" style="margin: 0; min-width: 240px;">
+            <input type="search" id="clientesBuscar" placeholder="Buscar por código, nombre o Dartis..." class="table-input" style="min-width: 240px;" />
+          </div>
+          <div style="display: flex; gap: .5rem;">
+            <button type="button" id="btnClientesAgregar" class="btn btn-secondary"><i class="ph ph-plus"></i> Agregar cliente</button>
+            <button type="button" id="btnClientesGuardar" class="btn btn-primary"><i class="ph ph-floppy-disk"></i> Guardar cambios</button>
+          </div>
+        </div>
+        <div id="clientesResultado" class="resultado"></div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:2.2rem;"><i class="ph ph-check-square" title="Requiere auditoría"></i></th>
+              <th>Código</th>
+              <th>Etiqueta / Nombre</th>
+              <th>Nombre en Dartis</th>
+              <th>Destinatario (opcional)</th>
+              <th class="actions-col">Quitar</th>
+            </tr>
+          </thead>
+          <tbody id="tablaClientes"><tr><td colspan="6" class="loading">Cargando...</td></tr></tbody>
+        </table>
+      </div>
     </section>
   </main>
 

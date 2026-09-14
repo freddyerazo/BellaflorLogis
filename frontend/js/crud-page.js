@@ -2,8 +2,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "./api.js";
 
 export async function initCrudPage(config) {
   const {
-    endpoint, // usado tal cual para crear (POST) y como base de `${endpoint}/${id}` en editar/borrar
-    listEndpoint = endpoint, // separado de `endpoint`: si trae query string (ej. filtro), no debe usarse en `${endpoint}/${id}`
+    endpoint,
     title,
     mountSelector = "#content",
     idField = "id",
@@ -82,7 +81,7 @@ export async function initCrudPage(config) {
   async function loadTable() {
     tableBody.innerHTML = `<tr><td colspan="${colCount}" class="loading">Cargando...</td></tr>`;
     try {
-      currentRows = await apiGet(listEndpoint);
+      currentRows = await apiGet(endpoint);
       if (!currentRows.length) {
         tableBody.innerHTML = `<tr><td colspan="${colCount}" class="empty">Sin registros</td></tr>`;
         return;

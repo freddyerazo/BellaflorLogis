@@ -1,5 +1,4 @@
-import { apiGet, apiPost } from "/js/api.js";
-import { initCrudPage } from "/js/crud-page.js";
+import { apiGet, apiPost, apiPut } from "/js/api.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -212,40 +211,188 @@ $("#btnGenerar").addEventListener("click", async () => {
 
 cargar();
 
-/* ─── Clientes a auditar (customers.es_cliente_especial) ─────────────────── */
-initCrudPage({
-  endpoint: "/customers",
-  listEndpoint: "/customers?es_cliente_especial=true",
-  mountSelector: "#content-clientes",
-  title: "Clientes a auditar",
-  // Sin "Eliminar": el DELETE de /customers desactiva el registro completo
-  // (customers.active = false), que afectaria a otros modulos que usan ese
-  // mismo cliente (Torre de Control, cotizaciones, etc.). Para sacar a un
-  // cliente de esta lista sin tocar el resto de su registro, se edita y se
-  // destilda "Requiere auditoria de etiquetas".
-  allowDelete: false,
-  columns: [
-    { key: "customer_code", label: "Código" },
-    { key: "customer_name", label: "Etiqueta / Nombre" },
-    { key: "dartis_name", label: "Nombre en Dartis" },
-    { key: "destinatario", label: "Destinatario (opcional)" },
-    { key: "active", label: "Estado", format: "active-badge" },
-  ],
-  fields: [
-    { name: "customer_code", label: "Código", type: "text", required: true },
-    { name: "customer_name", label: "Etiqueta / Nombre a mostrar", type: "text", required: true },
-    { name: "dartis_name", label: "Nombre exacto en Dartis (columna \"cliente\")", type: "text", required: true },
-    {
-      name: "destinatario", type: "text",
-      label: "Destinatario en Dartis (dejar vacío = aplica a TODAS las ventas de este Dartis)",
-    },
-    {
-      name: "es_cliente_especial", label: "Requiere auditoría de etiquetas", type: "checkbox",
-      default: true,
-    },
-    { name: "active", label: "Activo", type: "checkbox", editOnly: true },
-  ],
+/* ─── Clientes a auditar (customers.es_cliente_especial) ───────────────────
+   Tabla única en modo checklist: se cargan los clientes que YA auditan,
+   se pueden editar sus campos, destildar (= quitarlos sin tocar el resto
+   de su registro) o agregar filas nuevas -- nada se manda al servidor
+   hasta hacer clic en "Guardar cambios", que aplica todo junto (POST para
+   las filas nuevas, PUT solo para las filas existentes que de verdad
+   cambiaron). Pedido explicito del usuario: no el modal de una fila a la
+   vez que trae el CRUD generico (initCrudPage), que se usa en la pagina
+   general de Clientes. */
+let clientesOriginales = [];
+let clientesIdCounter = 0;
+
+const CLIENTES_CAMPOS = ["customer_code", "customer_name", "dartis_name", "destinatario"];
+
+const escapeHtml = (s) =>
+  (s || "").toString().replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function clientesFilaHtml(c, esNueva) {
+  const rowId = esNueva ? c._tempId : c.id;
+  const marcado = c.es_cliente_especial !== false; // filas existentes siempre llegan en true (vienen filtradas); las nuevas arrancan en true
+  return `
+    <tr data-row-id="${rowId}" data-es-nueva="${esNueva}" class="${esNueva ? "row-nuevo" : ""}">
+      <td><input type="checkbox" data-field="es_cliente_especial" ${marcado ? "checked" : ""} title="Requiere auditoría" /></td>
+      <td><input type="text" class="table-input" data-field="customer_code" value="${escapeHtml(c.customer_code)}" /></td>
+      <td><input type="text" class="table-input" data-field="customer_name" value="${escapeHtml(c.customer_name)}" /></td>
+      <td><input type="text" class="table-input" data-field="dartis_name" value="${escapeHtml(c.dartis_name)}" /></td>
+      <td><input type="text" class="table-input" data-field="destinatario" value="${escapeHtml(c.destinatario)}" placeholder="(todas las ventas)" /></td>
+      <td class="actions-col"><button type="button" class="btn-link btn-danger" data-action="quitar">✕</button></td>
+    </tr>`;
+}
+
+function filaValores(tr) {
+  const valores = { es_cliente_especial: tr.querySelector('[data-field="es_cliente_especial"]').checked };
+  CLIENTES_CAMPOS.forEach((f) => {
+    const v = tr.querySelector(`[data-field="${f}"]`).value.trim();
+    valores[f] = v === "" ? null : v;
+  });
+  return valores;
+}
+
+function filaEsDistinta(tr, original) {
+  const actual = filaValores(tr);
+  return Object.keys(actual).some((k) => (original[k] ?? null) !== (actual[k] ?? null));
+}
+
+// Cablea los eventos de UNA fila ya insertada en el DOM. Deliberadamente no
+// hay ningun "re-render completo de la tabla" en toda esta seccion (buscar,
+// agregar, quitar) -- reconstruir el HTML desde los arreglos de origen
+// habria descartado cualquier edicion sin guardar que el usuario ya hubiera
+// escrito en OTRAS filas todavia visibles.
+function clientesAdjuntarEventos(tr) {
+  const original = tr.dataset.esNueva === "false"
+    ? clientesOriginales.find((c) => String(c.id) === tr.dataset.rowId)
+    : null;
+
+  if (original) {
+    tr.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("input", () => {
+        tr.classList.toggle("row-modificada", filaEsDistinta(tr, original));
+      });
+    });
+  }
+
+  tr.querySelector('[data-action="quitar"]').addEventListener("click", () => {
+    if (tr.dataset.esNueva === "true") {
+      tr.remove();
+    } else {
+      // "Quitar" en una fila existente = destildar el checkbox (se resuelve al Guardar, no borra nada todavia)
+      tr.querySelector('[data-field="es_cliente_especial"]').checked = false;
+      tr.classList.toggle("row-modificada", filaEsDistinta(tr, original));
+    }
+  });
+}
+
+function clientesHayFilas() {
+  return document.querySelectorAll('#tablaClientes tr[data-row-id]').length > 0;
+}
+
+function clientesFiltrarVisibles() {
+  const q = (document.getElementById("clientesBuscar").value || "").trim().toLowerCase();
+  let visibles = 0;
+  document.querySelectorAll('#tablaClientes tr[data-row-id]').forEach((tr) => {
+    const texto = q
+      ? CLIENTES_CAMPOS.map((f) => tr.querySelector(`[data-field="${f}"]`).value.toLowerCase()).join(" ")
+      : "";
+    const coincide = !q || texto.includes(q);
+    tr.hidden = !coincide;
+    if (coincide) visibles += 1;
+  });
+  const sinCoincidencias = document.getElementById("clientesSinCoincidencias");
+  if (sinCoincidencias) sinCoincidencias.hidden = visibles > 0 || !clientesHayFilas();
+}
+
+async function cargarClientes() {
+  const tbody = document.getElementById("tablaClientes");
+  tbody.innerHTML = `<tr><td colspan="6" class="loading">Cargando...</td></tr>`;
+  try {
+    clientesOriginales = await apiGet("/customers?es_cliente_especial=true");
+    tbody.innerHTML = clientesOriginales.map((c) => clientesFilaHtml(c, false)).join("")
+      + `<tr id="clientesSinCoincidencias" hidden><td colspan="6" class="empty">Sin clientes que coincidan con la búsqueda.</td></tr>`;
+    tbody.querySelectorAll("tr[data-row-id]").forEach(clientesAdjuntarEventos);
+    document.getElementById("clientesSinCoincidencias").hidden = clientesHayFilas();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="error">Error: ${err.message}</td></tr>`;
+  }
+}
+
+document.getElementById("clientesBuscar").addEventListener("input", clientesFiltrarVisibles);
+
+document.getElementById("btnClientesAgregar").addEventListener("click", () => {
+  clientesIdCounter += 1;
+  const nueva = {
+    _tempId: `nuevo-${clientesIdCounter}`,
+    customer_code: "", customer_name: "", dartis_name: "", destinatario: "", es_cliente_especial: true,
+  };
+  const tbody = document.getElementById("tablaClientes");
+  tbody.insertAdjacentHTML("afterbegin", clientesFilaHtml(nueva, true));
+  clientesAdjuntarEventos(tbody.querySelector(`tr[data-row-id="${nueva._tempId}"]`));
+  document.getElementById("clientesBuscar").value = "";
+  clientesFiltrarVisibles();
 });
+
+document.getElementById("btnClientesGuardar").addEventListener("click", async () => {
+  const btn = document.getElementById("btnClientesGuardar");
+  const resultado = document.getElementById("clientesResultado");
+  const tbody = document.getElementById("tablaClientes");
+
+  const porCrear = [];
+  const porActualizar = [];
+
+  tbody.querySelectorAll("tr[data-row-id]").forEach((tr) => {
+    const valores = filaValores(tr);
+    if (tr.dataset.esNueva === "true") {
+      const vacia = CLIENTES_CAMPOS.every((f) => !valores[f]);
+      if (vacia) return; // fila agregada y dejada en blanco: se ignora sin avisar
+      if (!valores.customer_code || !valores.customer_name || !valores.dartis_name) {
+        porCrear.push({ error: true, tempId: tr.dataset.rowId });
+        return;
+      }
+      porCrear.push({ valores });
+    } else {
+      const original = clientesOriginales.find((c) => String(c.id) === tr.dataset.rowId);
+      if (!filaEsDistinta(tr, original)) return;
+      if (!valores.customer_code || !valores.customer_name || !valores.dartis_name) {
+        porActualizar.push({ error: true, id: tr.dataset.rowId });
+        return;
+      }
+      porActualizar.push({ id: tr.dataset.rowId, valores });
+    }
+  });
+
+  const incompletas = [...porCrear, ...porActualizar].filter((c) => c.error);
+  if (incompletas.length) {
+    resultado.innerHTML = `<p class="msg-error">⚠️ ${incompletas.length} fila(s) sin Código, Etiqueta o Dartis (obligatorios) -- ningún campo requerido puede quedar vacío.</p>`;
+    return;
+  }
+  if (!porCrear.length && !porActualizar.length) {
+    resultado.innerHTML = `<p class="msg-info">No hay cambios para guardar.</p>`;
+    return;
+  }
+
+  btn.disabled = true;
+  resultado.innerHTML = `<p class="msg-info">Guardando...</p>`;
+  try {
+    const resultados = await Promise.allSettled([
+      ...porCrear.map((c) => apiPost("/customers", c.valores)),
+      ...porActualizar.map((c) => apiPut(`/customers/${c.id}`, c.valores)),
+    ]);
+    const fallidas = resultados.filter((r) => r.status === "rejected");
+    const total = porCrear.length + porActualizar.length;
+    if (fallidas.length) {
+      resultado.innerHTML = `<p class="msg-error">⚠️ ${total - fallidas.length}/${total} cambios guardados. Fallaron ${fallidas.length}: ${fallidas.map((f) => f.reason.message).join("; ")}</p>`;
+    } else {
+      resultado.innerHTML = `<p class="msg-ok">✅ ${porCrear.length} cliente(s) nuevo(s), ${porActualizar.length} actualizado(s).</p>`;
+    }
+    await cargarClientes();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+cargarClientes();
 
 /* ─── Navegación por pestañas ─────────────────────────────────────────── */
 document.querySelectorAll(".subtab").forEach((tab) => {
