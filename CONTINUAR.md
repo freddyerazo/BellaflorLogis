@@ -1,7 +1,8 @@
 # Dónde retomar — 2026-09-14
 
-**Auditoría de Etiquetas: los despachos se consolidan por cliente + HAWB**,
-commiteado y subido. Antes de eso, **Torre de Control: la celda
+**Auditoría de Etiquetas: pestaña nueva "Clientes a auditar"** (`d77baa5`).
+Antes, en la misma sesión: **los despachos se consolidan por cliente + HAWB**
+(`a5ed939`/`d488561`). Antes de eso, **Torre de Control: la celda
 "Cliente / Factura" ahora muestra `id_comercializadora`** (`0f4fc42`), el
 cambio de proceso de Torre de Control (`50cc383`, y `0d8b2c4` antes), la
 **reforma de la vista** del 2026-09-05 (`7c55709`) y, antes aún,
@@ -10,7 +11,63 @@ descrito más abajo, del más reciente al más viejo.
 
 ---
 
-## Lo último: Auditoría de Etiquetas — un despacho por cliente + HAWB, no por id_pedido (2026-09-14)
+## Lo último: pestaña "Clientes a auditar" (2026-09-14)
+
+Pedido del usuario: revisar cómo se cruzan los clientes que requieren
+auditoría de etiquetas, y crear una forma de agregarlos/editarlos sin SQL
+directo (hasta ahora la única forma de marcar `customers.es_cliente_especial`
+o cargar `dartis_name`/`destinatario` era una consulta manual en Supabase).
+
+**Cómo se cruza hoy (sin cambios en esta tanda, solo se documenta):**
+`special_dispatches.generar_despachos_del_dia()` hace
+`JOIN customers c ON LOWER(TRIM(c.dartis_name)) = LOWER(TRIM(dv.cliente))`
+contra `dartis_ventas`, exigiendo además `c.destinatario IS NULL` (matchea
+CUALQUIER venta de ese Dartis) O que coincida con `dv.destinatario` (matchea
+solo esa línea puntual). Dos patrones reales en los 65 clientes especiales
+actuales:
+- **Genérico** (`customer_code` tipo `DAR-...`): `dartis_name = customer_name`,
+  `destinatario` vacío — aplica a TODAS las ventas de ese Dartis (ej.
+  TRADEWINDS INTL LLC).
+- **Específico** (`customer_code` tipo `DST-...`): mismo `dartis_name` que un
+  genérico, pero `destinatario` puntual y `customer_name` distinto — usado
+  para darle etiqueta propia a un sub-cliente puntual dentro de un
+  comercializador (ej. "HRD" y "RVF", ambos destinatarios de TRADEWINDS).
+
+**Hecho:**
+
+1. Nueva sub-pestaña "Clientes a auditar" en `auditoria-etiquetas.html`
+   (patrón `.subtabs`/`.subpanel`, el mismo que ya usan Agrocalidad e
+   Inventario LAG). Reutiliza el CRUD genérico (`initCrudPage`,
+   `crud-page.js`) apuntado a `/api/customers`, sin duplicar lógica.
+2. `crud-page.js` gana `listEndpoint` (opcional, cae a `endpoint` si no se
+   pasa): el listado necesita `?es_cliente_especial=true` para filtrar,
+   pero editar/borrar arman `${endpoint}/${id}` — pasarle ahí un endpoint
+   con query string habría roto la URL (`/customers?es_cliente_especial=true/<id>`).
+   Con `listEndpoint` separado, `endpoint` se mantiene limpio.
+3. `GET /api/customers` gana un filtro opcional `?es_cliente_especial=`
+   (aditivo: sin el parámetro se comporta exactamente igual que antes, la
+   página general de "Clientes" no se vio afectada). `CustomerCreate` y
+   `CustomerUpdate` ganan `dartis_name`, `destinatario`, `es_cliente_especial`
+   — antes esos tres campos, aunque ya existían como columnas reales en
+   `customers`, no se podían escribir desde ninguna API.
+4. **Sin botón "Eliminar" en esta vista.** El `DELETE /customers/{id}`
+   existente hace un soft-delete de TODO el registro
+   (`active = false, inactive_date = now()`), que afectaría a otros módulos
+   que usan ese mismo cliente (Torre de Control, cotizaciones). Para sacar
+   a alguien de la auditoría sin tocar el resto de su registro, se edita y
+   se destilda "Requiere auditoría de etiquetas" — desaparece de esta lista
+   filtrada sin desactivar el cliente.
+
+**Verificado contra Supabase real** (no solo lectura de código): crear un
+cliente de prueba vía `POST /customers`, editarlo para destildar
+`es_cliente_especial` y confirmar que desaparece del listado filtrado, y
+borrar el registro de prueba al terminar. Sin migración: las tres columnas
+ya existían en `customers` desde antes (fuera de cualquier migración
+rastreada en `database/migrations/` — ver "Cosas que conviene no perder").
+
+---
+
+## Lo anterior: Auditoría de Etiquetas — un despacho por cliente + HAWB, no por id_pedido (2026-09-14)
 
 Pedido del usuario: un mismo cliente + `guia_hija` (HAWB) con varios
 `id_pedido` de Dartis generaba un despacho por cada uno — hasta 25 en los
