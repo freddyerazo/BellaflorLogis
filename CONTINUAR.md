@@ -1,15 +1,90 @@
-# Dónde retomar — 2026-09-10
+# Dónde retomar — 2026-09-14
 
-**Torre de Control: la celda "Cliente / Factura" ahora muestra
-`id_comercializadora`**, commiteado y subido (`0f4fc42`). Antes de eso,
-**Torre de Control cambió de proceso** (`50cc383`, y `0d8b2c4` antes), la
+**Auditoría de Etiquetas: los despachos se consolidan por cliente + HAWB**,
+commiteado y subido. Antes de eso, **Torre de Control: la celda
+"Cliente / Factura" ahora muestra `id_comercializadora`** (`0f4fc42`), el
+cambio de proceso de Torre de Control (`50cc383`, y `0d8b2c4` antes), la
 **reforma de la vista** del 2026-09-05 (`7c55709`) y, antes aún,
 **Agrocalidad** y la importación de Dartis del 2026-09-04. Todo sigue
 descrito más abajo, del más reciente al más viejo.
 
 ---
 
-## Lo último: Torre de Control muestra id_comercializadora en vez de id_pedido (2026-09-10)
+## Lo último: Auditoría de Etiquetas — un despacho por cliente + HAWB, no por id_pedido (2026-09-14)
+
+Pedido del usuario: un mismo cliente + `guia_hija` (HAWB) con varios
+`id_pedido` de Dartis generaba un despacho por cada uno — hasta 25 en los
+datos reales (DELAWARE VALLEY FLORAL GROUP LLC) — y el bot obligaba al
+auditor a repetir el cuestionario completo esa cantidad de veces para
+revisar un solo paquete físico.
+
+**Hecho:**
+
+1. `special_dispatches.py`: la agrupación deja de ser por SQL
+   (`GROUP BY ... id_pedido, tipo_caja`) y pasa a Python, porque hace
+   falta un `jsonb_object_agg` de piezas *por tipo de caja* (dos niveles
+   de agregación) además de un array de `id_pedido` distintos — más
+   simple de construir ahí que en un SELECT con subconsultas
+   correlacionadas. Nuevas columnas `id_pedidos` (JSONB, todos los
+   pedidos consolidados, para trazabilidad) y `desglose_tipo_caja`
+   (JSONB, `{"HB": 3, "QB": 9}`) — dentro de un mismo HAWB el tipo de
+   caja **sí varía** (verificado: 15 grupos cliente+HAWB con más de un
+   tipo en los últimos 10 días).
+2. **`dv.destinatario` (el de la línea de venta) quedó fuera de la clave
+   de agrupación** — intento fallido primero: se dejó "por seguridad",
+   copiado del criterio de matching de `customers.destinatario`, pero
+   son conceptos distintos. Clientes distribuidores (ej. LA HACIENDA
+   FLOWERS INC) reparten un mismo HAWB entre floristerías finales
+   distintas — 11 en el caso verificado — cada línea con su propio
+   `dv.destinatario`, así que dejarlo en la clave seguía partiendo el
+   despacho en 11. La identidad del cliente especial ya la resuelve
+   `customer_id` (vía `customers.destinatario` en el JOIN de
+   `match_unico`) — `dv.destinatario` es solo un dato de la línea de
+   venta. Se sigue guardando: el valor si coincide en todas las líneas,
+   o `"<n> destinatarios distintos"` si no.
+3. **Índice único nuevo, PARCIAL (`WHERE estado = 'PENDIENTE'`)** —
+   `special_dispatches_fecha_pos_cliente_guia_pendiente_idx` sobre
+   `(fecha, postcosecha, customer_id, COALESCE(guia_hija, ''))`. Hace
+   falta que sea parcial porque hay HAWB con una parte ya **AUDITADA**
+   bajo el esquema viejo (un tipo de caja) y otra parte **PENDIENTE**
+   bajo otro — un índice único normal habría chocado contra esas filas
+   ya auditadas, que no se deben tocar ni fusionar (se perdería su
+   rastro: fotos, confirmación, observaciones). Con el índice parcial el
+   historial AUDITADO queda intacto tal cual estaba, y la unicidad solo
+   se exige hacia adelante.
+4. `telegram_bot.py`: `_texto_resumen` y la lista de `/lista` muestran el
+   desglose por tipo de caja (`HB:1, QB:9, SB:2`) en vez del `tipo_caja`
+   singular de antes.
+5. `frontend/pages/auditoria-etiquetas.js`/`.html`: columnas "ID Pedidos"
+   y "Tipo(s) caja" muestran el array/desglose nuevo, con fallback a los
+   campos singulares viejos para las filas ya AUDITADAS que no los
+   tienen.
+6. Migración `043_special_dispatches_consolidar_guia_hija.sql` aplicada a
+   mano contra Supabase (mismo motivo que la 042: el runner sigue
+   bloqueado en la migración 016). Los 1.316 despachos PENDIENTE
+   existentes se borraron (recalculables al 100% desde `dartis_ventas`,
+   sin rastro de auditoría) y se regeneraron ya consolidados con
+   `generar_despachos_del_dia()` para cada fecha con pendientes
+   (2026-08-03 al 2026-09-11): **737 despachos resultantes, 35 AUDITADOS
+   sin tocar**. Verificado el caso que motivó el cambio: HAWB `UP818477`
+   de LA HACIENDA FLOWERS INC pasó de 11 filas a 1 (12 cajas, HB:1/QB:9/SB:2).
+
+**Ojo — se dejó producción momentáneamente rota entre la migración y el
+deploy:** el código viejo desplegado en Render seguía usando el índice
+único viejo (`..._fecha_id_pedido_tipo_caja_pos_guia_idx`), que la
+migración elimina. Cualquier `/lista` del bot entre el `DROP INDEX` y el
+deploy del código nuevo habría fallado con "no unique or exclusion
+constraint matching ON CONFLICT". Se hizo el push inmediatamente después
+de verificar en local para minimizar la ventana; no se confirmó con el
+usuario antes de desplegar por esa urgencia (a diferencia del cambio
+anterior de `id_comercializadora`, donde sí se preguntó).
+
+**Pendiente, no de este cambio:** mismo hallazgo de `scripts/migrate.py`
+bloqueado en la migración 016 — ver la sesión anterior (2026-09-10).
+
+---
+
+## Lo anterior: Torre de Control muestra id_comercializadora en vez de id_pedido (2026-09-10)
 
 Pedido del usuario: en la pestaña "Fedex-Ups See", bajo el nombre del
 cliente se veía el `id_pedido` — la clave interna que cruza cada factura de
