@@ -253,8 +253,9 @@ async def _mostrar_lista_por_poscosecha(chat_id: str, poscosecha: str, pendiente
     texto = f"\U0001F4CB <b>Despachos pendientes - {poscosecha}</b>\n\n"
     for i, d in enumerate(filtrados, start=1):
         texto += f"{i}. <b>{d['cliente']}</b> - {_entero(d['cajas'])} cajas"
-        if d.get("tipo_caja"):
-            texto += f" ({d['tipo_caja']})"
+        desglose = _texto_desglose(d)
+        if desglose:
+            texto += f" ({desglose})"
         texto += f" - Guia {d.get('guia_hija') or '-'}\n"
     texto += "\n➡️ Responde con el <b>numero</b> del despacho que vas a auditar."
     _guardar_estado(chat_id, {"paso": "eligiendo", "pendientes": filtrados})
@@ -283,14 +284,23 @@ def _nombre_desde_perfil(perfil: dict) -> str:
     return str(perfil.get("id") or "desconocido")
 
 
+def _texto_desglose(d: dict) -> str:
+    """'HB:3, QB:2' a partir de desglose_tipo_caja -- reemplaza el antiguo
+    tipo_caja singular, porque un mismo despacho (cliente+HAWB) ahora
+    puede consolidar varios tipos de caja de Dartis."""
+    desglose = d.get("desglose_tipo_caja") or {}
+    return ", ".join(f"{tipo}:{_entero(cant)}" for tipo, cant in desglose.items())
+
+
 def _texto_resumen(d: dict) -> str:
+    desglose = _texto_desglose(d)
+    detalle = f"<b>{_entero(d['cajas'])}</b> ({desglose})" if desglose else f"<b>{_entero(d['cajas'])}</b>"
     return (
         f"\U0001F4E6 <b>{d['cliente']}</b>\n"
         f"Destinatario: {d.get('destinatario') or '-'}\n"
         f"\U0001F3ED Poscosecha: {d['postcosecha']}\n"
         f"\U0001F4C4 Guia hija: {d.get('guia_hija') or '-'}\n"
-        f"\U0001F4E6 Cajas segun venta: <b>{_entero(d['cajas'])}</b>\n"
-        f"\U0001F4E6 Tipo de caja segun venta: <b>{d.get('tipo_caja') or '-'}</b>"
+        f"\U0001F4E6 Cajas segun venta: {detalle}"
     )
 
 

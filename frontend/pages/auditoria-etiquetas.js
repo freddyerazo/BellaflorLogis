@@ -15,6 +15,22 @@ function tieneProblema(a) {
   return a.confirmado === false;
 }
 
+// Un despacho ahora consolida varios id_pedido y tipos de caja de Dartis
+// bajo un mismo cliente+HAWB (2026-09-14) -- las filas viejas (de antes del
+// cambio) siguen con los campos singulares id_pedido/tipo_caja, asi que se
+// muestra lo nuevo si existe y se cae a lo viejo si no.
+function formatearPedidos(d) {
+  if (d.id_pedidos && d.id_pedidos.length) return d.id_pedidos.join(", ");
+  return d.id_pedido ?? "";
+}
+
+function formatearTipoCaja(d) {
+  const desglose = d.desglose_tipo_caja || {};
+  const entradas = Object.entries(desglose);
+  if (entradas.length) return entradas.map(([tipo, cajas]) => `${tipo}:${cajas}`).join(", ");
+  return d.tipo_caja || "";
+}
+
 function fechaHoyLocal() {
   const hoy = new Date();
   const offset = hoy.getTimezoneOffset();
@@ -66,21 +82,21 @@ function renderDespachos() {
     return;
   }
   const ordenados = [...despachos].sort((a, b) => {
-    const claveA = `${a.fecha || ""}|${a.postcosecha || ""}|${a.id_pedido ?? ""}|${a.destinatario || ""}|${a.guia_madre || ""}|${a.guia_hija || ""}`;
-    const claveB = `${b.fecha || ""}|${b.postcosecha || ""}|${b.id_pedido ?? ""}|${b.destinatario || ""}|${b.guia_madre || ""}|${b.guia_hija || ""}`;
+    const claveA = `${a.fecha || ""}|${a.postcosecha || ""}|${a.cliente || ""}|${a.destinatario || ""}|${a.guia_madre || ""}|${a.guia_hija || ""}`;
+    const claveB = `${b.fecha || ""}|${b.postcosecha || ""}|${b.cliente || ""}|${b.destinatario || ""}|${b.guia_madre || ""}|${b.guia_hija || ""}`;
     return claveA.localeCompare(claveB);
   });
   tbody.innerHTML = ordenados.map((d) => `
     <tr>
       <td>${d.fecha || ""}</td>
       <td>${d.postcosecha || ""}</td>
-      <td>${d.id_pedido ?? ""}</td>
+      <td>${formatearPedidos(d)}</td>
       <td>${d.destinatario || ""}</td>
       <td>${d.guia_madre || ""}</td>
       <td>${d.guia_hija || ""}</td>
       <td>${d.cliente || ""}</td>
       <td>${d.cajas ?? ""}</td>
-      <td>${d.tipo_caja || ""}</td>
+      <td>${formatearTipoCaja(d)}</td>
       <td><span class="badge ${d.estado === "AUDITADO" ? "badge-green" : "badge-gray"}">${d.estado}</span></td>
     </tr>
   `).join("");
@@ -142,17 +158,17 @@ function exportarDespachosExcel() {
   const despachos = soloGuiasCompletas
     ? despachosCargados.filter((d) => d.guia_madre && d.guia_hija)
     : despachosCargados;
-  const encabezados = ["Fecha", "Poscosecha", "ID Pedido", "Destinatario", "Guía madre", "Guía hija", "Cliente", "Cajas", "Tipo caja", "Estado"];
+  const encabezados = ["Fecha", "Poscosecha", "ID Pedidos", "Destinatario", "Guía madre", "Guía hija", "Cliente", "Cajas", "Tipo(s) caja", "Estado"];
   const filas = despachos.map((d) => [
     d.fecha || "",
     d.postcosecha || "",
-    d.id_pedido ?? "",
+    formatearPedidos(d),
     d.destinatario || "",
     d.guia_madre || "",
     d.guia_hija || "",
     d.cliente || "",
     d.cajas ?? "",
-    d.tipo_caja || "",
+    formatearTipoCaja(d),
     d.estado || "",
   ]);
   descargarCsv(encabezados, filas, `despachos_etiquetas_${$("#filtroDesde").value}_a_${$("#filtroHasta").value}.csv`);
