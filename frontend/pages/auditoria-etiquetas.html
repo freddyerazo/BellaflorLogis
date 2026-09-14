@@ -15,65 +15,82 @@
       <p class="page-subtitle">Despachos de clientes especiales y su auditoría física, vía el bot de Telegram del auditor de poscosecha.</p>
     </div>
 
-    <div class="import-card">
-      <div class="import-actions" style="justify-content: flex-start; gap: .75rem;">
-        <button id="btnGenerar" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> Generar despachos del día</button>
-        <span id="actualizado" class="page-subtitle"></span>
-      </div>
-      <div id="resultado" class="resultado"></div>
-    </div>
+    <nav class="subtabs">
+      <button class="subtab active" data-tab="supervision">Supervisión</button>
+      <button class="subtab" data-tab="clientes">Clientes a auditar</button>
+    </nav>
 
-    <div class="import-card" style="margin-top: 1.5rem;">
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Desde</label>
-          <input type="date" id="filtroDesde" />
+    <section id="panel-supervision" class="subpanel active">
+      <div class="import-card">
+        <div class="import-actions" style="justify-content: flex-start; gap: .75rem;">
+          <button id="btnGenerar" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> Generar despachos del día</button>
+          <span id="actualizado" class="page-subtitle"></span>
         </div>
-        <div class="form-group">
-          <label>Hasta</label>
-          <input type="date" id="filtroHasta" />
-        </div>
-        <div class="form-group form-group-checkbox" style="align-self: end;">
-          <label><input type="checkbox" id="filtroGuiasCompletas" /> Solo despachos con guía madre e hija</label>
-        </div>
-        <div class="form-group form-group-checkbox" style="align-self: end;">
-          <label><input type="checkbox" id="filtroSoloProblemas" /> Solo auditorías con algún problema</label>
+        <div id="resultado" class="resultado"></div>
+      </div>
+
+      <div class="import-card" style="margin-top: 1.5rem;">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Desde</label>
+            <input type="date" id="filtroDesde" />
+          </div>
+          <div class="form-group">
+            <label>Hasta</label>
+            <input type="date" id="filtroHasta" />
+          </div>
+          <div class="form-group form-group-checkbox" style="align-self: end;">
+            <label><input type="checkbox" id="filtroGuiasCompletas" /> Solo despachos con guía madre e hija</label>
+          </div>
+          <div class="form-group form-group-checkbox" style="align-self: end;">
+            <label><input type="checkbox" id="filtroSoloProblemas" /> Solo auditorías con algún problema</label>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="card-grid" id="kpis" style="margin-top: 1.5rem;">
-      <div class="summary-card"><span class="summary-card-value" id="kpi-total">0</span><span class="summary-card-label">Despachos</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-auditados">0</span><span class="summary-card-label">Auditados</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-pendientes">0</span><span class="summary-card-label">Pendientes</span></div>
-      <div class="summary-card"><span class="summary-card-value" id="kpi-problemas">0</span><span class="summary-card-label">Con problemas</span></div>
-    </div>
-
-    <div class="import-card" style="margin-top: 1.5rem;">
-      <div class="import-actions" style="justify-content: space-between;">
-        <h3 style="margin: 0;">Despachos</h3>
-        <button id="btnExportarDespachos" class="btn btn-secondary"><i class="ph ph-download-simple"></i> Exportar Excel</button>
+      <div class="card-grid" id="kpis" style="margin-top: 1.5rem;">
+        <div class="summary-card"><span class="summary-card-value" id="kpi-total">0</span><span class="summary-card-label">Despachos</span></div>
+        <div class="summary-card"><span class="summary-card-value" id="kpi-auditados">0</span><span class="summary-card-label">Auditados</span></div>
+        <div class="summary-card"><span class="summary-card-value" id="kpi-pendientes">0</span><span class="summary-card-label">Pendientes</span></div>
+        <div class="summary-card"><span class="summary-card-value" id="kpi-problemas">0</span><span class="summary-card-label">Con problemas</span></div>
       </div>
-      <table class="data-table">
-        <thead>
-          <tr><th>Fecha</th><th>Poscosecha</th><th>ID Pedidos</th><th>Destinatario</th><th>Guía madre</th><th>Guía hija</th><th>Cliente</th><th>Cajas</th><th>Tipo(s) caja</th><th>Estado</th></tr>
-        </thead>
-        <tbody id="tablaDespachos"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
-      </table>
-    </div>
 
-    <div class="import-card" style="margin-top: 1.5rem;">
-      <div class="import-actions" style="justify-content: space-between;">
-        <h3 style="margin: 0;">Auditorías registradas</h3>
-        <button id="btnExportar" class="btn btn-secondary"><i class="ph ph-download-simple"></i> Exportar CSV</button>
+      <div class="import-card" style="margin-top: 1.5rem;">
+        <div class="import-actions" style="justify-content: space-between;">
+          <h3 style="margin: 0;">Despachos</h3>
+          <button id="btnExportarDespachos" class="btn btn-secondary"><i class="ph ph-download-simple"></i> Exportar Excel</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Poscosecha</th><th>ID Pedidos</th><th>Destinatario</th><th>Guía madre</th><th>Guía hija</th><th>Cliente</th><th>Cajas</th><th>Tipo(s) caja</th><th>Estado</th></tr>
+          </thead>
+          <tbody id="tablaDespachos"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
+        </table>
       </div>
-      <table class="data-table">
-        <thead>
-          <tr><th>Hora</th><th>Auditor</th><th>Cliente</th><th>Cajas</th><th>Confirmado</th><th>Observaciones</th><th>Fotos</th></tr>
-        </thead>
-        <tbody id="tablaAuditorias"><tr><td colspan="7" class="loading">Cargando...</td></tr></tbody>
-      </table>
-    </div>
+
+      <div class="import-card" style="margin-top: 1.5rem;">
+        <div class="import-actions" style="justify-content: space-between;">
+          <h3 style="margin: 0;">Auditorías registradas</h3>
+          <button id="btnExportar" class="btn btn-secondary"><i class="ph ph-download-simple"></i> Exportar CSV</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr><th>Hora</th><th>Auditor</th><th>Cliente</th><th>Cajas</th><th>Confirmado</th><th>Observaciones</th><th>Fotos</th></tr>
+          </thead>
+          <tbody id="tablaAuditorias"><tr><td colspan="7" class="loading">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-clientes" class="subpanel">
+      <p class="page-subtitle" style="margin-bottom: 1rem;">
+        Clientes cuyos despachos se generan para el bot de auditoría (columna <code>customers.es_cliente_especial</code>).
+        Un mismo <b>Dartis</b> puede tener un registro general (Destinatario en blanco, aplica a todas sus ventas) y
+        registros específicos por destinatario final (para darle etiqueta/seguimiento propio a un sub-cliente puntual,
+        ej. los distintos floristas que reciben en nombre de un mismo comercializador).
+      </p>
+      <div id="content-clientes"></div>
+    </section>
   </main>
 
   <div id="lightboxFoto" class="lightbox-foto" hidden>

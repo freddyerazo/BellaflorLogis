@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from "/js/api.js";
+import { initCrudPage } from "/js/crud-page.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -210,3 +211,48 @@ $("#btnGenerar").addEventListener("click", async () => {
 });
 
 cargar();
+
+/* ─── Clientes a auditar (customers.es_cliente_especial) ─────────────────── */
+initCrudPage({
+  endpoint: "/customers",
+  listEndpoint: "/customers?es_cliente_especial=true",
+  mountSelector: "#content-clientes",
+  title: "Clientes a auditar",
+  // Sin "Eliminar": el DELETE de /customers desactiva el registro completo
+  // (customers.active = false), que afectaria a otros modulos que usan ese
+  // mismo cliente (Torre de Control, cotizaciones, etc.). Para sacar a un
+  // cliente de esta lista sin tocar el resto de su registro, se edita y se
+  // destilda "Requiere auditoria de etiquetas".
+  allowDelete: false,
+  columns: [
+    { key: "customer_code", label: "Código" },
+    { key: "customer_name", label: "Etiqueta / Nombre" },
+    { key: "dartis_name", label: "Nombre en Dartis" },
+    { key: "destinatario", label: "Destinatario (opcional)" },
+    { key: "active", label: "Estado", format: "active-badge" },
+  ],
+  fields: [
+    { name: "customer_code", label: "Código", type: "text", required: true },
+    { name: "customer_name", label: "Etiqueta / Nombre a mostrar", type: "text", required: true },
+    { name: "dartis_name", label: "Nombre exacto en Dartis (columna \"cliente\")", type: "text", required: true },
+    {
+      name: "destinatario", type: "text",
+      label: "Destinatario en Dartis (dejar vacío = aplica a TODAS las ventas de este Dartis)",
+    },
+    {
+      name: "es_cliente_especial", label: "Requiere auditoría de etiquetas", type: "checkbox",
+      default: true,
+    },
+    { name: "active", label: "Activo", type: "checkbox", editOnly: true },
+  ],
+});
+
+/* ─── Navegación por pestañas ─────────────────────────────────────────── */
+document.querySelectorAll(".subtab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".subtab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".subpanel").forEach((p) => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+  });
+});

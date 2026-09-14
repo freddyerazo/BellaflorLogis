@@ -9,6 +9,9 @@ class CustomerCreate(BaseModel):
     contact_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    dartis_name: Optional[str] = None
+    destinatario: Optional[str] = None
+    es_cliente_especial: Optional[bool] = None
 
 
 class CustomerUpdate(BaseModel):
@@ -18,3 +21,6 @@ class CustomerUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     active: Optional[bool] = None
+    dartis_name: Optional[str] = None
+    destinatario: Optional[str] = None
+    es_cliente_especial: Optional[bool] = None
