@@ -1,24 +1,72 @@
 # Dónde retomar — 2026-09-14
 
-**Auditoría de Etiquetas: pestaña nueva "Clientes a auditar"**, tabla
-checklist con guardado en lote (`9899688`, tras un primer intento con modal
-en `d77baa5` que el usuario pidió rehacer). Antes, en la misma sesión: **los
-despachos se consolidan por cliente + HAWB** (`a5ed939`/`d488561`). Antes de
-eso, **Torre de Control: la celda "Cliente / Factura" ahora muestra
-`id_comercializadora`** (`0f4fc42`), el cambio de proceso de Torre de Control
-(`50cc383`, y `0d8b2c4` antes), la **reforma de la vista** del 2026-09-05
-(`7c55709`) y, antes aún, **Agrocalidad** y la importación de Dartis del
-2026-09-04. Todo sigue descrito más abajo, del más reciente al más viejo.
+**Auditoría de Etiquetas: "+ Agregar cliente" ahora abre un buscador con
+checklist** sobre los ~1.716 clientes de BLIS (`fcbfe32`), en vez de obligar
+a escribir todo a mano. Justo antes, en la misma sesión: la pestaña
+**"Clientes a auditar"** se rehízo como tabla checklist con guardado en lote
+(`9899688`, tras un primer intento con modal en `d77baa5` que el usuario
+pidió descartar). Antes: **los despachos se consolidan por cliente + HAWB**
+(`a5ed939`/`d488561`). Antes de eso, **Torre de Control: la celda
+"Cliente / Factura" ahora muestra `id_comercializadora`** (`0f4fc42`), el
+cambio de proceso de Torre de Control (`50cc383`, y `0d8b2c4` antes), la
+**reforma de la vista** del 2026-09-05 (`7c55709`) y, antes aún,
+**Agrocalidad** y la importación de Dartis del 2026-09-04. Todo sigue
+descrito más abajo, del más reciente al más viejo.
 
-**Ojo — el autodeploy de Render no es confiable, ver el cierre de esta
-sección.** Tres pushes seguidos tardaron 20+ minutos en reflejarse porque el
-panel no disparó ningún deploy automático; se resolvió con "Manual Deploy"
-desde el panel. Verificar SIEMPRE que un push se reflejó en producción antes
-de darlo por bueno.
+**Ojo — el autodeploy de Render no es confiable, ver el cierre de la sección
+"pestaña Clientes a auditar" más abajo.** Varios pushes seguidos tardaron
+20+ minutos en reflejarse (y el de `fcbfe32` tampoco se disparó solo) porque
+el panel no dispara ningún deploy automático — todos los deploys visibles en
+la lista de Render muestran `Trigger: Manual`. Después de cada push, pedir
+al usuario "Manual Deploy" → "Deploy latest commit" en el panel de
+`blis-api`, no asumir que llega solo.
 
 ---
 
-## Lo último: pestaña "Clientes a auditar" (2026-09-14)
+## Lo último: picker de clientes existentes para "+ Agregar cliente" (2026-09-14)
+
+Pedido del usuario, inmediatamente después de ver la tabla checklist en
+producción: la mayoría de clientes que hay que agregar a la auditoría **ya
+existen** en BLIS (se usan en cotizaciones, Torre de Control, etc.) —
+escribir de nuevo a mano su código/nombre/Dartis es innecesario y propenso a
+error de tipeo (un `dartis_name` mal escrito rompe silenciosamente el cruce
+contra `dartis_ventas`, ver sección de abajo).
+
+**Hecho:**
+
+1. `btnClientesAgregar` ya no inserta directo una fila en blanco — abre un
+   `<dialog class="dialog-picker">` con buscador y una lista con checkbox
+   por cliente, cargada de `GET /customers` **sin filtro** (los ~1.716,
+   cacheados en `clientesTodosCache` tras la primera apertura, para no
+   volver a pedirlos cada vez que se abre el picker). Se puede marcar varios
+   de una vez; "Agregar seleccionados (N)" los inserta todos en la tabla
+   principal, ya tildados.
+2. Los clientes ya listados en la tabla principal (`clientesOriginales`) se
+   excluyen de los resultados del picker, para no ofrecer duplicados. La
+   lista se recorta a 200 resultados por render (con miles de clientes,
+   listarlos todos de una sin que el usuario haya buscado nada no aporta y
+   sí pesa el DOM).
+3. **Detalle importante para no romper el guardado en lote:** un cliente
+   elegido del picker se agrega a `clientesOriginales` con su
+   `es_cliente_especial` **real** (normalmente `false`) y se pinta en la
+   tabla con el checkbox ya tildado (`true`) — así la comparación de "qué
+   cambió" al hacer clic en Guardar detecta la diferencia sola y manda un
+   `PUT` (no un `POST`: el cliente ya existe, no hay que crearlo de nuevo).
+4. Se conserva el flujo de fila-en-blanco de antes como respaldo, vía el
+   enlace "¿No existe todavía? Crear cliente completamente nuevo" dentro del
+   mismo modal — para sub-clientes `DST-...` que de verdad no existen en
+   ningún otro lado de BLIS.
+
+**Verificado contra producción real** (no solo lectura de código): tomado un
+cliente real no-especial (`3V INBLOOM GROUP`, `es_cliente_especial: false`),
+simulado el `PUT` que dispara "Guardar" tras elegirlo en el picker,
+confirmado que aparece en `GET /customers?es_cliente_especial=true`, y
+revertido a su estado original al terminar — sin dejar ningún residuo en la
+base real.
+
+---
+
+## Lo anterior: pestaña "Clientes a auditar" (2026-09-14)
 
 Pedido del usuario: revisar cómo se cruzan los clientes que requieren
 auditoría de etiquetas, y crear una forma de agregarlos/editarlos sin SQL
