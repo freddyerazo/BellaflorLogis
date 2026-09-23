@@ -183,6 +183,13 @@ async def place_order(customer_id: str, carrier_id: str, miami_ship_date: str,
     boxes: [{"box_id": str, "stem_price": float | None}, ...]. Sin
     documentacion oficial del formato de respuesta (texto/XML/JSON segun el
     caso) -- se devuelve el texto crudo tal cual, sin asumir su forma.
+
+    Verificado contra LAG en vivo (2026-09-23, orden real de 2 cajas): NO es
+    un indice por caja (`boxIds[0]`, `boxIds[1]`, ...) como se asumio al
+    clonar el proyecto. Es un solo `boxIds[0]` con todos los barcodes
+    separados por coma -- `boxIds[0]=EX00943983,EX01020221` proceso las 2
+    cajas ("Boxes successfully processed: 2"). `stemPrice[0]` sigue el mismo
+    patron, alineado por posicion con `boxIds[0]`.
     """
     if not LAG_PLACE_ORDER_TOKEN:
         raise HTTPException(
@@ -196,11 +203,13 @@ async def place_order(customer_id: str, carrier_id: str, miami_ship_date: str,
         "carrierId": carrier_id,
         "miamiShipDate": miami_ship_date,
         "printWmsLabels": "1" if print_wms_labels else "0",
+        "boxIds[0]": ",".join(box["box_id"] for box in boxes),
     }
-    for i, box in enumerate(boxes):
-        params[f"boxIds[{i}]"] = box["box_id"]
-        if box.get("stem_price") is not None:
-            params[f"stemPrice[{i}]"] = str(box["stem_price"])
+    if any(box.get("stem_price") is not None for box in boxes):
+        params["stemPrice[0]"] = ",".join(
+            str(box["stem_price"]) if box.get("stem_price") is not None else ""
+            for box in boxes
+        )
 
     url = f"{LAG_PLACE_ORDER_BASE_URL}/PlaceOrder/ordernew"
     response = await _request("GET", url, params=params)
