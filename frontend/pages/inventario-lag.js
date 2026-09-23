@@ -671,7 +671,7 @@ const escapeHtml = (s) =>
 // navegable con flechas/Enter) para catalogos largos donde un <select>
 // plano no se puede filtrar. Devuelve el estado (con .seleccionado) para
 // poder leerlo despues, p.ej. al armar el mensaje de confirmacion.
-function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, textoSeleccionado, etiquetaCarga }) {
+function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, textoSeleccionado, etiquetaCarga, onSeleccionar }) {
   const estado = { items: [], seleccionado: null, resaltado: -1 };
   const input = document.getElementById(`${prefix}-search`);
   const hidden = document.getElementById(`${prefix}-value`);
@@ -707,6 +707,7 @@ function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, 
     input.value = textoSeleccionado(item);
     hidden.value = valorOpcion(item);
     cont.classList.remove("abierto");
+    if (onSeleccionar) onSeleccionar(item);
   }
 
   input.addEventListener("input", () => {
@@ -746,6 +747,7 @@ function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, 
     if (!combo.contains(e.target)) cont.classList.remove("abierto");
   });
 
+  estado.recargar = cargarDatos;
   cargarDatos();
   return estado;
 }
@@ -796,6 +798,14 @@ const comboCliente = crearComboBuscable({
   textoSeleccionado: (c) => `${c.customer_name} (${c.customer_code_lag})`,
   valorOpcion: (c) => c.customer_code_lag,
   etiquetaCarga: "clientes",
+  // Las piezas disponibles (Box ID) dependen de este mismo cliente -- ver
+  // obtenerPiezasDisponibles. Al cambiar de cliente hay que descartar la
+  // cache y refrescar cada combo de caja ya creado, sino quedan mostrando
+  // piezas del cliente anterior.
+  onSeleccionar: (item) => {
+    piezasPorCliente.clear();
+    combosCajaPosteo.forEach((c) => c.recargar());
+  },
 });
 
 // El carrierId viene de truck_company.id_logistic_carrier (catalogo de
@@ -813,16 +823,27 @@ const comboCarrier = crearComboBuscable({
   etiquetaCarga: "carriers",
 });
 
-// Box ID = barcode de una pieza disponible en bodega (misma fuente que la
-// pestana "Inventario", GET /inventario-lag/pieces). Se pide una sola vez
-// y se comparte entre todas las filas de caja (cada fila tiene su propio
-// combo, pero la lista de piezas es la misma).
-let piezasDisponiblesPromise = null;
+// Box ID = barcode de una pieza disponible en bodega, PARA EL CLIENTE
+// elegido arriba (GET /inventario-lag/pieces?customer_code=...) -- el
+// mismo cliente que ya sabemos que customer_code == customer_code_lag
+// cuando ambos existen (ver comentario de comboCliente). Se cachea por
+// cliente para no repetir la consulta entre filas de caja, y se limpia
+// cuando cambia el cliente elegido (ver onSeleccionar de comboCliente).
+const piezasPorCliente = new Map();
+const combosCajaPosteo = [];
+
 function obtenerPiezasDisponibles() {
-  if (!piezasDisponiblesPromise) {
-    piezasDisponiblesPromise = apiGet("/inventario-lag/pieces").then((r) => r.piezas || []);
+  const customerCode = comboCliente.seleccionado?.customer_code_lag;
+  if (!customerCode) {
+    return Promise.reject(new Error("Elegí un cliente primero"));
   }
-  return piezasDisponiblesPromise;
+  if (!piezasPorCliente.has(customerCode)) {
+    piezasPorCliente.set(
+      customerCode,
+      apiGet(`/inventario-lag/pieces?customer_code=${encodeURIComponent(customerCode)}`).then((r) => r.piezas || [])
+    );
+  }
+  return piezasPorCliente.get(customerCode);
 }
 
 let contadorCajaPosteo = 0;
@@ -837,7 +858,7 @@ function plantillaCajaPosteo() {
       <div class="form-group">
         <label>Box ID (pieza en bodega) *</label>
         <div class="combo-buscable" id="${prefix}-combo">
-          <input type="text" id="${prefix}-search" placeholder="Cargando piezas..." autocomplete="off" disabled />
+          <input type="text" id="${prefix}-search" placeholder="Elegí un cliente primero" autocomplete="off" disabled />
           <input type="hidden" name="boxId" id="${prefix}-value" />
           <div class="combo-opciones" id="${prefix}-opciones"></div>
         </div>
@@ -845,9 +866,13 @@ function plantillaCajaPosteo() {
       <div class="form-group"><label>Stem Price</label><input type="number" step="0.01" name="stemPrice" min="0" /></div>
     </div>
     <button type="button" class="btn btn-secondary btn-quitar">Quitar</button>`;
-  div.querySelector(".btn-quitar").addEventListener("click", () => div.remove());
+  div.querySelector(".btn-quitar").addEventListener("click", () => {
+    const i = combosCajaPosteo.indexOf(comboCaja);
+    if (i >= 0) combosCajaPosteo.splice(i, 1);
+    div.remove();
+  });
 
-  crearComboBuscable({
+  const comboCaja = crearComboBuscable({
     prefix,
     cargar: obtenerPiezasDisponibles,
     filtro: (piezas) => piezas,
@@ -856,6 +881,7 @@ function plantillaCajaPosteo() {
     valorOpcion: (p) => p.barcode,
     etiquetaCarga: "piezas",
   });
+  combosCajaPosteo.push(comboCaja);
 
   return div;
 }

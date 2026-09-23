@@ -9,7 +9,16 @@ estilo de BLIS (variables de entorno via os.getenv, sin pydantic-settings).
 import os
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import HTTPException, status
+
+# Este modulo no depende de la base de datos, asi que nada mas lo garantiza
+# cargar el .env antes de leer os.getenv() -- sin esto, quedaba a merced de
+# que algun otro modulo (connection.py) se hubiera importado primero en la
+# misma corrida. Verificado en la practica: probar lag_client solo, sin
+# pasar por la app completa, dejaba LAG_TOKEN vacio y LAG respondia 404 en
+# vez de un error claro de autenticacion.
+load_dotenv()
 
 LAG_ENV = os.getenv("LAG_ENV", "test")
 LAG_TOKEN = os.getenv("LAG_TOKEN", "")
