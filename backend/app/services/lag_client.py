@@ -12,7 +12,6 @@ import httpx
 from fastapi import HTTPException, status
 
 LAG_ENV = os.getenv("LAG_ENV", "test")
-LAG_CUSTOMER_CODE = os.getenv("LAG_CUSTOMER_CODE", "")
 LAG_TOKEN = os.getenv("LAG_TOKEN", "")
 LAG_SALES_API_KEY = os.getenv("LAG_SALES_API_KEY", "")
 LAG_TIMEOUT = float(os.getenv("LAG_TIMEOUT", "30"))
@@ -81,8 +80,12 @@ async def create_purchase_order(xml_body: str) -> str:
     return response.text
 
 
-async def get_pieces_in_inventory() -> list[dict]:
-    """Piezas disponibles en la bodega de Miami.
+async def get_pieces_in_inventory(customer_code: str) -> list[dict]:
+    """Piezas disponibles en la bodega de Miami, para UN cliente de Bellaflor.
+
+    LAG identifica "cliente" con el codigo propio de cada cliente de Bellaflor
+    (`customers.customer_code` en Supabase) -- no existe un codigo unico de
+    cuenta que traiga el inventario de todos a la vez.
 
     LAG no distingue en la respuesta entre "sin inventario", "token invalido" y
     "codigo de cliente invalido": los tres devuelven []. Los parametros faltantes
@@ -91,7 +94,7 @@ async def get_pieces_in_inventory() -> list[dict]:
     """
     url = (
         f"{LAG_BASE_URL}/api/ClientesExternosA/"
-        f"ListarCodigosDeBarraDisponiblesUbicacion/{LAG_CUSTOMER_CODE}/{LAG_TOKEN}"
+        f"ListarCodigosDeBarraDisponiblesUbicacion/{customer_code}/{LAG_TOKEN}"
     )
     response = await _request("GET", url)
 
@@ -100,7 +103,7 @@ async def get_pieces_in_inventory() -> list[dict]:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
                 "LAG respondio vacio: faltan parametros. "
-                "Revise LAG_CUSTOMER_CODE y LAG_TOKEN en la configuracion del servidor."
+                "Revise el customer_code enviado y LAG_TOKEN en la configuracion del servidor."
             ),
         )
 
@@ -121,26 +124,26 @@ async def get_pieces_in_inventory() -> list[dict]:
     return data
 
 
-async def get_barcode_info(shipment_nr: str):
+async def get_barcode_info(customer_code: str, shipment_nr: str):
     url = (
         f"{LAG_BASE_URL}/api/v2/ClientesExternosA/"
-        f"ListarCodigosDeBarraPorClienteNew/{LAG_CUSTOMER_CODE}/{shipment_nr}"
+        f"ListarCodigosDeBarraPorClienteNew/{customer_code}/{shipment_nr}"
     )
     return _json(await _request("GET", url, params={"authenticationToken": LAG_TOKEN}))
 
 
-async def get_shipment_info(date: str):
+async def get_shipment_info(customer_code: str, date: str):
     url = (
         f"{LAG_BASE_URL}/api/ClientesExternosA/"
-        f"ListarTotalesGuiasPorClienteV2/{LAG_CUSTOMER_CODE}/{date}"
+        f"ListarTotalesGuiasPorClienteV2/{customer_code}/{date}"
     )
     return _json(await _request("GET", url, params={"authenticationToken": LAG_TOKEN}))
 
 
-async def get_pieces_dispatched(date: str):
+async def get_pieces_dispatched(customer_code: str, date: str):
     url = (
         f"{LAG_BASE_URL}/api/ClientesExternosA/"
-        f"ListarCodigosDeBarraDespachadosFecha/{LAG_CUSTOMER_CODE}/{LAG_TOKEN}/{date}"
+        f"ListarCodigosDeBarraDespachadosFecha/{customer_code}/{LAG_TOKEN}/{date}"
     )
     return _json(await _request("GET", url))
 

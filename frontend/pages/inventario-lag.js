@@ -3,11 +3,15 @@ import { apiGet, apiPost } from "/js/api.js";
 // ---------- API del modulo (proxy sobre LAG) ----------
 const api = {
   crearOrdenCompra: (payload) => apiPost("/inventario-lag/purchase-orders", payload),
-  piezasInventario: () => apiGet("/inventario-lag/pieces"),
+  piezasInventario: (customerCode) =>
+    apiGet(`/inventario-lag/pieces?customer_code=${encodeURIComponent(customerCode)}`),
   reporteDetallado: (params) => apiGet(`/inventario-lag/full?${new URLSearchParams(params)}`),
-  infoCodigosBarra: (shipmentNr) => apiGet(`/inventario-lag/barcode/${encodeURIComponent(shipmentNr)}`),
-  infoEnvios: (fecha) => apiGet(`/inventario-lag/shipments?fecha=${fecha}`),
-  piezasDespachadas: (fecha) => apiGet(`/inventario-lag/dispatched?fecha=${fecha}`),
+  infoCodigosBarra: (customerCode, shipmentNr) =>
+    apiGet(`/inventario-lag/barcode/${encodeURIComponent(shipmentNr)}?customer_code=${encodeURIComponent(customerCode)}`),
+  infoEnvios: (customerCode, fecha) =>
+    apiGet(`/inventario-lag/shipments?customer_code=${encodeURIComponent(customerCode)}&fecha=${fecha}`),
+  piezasDespachadas: (customerCode, fecha) =>
+    apiGet(`/inventario-lag/dispatched?customer_code=${encodeURIComponent(customerCode)}&fecha=${fecha}`),
   crearOrdenVenta: (payload) => apiPost("/inventario-lag/sales-orders", payload),
   cancelarOrdenVenta: (idOrder) =>
     apiPost("/inventario-lag/sales-orders/cancel", { idOrder: Number(idOrder) }),
@@ -218,9 +222,14 @@ function renderResumenRacks(resumen) {
   div.appendChild(wrap);
 }
 
-$("#btn-piezas").addEventListener("click", (e) =>
+$("#btn-piezas").addEventListener("click", (e) => {
+  const customerCode = $("#inv-customer-value").value;
+  if (!customerCode) {
+    mostrarError("#res-piezas", "Elegí un cliente antes de consultar.");
+    return;
+  }
   ejecutar(e.target, "#res-piezas", async () => {
-    const data = await api.piezasInventario();
+    const data = await api.piezasInventario(customerCode);
 
     inventario.piezas = data.piezas;
     $("#kpi-piezas").textContent = data.total_piezas;
@@ -244,8 +253,8 @@ $("#btn-piezas").addEventListener("click", (e) =>
     $("#actualizado").textContent = `Actualizado ${new Date().toLocaleString("es-EC")}`;
 
     aplicarFiltros();
-  })
-);
+  });
+});
 
 $("#buscar-barcode").addEventListener("input", aplicarFiltros);
 $("#filtro-rack").addEventListener("change", aplicarFiltros);
@@ -278,8 +287,13 @@ $("#btn-exportar").addEventListener("click", () => {
 $("#form-barcode").addEventListener("submit", (e) => {
   e.preventDefault();
   const shipmentNr = datosFormulario(e.target).shipmentNr;
+  const customerCode = $("#inv-customer-value").value;
+  if (!customerCode) {
+    mostrarError("#res-barcode", "Elegí un cliente antes de consultar.");
+    return;
+  }
   ejecutar(e.target.querySelector("button"), "#res-barcode", async () => {
-    mostrarTabla("#res-barcode", await api.infoCodigosBarra(shipmentNr));
+    mostrarTabla("#res-barcode", await api.infoCodigosBarra(customerCode, shipmentNr));
   });
 });
 
@@ -381,6 +395,10 @@ $("#form-reporte").addEventListener("submit", (e) => {
   e.preventDefault();
   const datos = datosFormulario(e.target);
 
+  if (!datos.customer_code) {
+    mostrarError("#res-reporte", "Elegí un cliente antes de generar el reporte.");
+    return;
+  }
   if (!datos.fecha && !datos.guias) {
     mostrarError("#res-reporte", "Indique una fecha de embarque o al menos una guia.");
     return;
@@ -454,16 +472,26 @@ $("#btn-exportar-rep").addEventListener("click", () => {
 $("#form-envios").addEventListener("submit", (e) => {
   e.preventDefault();
   const fecha = datosFormulario(e.target).fecha;
+  const customerCode = $("#env-customer-value").value;
+  if (!customerCode) {
+    mostrarError("#res-envios", "Elegí un cliente antes de consultar.");
+    return;
+  }
   ejecutar(e.target.querySelector("button"), "#res-envios", async () => {
-    mostrarTabla("#res-envios", await api.infoEnvios(fecha));
+    mostrarTabla("#res-envios", await api.infoEnvios(customerCode, fecha));
   });
 });
 
 $("#form-despachadas").addEventListener("submit", (e) => {
   e.preventDefault();
   const fecha = datosFormulario(e.target).fecha;
+  const customerCode = $("#env-customer-value").value;
+  if (!customerCode) {
+    mostrarError("#res-despachadas", "Elegí un cliente antes de consultar.");
+    return;
+  }
   ejecutar(e.target.querySelector("button"), "#res-despachadas", async () => {
-    mostrarTabla("#res-despachadas", await api.piezasDespachadas(fecha));
+    mostrarTabla("#res-despachadas", await api.piezasDespachadas(customerCode, fecha));
   });
 });
 
@@ -721,6 +749,40 @@ function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, 
   cargarDatos();
   return estado;
 }
+
+// Selectores de cliente para las consultas de inventario/reporte/envios: LAG
+// identifica el inventario por customers.customer_code (todos los clientes
+// lo tienen), a diferencia del customerId de Posteo de Inventario mas abajo,
+// que usa customer_code_lag.
+const comboClienteConsulta = {
+  inv: crearComboBuscable({
+    prefix: "inv-customer",
+    cargar: () => apiGet("/customers"),
+    filtro: (clientes) => clientes.filter((c) => c.customer_code).sort((a, b) => a.customer_name.localeCompare(b.customer_name)),
+    textoOpcion: (c) => `${c.customer_name} (${c.customer_code})`,
+    textoSeleccionado: (c) => `${c.customer_name} (${c.customer_code})`,
+    valorOpcion: (c) => c.customer_code,
+    etiquetaCarga: "clientes",
+  }),
+  rep: crearComboBuscable({
+    prefix: "rep-customer",
+    cargar: () => apiGet("/customers"),
+    filtro: (clientes) => clientes.filter((c) => c.customer_code).sort((a, b) => a.customer_name.localeCompare(b.customer_name)),
+    textoOpcion: (c) => `${c.customer_name} (${c.customer_code})`,
+    textoSeleccionado: (c) => `${c.customer_name} (${c.customer_code})`,
+    valorOpcion: (c) => c.customer_code,
+    etiquetaCarga: "clientes",
+  }),
+  env: crearComboBuscable({
+    prefix: "env-customer",
+    cargar: () => apiGet("/customers"),
+    filtro: (clientes) => clientes.filter((c) => c.customer_code).sort((a, b) => a.customer_name.localeCompare(b.customer_name)),
+    textoOpcion: (c) => `${c.customer_name} (${c.customer_code})`,
+    textoSeleccionado: (c) => `${c.customer_name} (${c.customer_code})`,
+    valorOpcion: (c) => c.customer_code,
+    etiquetaCarga: "clientes",
+  }),
+};
 
 // El customerId de LAG viene de customers.customer_code_lag (verificado:
 // siempre igual a customer_code cuando existe, 1,409 de 1,703 clientes lo

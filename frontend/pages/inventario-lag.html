@@ -27,6 +27,19 @@
     <!-- INVENTARIO -->
     <section id="panel-inventario" class="subpanel active">
       <div class="import-card">
+        <h3>Cliente a consultar</h3>
+        <p class="page-subtitle">LAG identifica el inventario por cliente de Bellaflor (<code>customers.customer_code</code>) — elegí uno antes de consultar.</p>
+        <div class="form-group" style="max-width: 28rem;">
+          <label>Cliente *</label>
+          <div class="combo-buscable" id="inv-customer-combo">
+            <input type="text" id="inv-customer-search" placeholder="Cargando clientes..." autocomplete="off" disabled />
+            <input type="hidden" id="inv-customer-value" />
+            <div class="combo-opciones" id="inv-customer-opciones"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="import-card" style="margin-top: 1.5rem;">
         <h3>Piezas disponibles en bodega (Miami)</h3>
         <div class="import-actions" style="justify-content: flex-start; gap: .75rem;">
           <button id="btn-piezas" class="btn btn-primary"><i class="ph ph-magnifying-glass"></i> Consultar inventario</button>
@@ -97,6 +110,14 @@
 
         <form id="form-reporte" class="form-grid">
           <div class="form-group">
+            <label>Cliente *</label>
+            <div class="combo-buscable" id="rep-customer-combo">
+              <input type="text" id="rep-customer-search" placeholder="Cargando clientes..." autocomplete="off" disabled />
+              <input type="hidden" name="customer_code" id="rep-customer-value" />
+              <div class="combo-opciones" id="rep-customer-opciones"></div>
+            </div>
+          </div>
+          <div class="form-group">
             <label>Fecha de embarque</label>
             <input type="date" name="fecha" />
           </div>
@@ -149,6 +170,18 @@
     <!-- ENVIOS -->
     <section id="panel-envios" class="subpanel">
       <div class="import-card">
+        <h3>Cliente a consultar</h3>
+        <div class="form-group" style="max-width: 28rem;">
+          <label>Cliente *</label>
+          <div class="combo-buscable" id="env-customer-combo">
+            <input type="text" id="env-customer-search" placeholder="Cargando clientes..." autocomplete="off" disabled />
+            <input type="hidden" id="env-customer-value" />
+            <div class="combo-opciones" id="env-customer-opciones"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="import-card" style="margin-top: 1.5rem;">
         <h3>Información de envíos por fecha</h3>
         <form id="form-envios" class="form-grid">
           <div class="form-group"><label>Fecha</label><input type="date" name="fecha" required /></div>

@@ -48,9 +48,11 @@ async def health():
 
 
 @router.get("/pieces", response_model=InventoryResponse)
-async def piezas_en_inventario() -> InventoryResponse:
-    """Lista las piezas disponibles en bodega, con el resumen por ubicacion."""
-    crudo = await lag_client.get_pieces_in_inventory()
+async def piezas_en_inventario(
+    customer_code: str = Query(description="customers.customer_code del cliente a consultar"),
+) -> InventoryResponse:
+    """Lista las piezas disponibles en bodega para UN cliente, con el resumen por ubicacion."""
+    crudo = await lag_client.get_pieces_in_inventory(customer_code)
 
     piezas = [
         PieceInInventory(
@@ -74,12 +76,16 @@ async def piezas_en_inventario() -> InventoryResponse:
 
 
 @router.get("/barcode/{shipment_nr}")
-async def info_codigos_barra(shipment_nr: str):
-    return await lag_client.get_barcode_info(shipment_nr)
+async def info_codigos_barra(
+    shipment_nr: str,
+    customer_code: str = Query(description="customers.customer_code del cliente a consultar"),
+):
+    return await lag_client.get_barcode_info(customer_code, shipment_nr)
 
 
 @router.get("/full", response_model=InventarioCompleto)
 async def inventario_detallado(
+    customer_code: str = Query(description="customers.customer_code del cliente a consultar"),
     fecha: Optional[date_type] = Query(
         default=None, description="Fecha de embarque (YYYY-MM-DD) para descubrir las guias"
     ),
@@ -87,7 +93,8 @@ async def inventario_detallado(
         default=None, description="Guias separadas por coma, en lugar de descubrirlas por fecha"
     ),
 ) -> InventarioCompleto:
-    """Reconstruye el reporte ResumenCodigosDeBarra combinando tres APIs de LAG.
+    """Reconstruye el reporte ResumenCodigosDeBarra combinando tres APIs de LAG,
+    para UN cliente (customer_code).
 
     Indique una fecha (para descubrir las guias del dia) o una lista de guias.
     """
@@ -97,7 +104,7 @@ async def inventario_detallado(
     if guias:
         lista_guias = [g.strip() for g in guias.split(",") if g.strip()]
     elif fecha:
-        envios = await lag_client.get_shipment_info(fecha.isoformat())
+        envios = await lag_client.get_shipment_info(customer_code, fecha.isoformat())
         if isinstance(envios, dict):
             raise HTTPException(
                 status_code=http_status.HTTP_502_BAD_GATEWAY,
@@ -118,7 +125,7 @@ async def inventario_detallado(
     async def detalle(guia: str):
         async with semaforo:
             try:
-                return guia, await lag_client.get_barcode_info(guia)
+                return guia, await lag_client.get_barcode_info(customer_code, guia)
             except HTTPException as exc:
                 return guia, exc
 
@@ -127,7 +134,7 @@ async def inventario_detallado(
     # 3. Ubicaciones. Si falla, seguimos sin racks en vez de perder todo el reporte.
     racks: dict[str, str] = {}
     try:
-        racks = ic.mapa_de_racks(await lag_client.get_pieces_in_inventory())
+        racks = ic.mapa_de_racks(await lag_client.get_pieces_in_inventory(customer_code))
     except HTTPException as exc:
         avisos.append(f"No se pudieron obtener las ubicaciones: {exc.detail}")
 
@@ -160,13 +167,19 @@ async def inventario_detallado(
 
 
 @router.get("/shipments")
-async def info_envios(fecha: date_type = Query(description="Fecha del envio (YYYY-MM-DD)")):
-    return await lag_client.get_shipment_info(fecha.isoformat())
+async def info_envios(
+    customer_code: str = Query(description="customers.customer_code del cliente a consultar"),
+    fecha: date_type = Query(description="Fecha del envio (YYYY-MM-DD)"),
+):
+    return await lag_client.get_shipment_info(customer_code, fecha.isoformat())
 
 
 @router.get("/dispatched")
-async def piezas_despachadas(fecha: date_type = Query(description="Fecha de despacho (YYYY-MM-DD)")):
-    return await lag_client.get_pieces_dispatched(fecha.isoformat())
+async def piezas_despachadas(
+    customer_code: str = Query(description="customers.customer_code del cliente a consultar"),
+    fecha: date_type = Query(description="Fecha de despacho (YYYY-MM-DD)"),
+):
+    return await lag_client.get_pieces_dispatched(customer_code, fecha.isoformat())
 
 
 @router.post("/purchase-orders", response_model=PurchaseOrderResult)
