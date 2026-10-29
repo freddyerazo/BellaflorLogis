@@ -98,7 +98,7 @@ def buscar_cruce_dartis(awb_number: str) -> list[dict]:
         filas = conn.execute(
             text(
                 """
-                SELECT DISTINCT cliente, id_comercializadora
+                SELECT DISTINCT cliente, id_comercializadora, especie
                 FROM dartis_ventas
                 WHERE guia_madre = :awb OR guia_hija = :awb
                 ORDER BY cliente
@@ -109,14 +109,16 @@ def buscar_cruce_dartis(awb_number: str) -> list[dict]:
     return [dict(f) for f in filas]
 
 
-def armar_detail_y_order_number(filas: list[dict]) -> tuple[str, str]:
+def armar_campos_sello(filas: list[dict]) -> tuple[str, str, str]:
     clientes = sorted({f["cliente"] for f in filas if f["cliente"]})
     comercializadoras = sorted(
         {str(f["id_comercializadora"]) for f in filas if f["id_comercializadora"]}
     )
+    especies = sorted({f["especie"] for f in filas if f["especie"]})
     detail = ", ".join(clientes) if clientes else "SIN CRUCE EN DARTIS"
     order_number = ", ".join(comercializadoras) if comercializadoras else "-"
-    return detail, order_number
+    especie = ", ".join(especies) if especies else "-"
+    return detail, order_number, especie
 
 
 def _tamano_fuente_ajustado(texto: str, ancho_disponible: float, fuente="Helvetica", inicial=9.0, minimo=6.0) -> float:
@@ -129,6 +131,26 @@ def _tamano_fuente_ajustado(texto: str, ancho_disponible: float, fuente="Helveti
     return tamano
 
 
+def _envolver_texto(texto: str, fuente: str, tamano: float, ancho_disponible: float) -> list[str]:
+    """Parte el texto en varias lineas que entren en ancho_disponible --
+    un AWB puede agrupar muchas especies o clientes distintos (hasta 16 en
+    un caso real) y encoger la letra hasta que entre en una sola linea la
+    vuelve ilegible o la corta contra el borde de la pagina."""
+    palabras = texto.split(" ")
+    lineas = []
+    actual = ""
+    for palabra in palabras:
+        candidato = f"{actual} {palabra}".strip()
+        if not actual or stringWidth(candidato, fuente, tamano) <= ancho_disponible:
+            actual = candidato
+        else:
+            lineas.append(actual)
+            actual = palabra
+    if actual:
+        lineas.append(actual)
+    return lineas
+
+
 # Sello centrado con id_comercializadora + cliente, pedido por el usuario
 # ademas del llenado de DETAIL/ORDER NUMBER: va al 75% de la pagina medido
 # desde arriba, para que sea visible de un vistazo sin tener que leer los
@@ -136,31 +158,39 @@ def _tamano_fuente_ajustado(texto: str, ancho_disponible: float, fuente="Helveti
 PORCENTAJE_ALTURA_SELLO = 0.75
 
 
-def _dibujar_sello_centrado(c, ancho, alto, order_number: str, detail: str):
+def _dibujar_sello_centrado(c, ancho, alto, order_number: str, detail: str, especie: str):
     margen = 20
     ancho_disponible = ancho - 2 * margen
     x_centro = ancho / 2
-    y_titulo = alto * (1 - PORCENTAJE_ALTURA_SELLO)
+    y = alto * (1 - PORCENTAJE_ALTURA_SELLO)
 
     titulo = "FINANCE INFORMATION"
-    linea1 = f"Number invoice Bellaflor Group: {order_number}"
-    linea2 = f"Client Bellaflor: {detail}"
+    campos = [
+        f"Number invoice Bellaflor Group: {order_number}",
+        f"Client Bellaflor: {detail}",
+        f"Specie: {especie}",
+    ]
 
     tamano_titulo = _tamano_fuente_ajustado(titulo, ancho_disponible, fuente="Helvetica-Bold", inicial=13.0)
-    tamano = _tamano_fuente_ajustado(linea1, ancho_disponible, fuente="Helvetica-Bold", inicial=12.0)
-    tamano = min(tamano, _tamano_fuente_ajustado(linea2, ancho_disponible, fuente="Helvetica-Bold", inicial=tamano))
+    # Tamano de dato fijo (no se encoge): un AWB con varios clientes o
+    # especies se resuelve envolviendo cada campo en mas de una linea, no
+    # achicando la letra hasta ser ilegible.
+    tamano_dato = 10.5
     interlineado_titulo = tamano_titulo * 1.5
-    interlineado = tamano * 1.3
+    interlineado = tamano_dato * 1.3
 
     c.setFont("Helvetica-Bold", tamano_titulo)
-    c.drawCentredString(x_centro, y_titulo, titulo)
+    c.drawCentredString(x_centro, y, titulo)
+    y -= interlineado_titulo
 
-    c.setFont("Helvetica-Bold", tamano)
-    c.drawCentredString(x_centro, y_titulo - interlineado_titulo, linea1)
-    c.drawCentredString(x_centro, y_titulo - interlineado_titulo - interlineado, linea2)
+    c.setFont("Helvetica-Bold", tamano_dato)
+    for campo in campos:
+        for linea in _envolver_texto(campo, "Helvetica-Bold", tamano_dato, ancho_disponible):
+            c.drawCentredString(x_centro, y, linea)
+            y -= interlineado
 
 
-def rellenar_factura(pdf_bytes: bytes, detail: str, order_number: str) -> bytes:
+def rellenar_factura(pdf_bytes: bytes, detail: str, order_number: str, especie: str) -> bytes:
     """Devuelve una copia del PDF original con el sello centrado (ver
     _dibujar_sello_centrado) -- no toca el encabezado del reporte."""
     reader = PdfReader(io.BytesIO(pdf_bytes))
@@ -171,7 +201,7 @@ def rellenar_factura(pdf_bytes: bytes, detail: str, order_number: str) -> bytes:
     overlay_buf = io.BytesIO()
     c = canvas.Canvas(overlay_buf, pagesize=(ancho, alto))
     c.setFillColor(black)
-    _dibujar_sello_centrado(c, ancho, alto, order_number, detail)
+    _dibujar_sello_centrado(c, ancho, alto, order_number, detail, especie)
     c.save()
     overlay_buf.seek(0)
 
@@ -193,13 +223,15 @@ def procesar_factura_logiztik(pdf_bytes: bytes) -> dict:
     el sello centrado y devuelve el PDF resultante junto con lo encontrado."""
     campos = leer_campos_factura(pdf_bytes)
     filas = buscar_cruce_dartis(campos.awb_number)
-    detail, order_number = armar_detail_y_order_number(filas)
-    pdf_relleno = rellenar_factura(pdf_bytes, detail, order_number)
+    detail, order_number, especie = armar_campos_sello(filas)
+    pdf_relleno = rellenar_factura(pdf_bytes, detail, order_number, especie)
+    clientes_encontrados = len({f["cliente"] for f in filas if f["cliente"]})
     return {
         "invoice_number": campos.invoice_number,
         "awb_number": campos.awb_number,
         "detail": detail,
         "order_number": order_number,
-        "clientes_encontrados": len(filas),
+        "especie": especie,
+        "clientes_encontrados": clientes_encontrados,
         "pdf_bytes": pdf_relleno,
     }
