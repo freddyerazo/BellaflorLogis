@@ -387,6 +387,33 @@ body {
   color: var(--danger);
 }
 
+/* "Subventana" redimensionable para tablas anchas dentro de un
+   .import-card de ancho fijo (ej. Despachos en Auditoria de Etiquetas:
+   10 columnas con listas de pedidos/cliente/destinatario que no entran
+   "en una sola ventana" sin scroll). El usuario arrastra la esquina
+   inferior derecha para agrandarla, como una ventana nativa, en vez de
+   depender solo del scroll horizontal de la pagina. */
+.tabla-subventana {
+  resize: both;
+  overflow: auto;
+  width: 100%;
+  height: 340px;
+  min-width: 280px;
+  min-height: 160px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.tabla-subventana .data-table th,
+.tabla-subventana .data-table td {
+  font-size: 12.5px;
+  padding: 6px 10px;
+}
+.tabla-subventana .data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 /* ----- Badges ----- */
 
 .badge {

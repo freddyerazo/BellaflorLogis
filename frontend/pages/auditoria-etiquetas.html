@@ -60,12 +60,14 @@
           <h3 style="margin: 0;">Despachos</h3>
           <button id="btnExportarDespachos" class="btn btn-secondary"><i class="ph ph-download-simple"></i> Exportar Excel</button>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr><th>Fecha</th><th>Poscosecha</th><th>ID Pedidos</th><th>Destinatario</th><th>Guía madre</th><th>Guía hija</th><th>Cliente</th><th>Cajas</th><th>Tipo(s) caja</th><th>Estado</th></tr>
-          </thead>
-          <tbody id="tablaDespachos"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
-        </table>
+        <div class="tabla-subventana">
+          <table class="data-table">
+            <thead>
+              <tr><th>Fecha</th><th>Poscosecha</th><th>ID Pedidos</th><th>Destinatario</th><th>Guía madre</th><th>Guía hija</th><th>Cliente</th><th>Cajas</th><th>Tipo(s) caja</th><th>Estado</th></tr>
+            </thead>
+            <tbody id="tablaDespachos"><tr><td colspan="10" class="loading">Cargando...</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="import-card" style="margin-top: 1.5rem;">
