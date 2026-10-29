@@ -52,10 +52,38 @@ def listar_despachos(desde: Optional[date_type] = None, hasta: Optional[date_typ
     desde = desde or date_type.today()
     hasta = max(hasta, desde) if hasta else desde
     with engine.connect() as conn:
-        rows = conn.execute(text(
-            "SELECT * FROM special_dispatches WHERE fecha BETWEEN :desde AND :hasta "
-            "ORDER BY fecha, postcosecha, cliente"
-        ), {"desde": desde, "hasta": hasta}).mappings().all()
+        rows = conn.execute(text("""
+            -- La especie no vive en special_dispatches: se cruza contra
+            -- dartis_ventas por id_pedido, usando id_pedidos (jsonb, despachos
+            -- consolidados desde 2026-09-14) o cayendo al id_pedido singular
+            -- de las filas AUDITADO viejas que no se tocaron en esa migracion.
+            -- Hecho como CTE + JOIN en bloque (no una subconsulta LATERAL por
+            -- fila, que con un rango de meses tardaba 11s para ~2800 despachos
+            -- contra 1.5s de esta version -- medido, no solo intuido).
+            WITH pedidos AS (
+                SELECT sd.id AS dispatch_id, pedido.pedido_id
+                FROM special_dispatches sd
+                CROSS JOIN LATERAL (
+                    SELECT (jsonb_array_elements_text(sd.id_pedidos))::int AS pedido_id
+                    WHERE sd.id_pedidos IS NOT NULL AND jsonb_array_length(sd.id_pedidos) > 0
+                    UNION ALL
+                    SELECT sd.id_pedido
+                    WHERE sd.id_pedidos IS NULL OR jsonb_array_length(sd.id_pedidos) = 0
+                ) pedido
+                WHERE sd.fecha BETWEEN :desde AND :hasta
+            ),
+            especies AS (
+                SELECT p.dispatch_id, string_agg(DISTINCT dv.especie, ', ' ORDER BY dv.especie) AS especies
+                FROM pedidos p
+                JOIN dartis_ventas dv ON dv.id_pedido = p.pedido_id
+                GROUP BY p.dispatch_id
+            )
+            SELECT sd.*, COALESCE(e.especies, '') AS especies
+            FROM special_dispatches sd
+            LEFT JOIN especies e ON e.dispatch_id = sd.id
+            WHERE sd.fecha BETWEEN :desde AND :hasta
+            ORDER BY sd.fecha, sd.postcosecha, sd.cliente
+        """), {"desde": desde, "hasta": hasta}).mappings().all()
     return rows
 
 

@@ -78,7 +78,7 @@ function renderDespachos() {
     const mensaje = soloGuiasCompletas
       ? "Ningún despacho de este rango tiene guía madre y guía hija."
       : "Sin despachos para este rango. Usa \"Generar despachos del día\" o espera a que el bot los cree con /lista.";
-    tbody.innerHTML = `<tr><td colspan="10" class="empty">${mensaje}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty">${mensaje}</td></tr>`;
     return;
   }
   const ordenados = [...despachos].sort((a, b) => {
@@ -97,6 +97,7 @@ function renderDespachos() {
       <td>${d.cliente || ""}</td>
       <td>${d.cajas ?? ""}</td>
       <td>${formatearTipoCaja(d)}</td>
+      <td>${d.especies || ""}</td>
       <td><span class="badge ${d.estado === "AUDITADO" ? "badge-green" : "badge-gray"}">${d.estado}</span></td>
     </tr>
   `).join("");
@@ -158,7 +159,7 @@ function exportarDespachosExcel() {
   const despachos = soloGuiasCompletas
     ? despachosCargados.filter((d) => d.guia_madre && d.guia_hija)
     : despachosCargados;
-  const encabezados = ["Fecha", "Poscosecha", "ID Pedidos", "Destinatario", "Guía madre", "Guía hija", "Cliente", "Cajas", "Tipo(s) caja", "Estado"];
+  const encabezados = ["Fecha", "Poscosecha", "ID Pedidos", "Destinatario", "Guía madre", "Guía hija", "Cliente", "Cajas", "Tipo(s) caja", "Especie", "Estado"];
   const filas = despachos.map((d) => [
     d.fecha || "",
     d.postcosecha || "",
@@ -169,6 +170,7 @@ function exportarDespachosExcel() {
     d.cliente || "",
     d.cajas ?? "",
     formatearTipoCaja(d),
+    d.especies || "",
     d.estado || "",
   ]);
   descargarCsv(encabezados, filas, `despachos_etiquetas_${$("#filtroDesde").value}_a_${$("#filtroHasta").value}.csv`);
