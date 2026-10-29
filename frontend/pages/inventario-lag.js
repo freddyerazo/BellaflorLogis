@@ -671,12 +671,19 @@ const escapeHtml = (s) =>
 // navegable con flechas/Enter) para catalogos largos donde un <select>
 // plano no se puede filtrar. Devuelve el estado (con .seleccionado) para
 // poder leerlo despues, p.ej. al armar el mensaje de confirmacion.
-function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, textoSeleccionado, etiquetaCarga, onSeleccionar }) {
+function crearComboBuscable({ prefix, cargar, filtro, textoOpcion, valorOpcion, textoSeleccionado, etiquetaCarga, onSeleccionar, contenedor }) {
+  // `contenedor`: por defecto `document` (elementos ya presentes en el HTML
+  // estatico al cargar la pagina). Las filas de caja de Posteo se crean
+  // dinamicamente y todavia NO estan insertadas en el documento en el
+  // momento en que se arma su combo -- document.getElementById no las
+  // encuentra ahi (a diferencia de querySelector sobre el propio elemento
+  // detached), asi que esos llamadores deben pasar el <div> de la fila.
+  const raiz = contenedor || document;
   const estado = { items: [], seleccionado: null, resaltado: -1 };
-  const input = document.getElementById(`${prefix}-search`);
-  const hidden = document.getElementById(`${prefix}-value`);
-  const cont = document.getElementById(`${prefix}-opciones`);
-  const combo = document.getElementById(`${prefix}-combo`);
+  const input = raiz.querySelector(`#${prefix}-search`);
+  const hidden = raiz.querySelector(`#${prefix}-value`);
+  const cont = raiz.querySelector(`#${prefix}-opciones`);
+  const combo = raiz.querySelector(`#${prefix}-combo`);
 
   async function cargarDatos() {
     try {
@@ -856,12 +863,18 @@ function plantillaCajaPosteo() {
   div.innerHTML = `
     <div class="form-grid">
       <div class="form-group">
-        <label>Box ID (pieza en bodega) *</label>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: .5rem;">
+          <label style="margin: 0;">Box ID (pieza en bodega) *</label>
+          <label style="font-weight: normal; font-size: .82rem; margin: 0;">
+            <input type="checkbox" class="toggle-manual" /> Ingresar manualmente
+          </label>
+        </div>
         <div class="combo-buscable" id="${prefix}-combo">
           <input type="text" id="${prefix}-search" placeholder="Elegí un cliente primero" autocomplete="off" disabled />
           <input type="hidden" name="boxId" id="${prefix}-value" />
           <div class="combo-opciones" id="${prefix}-opciones"></div>
         </div>
+        <input type="text" name="boxIdManual" id="${prefix}-manual" placeholder="Numero de caja (barcode)" maxlength="16" hidden />
       </div>
       <div class="form-group"><label>Stem Price</label><input type="number" step="0.01" name="stemPrice" min="0" /></div>
     </div>
@@ -880,10 +893,35 @@ function plantillaCajaPosteo() {
     textoSeleccionado: (p) => `${p.barcode} (Rack: ${p.rack})`,
     valorOpcion: (p) => p.barcode,
     etiquetaCarga: "piezas",
+    contenedor: div,
   });
   combosCajaPosteo.push(comboCaja);
 
+  // La lista de piezas viene de LAG /pieces, que no siempre trae todo lo
+  // que hay fisicamente en bodega (ambiente de pruebas, piezas recien
+  // llegadas aun no sincronizadas, etc.) -- este interruptor permite
+  // escribir el numero de caja a mano en vez de depender de esa lista.
+  const comboDiv = div.querySelector(`#${prefix}-combo`);
+  const inputManual = div.querySelector(`#${prefix}-manual`);
+  div.querySelector(".toggle-manual").addEventListener("change", (e) => {
+    const manual = e.target.checked;
+    comboDiv.hidden = manual;
+    inputManual.hidden = !manual;
+    if (manual) {
+      inputManual.focus();
+    } else {
+      inputManual.value = "";
+    }
+  });
+
   return div;
+}
+
+function boxIdDeFila(caja) {
+  const manual = caja.querySelector(".toggle-manual").checked;
+  return manual
+    ? caja.querySelector('[name="boxIdManual"]').value.trim()
+    : caja.querySelector('[name="boxId"]').value.trim();
 }
 
 $("#btn-add-box-posteo").addEventListener("click", () => $("#items-posteo").appendChild(plantillaCajaPosteo()));
@@ -909,14 +947,14 @@ $("#form-posteo").addEventListener("submit", (e) => {
     return;
   }
 
-  const boxIdsVacios = cajas.some((caja) => !caja.querySelector('[name="boxId"]').value.trim());
+  const boxIdsVacios = cajas.some((caja) => !boxIdDeFila(caja));
   if (boxIdsVacios) {
-    mostrarError("#res-posteo", "Selecciona un Box ID (pieza en bodega) para cada caja.");
+    mostrarError("#res-posteo", "Indica un Box ID (pieza en bodega) para cada caja.");
     return;
   }
 
   const boxIds = cajas.map((caja) => {
-    const box = { boxId: caja.querySelector('[name="boxId"]').value.trim() };
+    const box = { boxId: boxIdDeFila(caja) };
     const stemPrice = caja.querySelector('[name="stemPrice"]').value.trim();
     if (stemPrice !== "") box.stemPrice = Number(stemPrice);
     return box;
