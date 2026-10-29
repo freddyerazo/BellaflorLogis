@@ -1,19 +1,20 @@
 """
-Rellena los campos DETAIL y ORDER NUMBER (vacios en el PDF original del
-reporte de flete de Logiztik-Group Ecuador) con el cliente y el
-id_comercializadora que surgen de cruzar el AWB del reporte contra
-dartis_ventas.
+A partir del PDF original del reporte de flete de Logiztik-Group Ecuador,
+cruza su AWB contra dartis_ventas y estampa un sello centrado con el
+id_comercializadora y el cliente encontrados -- NO se escribe nada en los
+campos DETAIL/ORDER NUMBER del encabezado del reporte (se probo primero y
+el usuario pidio sacarlo; el sello centrado es lo unico que queda).
 
 El PDF es generado por un motor de reportes (nombre de archivo con prefijo
-"rpt") con layout fijo: las etiquetas (CLIENT:, AWB NUMBER:, DETAIL:, ...) y
-sus valores viven siempre en la misma fila/columna relativa entre si, pero
-en el STREAM del PDF el texto de las etiquetas y el de los valores no
-quedan adyacentes (el motor de reportes los dibuja en pasadas separadas) --
-por eso no sirve un regex sobre el texto plano. En su lugar se ubica cada
-etiqueta por su propio texto (con pdfplumber) y se toma como valor las
-palabras que caen en la MISMA fila (solape vertical) a su derecha. Esto
-tolera que el reporte cambie ligeramente de version sin romper la
-deteccion, a diferencia de coordenadas absolutas hardcodeadas.
+"rpt") con layout fijo: las etiquetas (INVOICE NUMBER:, AWB NUMBER:, ...) y
+sus valores viven siempre en la misma fila relativa entre si, pero en el
+STREAM del PDF el texto de las etiquetas y el de los valores no quedan
+adyacentes (el motor de reportes los dibuja en pasadas separadas) -- por
+eso no sirve un regex sobre el texto plano para leer el AWB. En su lugar
+se ubica cada etiqueta por su propio texto (con pdfplumber) y se toma como
+valor las palabras que caen en la MISMA fila (solape vertical) a su
+derecha. Esto tolera que el reporte cambie ligeramente de version sin
+romper la deteccion, a diferencia de coordenadas absolutas hardcodeadas.
 """
 
 import io
@@ -139,69 +140,44 @@ def _dibujar_sello_centrado(c, ancho, alto, order_number: str, detail: str):
     margen = 20
     ancho_disponible = ancho - 2 * margen
     x_centro = ancho / 2
-    y_linea1 = alto * (1 - PORCENTAJE_ALTURA_SELLO)
+    y_titulo = alto * (1 - PORCENTAJE_ALTURA_SELLO)
 
-    tamano = _tamano_fuente_ajustado(order_number, ancho_disponible, fuente="Helvetica-Bold", inicial=12.0)
-    tamano = min(tamano, _tamano_fuente_ajustado(detail, ancho_disponible, fuente="Helvetica-Bold", inicial=tamano))
+    titulo = "FINANCE INFORMATION"
+    linea1 = f"Number invoice Bellaflor Group: {order_number}"
+    linea2 = f"Client Bellaflor: {detail}"
+
+    tamano_titulo = _tamano_fuente_ajustado(titulo, ancho_disponible, fuente="Helvetica-Bold", inicial=13.0)
+    tamano = _tamano_fuente_ajustado(linea1, ancho_disponible, fuente="Helvetica-Bold", inicial=12.0)
+    tamano = min(tamano, _tamano_fuente_ajustado(linea2, ancho_disponible, fuente="Helvetica-Bold", inicial=tamano))
+    interlineado_titulo = tamano_titulo * 1.5
     interlineado = tamano * 1.3
 
+    c.setFont("Helvetica-Bold", tamano_titulo)
+    c.drawCentredString(x_centro, y_titulo, titulo)
+
     c.setFont("Helvetica-Bold", tamano)
-    c.drawCentredString(x_centro, y_linea1, order_number)
-    c.drawCentredString(x_centro, y_linea1 - interlineado, detail)
+    c.drawCentredString(x_centro, y_titulo - interlineado_titulo, linea1)
+    c.drawCentredString(x_centro, y_titulo - interlineado_titulo - interlineado, linea2)
 
 
 def rellenar_factura(pdf_bytes: bytes, detail: str, order_number: str) -> bytes:
-    """Devuelve una copia del PDF original con DETAIL y ORDER NUMBER escritos
-    en su posicion correspondiente, calculada dinamicamente a partir de las
-    etiquetas del propio documento (no coordenadas fijas)."""
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        pagina = pdf.pages[0]
-        palabras = pagina.extract_words()
-        ancho, alto = pagina.width, pagina.height
-
-    caja_detail = _ubicar_etiqueta(palabras, ["DETAIL:"])
-    caja_order = _ubicar_etiqueta(palabras, ["ORDER", "NUMBER:"])
-    caja_client = _ubicar_etiqueta(palabras, ["CLIENT:"])
-    caja_awb = _ubicar_etiqueta(palabras, ["AWB", "NUMBER:"])
-    if not (caja_detail and caja_order and caja_client and caja_awb):
-        raise ValueError("No se encontraron las etiquetas DETAIL:/ORDER NUMBER: en el PDF.")
-
-    # Columna de valores: se toma la X del primer valor ya existente en la
-    # misma columna (CLIENT: para la izquierda, AWB NUMBER: para la
-    # derecha) en vez de un offset fijo, para seguir alineado aunque el
-    # reporte cambie de version. Si esos campos vinieran vacios (no deberia
-    # pasar en este reporte), se cae a un offset razonable.
-    fila_client = _palabras_misma_fila(palabras, caja_client)
-    x_columna_izquierda = fila_client[0]["x0"] if fila_client else caja_detail["x1"] + 26
-
-    fila_awb = _palabras_misma_fila(palabras, caja_awb)
-    x_columna_derecha = fila_awb[0]["x0"] if fila_awb else caja_order["x1"] + 13
+    """Devuelve una copia del PDF original con el sello centrado (ver
+    _dibujar_sello_centrado) -- no toca el encabezado del reporte."""
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    primera_pagina = reader.pages[0]
+    ancho = float(primera_pagina.mediabox.width)
+    alto = float(primera_pagina.mediabox.height)
 
     overlay_buf = io.BytesIO()
     c = canvas.Canvas(overlay_buf, pagesize=(ancho, alto))
     c.setFillColor(black)
-
-    margen_derecho = 20
-    y_detail = alto - caja_detail["bottom"] + 2
-    tamano_detail = _tamano_fuente_ajustado(detail, (ancho - margen_derecho) - x_columna_izquierda)
-    c.setFont("Helvetica", tamano_detail)
-    c.drawString(x_columna_izquierda, y_detail, detail)
-
-    y_order = alto - caja_order["bottom"] + 2
-    tamano_order = _tamano_fuente_ajustado(order_number, (ancho - margen_derecho) - x_columna_derecha)
-    c.setFont("Helvetica", tamano_order)
-    c.drawString(x_columna_derecha, y_order, order_number)
-
     _dibujar_sello_centrado(c, ancho, alto, order_number, detail)
-
     c.save()
     overlay_buf.seek(0)
 
-    reader = PdfReader(io.BytesIO(pdf_bytes))
     overlay_reader = PdfReader(overlay_buf)
     writer = PdfWriter()
 
-    primera_pagina = reader.pages[0]
     primera_pagina.merge_page(overlay_reader.pages[0])
     writer.add_page(primera_pagina)
     for p in reader.pages[1:]:
@@ -213,8 +189,8 @@ def rellenar_factura(pdf_bytes: bytes, detail: str, order_number: str) -> bytes:
 
 
 def procesar_factura_logiztik(pdf_bytes: bytes) -> dict:
-    """Punto de entrada: lee AWB/invoice del PDF, cruza con Dartis, rellena
-    DETAIL/ORDER NUMBER y devuelve el PDF resultante junto con lo encontrado."""
+    """Punto de entrada: lee AWB/invoice del PDF, cruza con Dartis, estampa
+    el sello centrado y devuelve el PDF resultante junto con lo encontrado."""
     campos = leer_campos_factura(pdf_bytes)
     filas = buscar_cruce_dartis(campos.awb_number)
     detail, order_number = armar_detail_y_order_number(filas)
