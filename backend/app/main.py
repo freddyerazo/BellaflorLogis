@@ -37,6 +37,7 @@ from app.api.auditoria_etiquetas import router as auditoria_etiquetas_router
 from app.api.truck_company import router as truck_company_router
 from app.api.proveedores import router as proveedores_router
 from app.api.armellini import router as armellini_router
+from app.api.finance_documents import router as finance_documents_router
 from app.services import courier_reconciliation
 
 scheduler = AsyncIOScheduler()
@@ -149,6 +150,7 @@ app.include_router(auditoria_etiquetas_router, prefix="/api")
 app.include_router(truck_company_router, prefix="/api")
 app.include_router(proveedores_router, prefix="/api")
 app.include_router(armellini_router, prefix="/api")
+app.include_router(finance_documents_router, prefix="/api")
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 

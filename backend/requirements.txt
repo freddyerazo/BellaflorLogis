@@ -13,6 +13,9 @@ openpyxl==3.1.5
 python-multipart==0.0.32
 httpx==0.28.1
 pdfplumber==0.11.10
+# Documentacion: rellenar PDFs de facturas con datos cruzados de Dartis
+pypdf==6.21.4
+reportlab==4.4.4
 apscheduler==3.11.3
 # La VUE entrega su registro en .xls legacy (OLE2); openpyxl no lo lee
 xlrd==2.0.2

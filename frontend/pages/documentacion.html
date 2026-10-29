@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLIS · Documentación</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-page="documentacion">
+  <div id="sidebar" class="sidebar"></div>
+
+  <main class="content" id="content">
+    <div class="page-header">
+      <h1><i class="ph ph-folder-notch"></i> Documentación</h1>
+      <p class="page-subtitle">Respaldos que se entregan al departamento financiero.</p>
+    </div>
+
+    <nav class="subtabs">
+      <button class="subtab active" data-tab="logiztik">Facturas Logiztik (flete AWB)</button>
+    </nav>
+
+    <section id="panel-logiztik" class="subpanel active">
+      <div class="import-card">
+        <h3>Completar DETAIL / ORDER NUMBER con datos de Dartis</h3>
+        <p class="page-subtitle">
+          El reporte de flete de Logiztik-Group Ecuador llega con los campos <strong>DETAIL</strong> y
+          <strong>ORDER NUMBER</strong> en blanco. Subí el PDF original: BLIS lee el AWB del reporte, lo cruza
+          contra <code>dartis_ventas</code> (por <code>guia_madre</code>/<code>guia_hija</code>) y devuelve el
+          mismo PDF con el cliente y el <code>id_comercializadora</code> escritos en su lugar.
+        </p>
+
+        <div class="form-group" style="max-width: 28rem;">
+          <label>PDF original de Logiztik *</label>
+          <input type="file" id="logiztik-file" accept="application/pdf" />
+        </div>
+
+        <button type="button" id="btn-logiztik-rellenar" class="btn btn-primary">Completar y descargar PDF</button>
+
+        <div id="res-logiztik" class="resultado"></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/layout.js"></script>
+  <script type="module" src="/pages/documentacion.js"></script>
+</body>
+</html>
