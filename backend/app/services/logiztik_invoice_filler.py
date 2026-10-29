@@ -118,14 +118,36 @@ def armar_detail_y_order_number(filas: list[dict]) -> tuple[str, str]:
     return detail, order_number
 
 
-def _tamano_fuente_ajustado(texto: str, ancho_disponible: float, inicial=9.0, minimo=6.0) -> float:
+def _tamano_fuente_ajustado(texto: str, ancho_disponible: float, fuente="Helvetica", inicial=9.0, minimo=6.0) -> float:
     """Reduce el tamano de fuente de a medio punto hasta que el texto entre
     en el ancho disponible -- evita que un DETAIL con varios clientes se
     salga de la columna cuando un AWB agrupa mas de un cliente."""
     tamano = inicial
-    while tamano > minimo and stringWidth(texto, "Helvetica", tamano) > ancho_disponible:
+    while tamano > minimo and stringWidth(texto, fuente, tamano) > ancho_disponible:
         tamano -= 0.5
     return tamano
+
+
+# Sello centrado con id_comercializadora + cliente, pedido por el usuario
+# ademas del llenado de DETAIL/ORDER NUMBER: va al 75% de la pagina medido
+# desde arriba, para que sea visible de un vistazo sin tener que leer los
+# campos chicos del encabezado.
+PORCENTAJE_ALTURA_SELLO = 0.75
+
+
+def _dibujar_sello_centrado(c, ancho, alto, order_number: str, detail: str):
+    margen = 20
+    ancho_disponible = ancho - 2 * margen
+    x_centro = ancho / 2
+    y_linea1 = alto * (1 - PORCENTAJE_ALTURA_SELLO)
+
+    tamano = _tamano_fuente_ajustado(order_number, ancho_disponible, fuente="Helvetica-Bold", inicial=12.0)
+    tamano = min(tamano, _tamano_fuente_ajustado(detail, ancho_disponible, fuente="Helvetica-Bold", inicial=tamano))
+    interlineado = tamano * 1.3
+
+    c.setFont("Helvetica-Bold", tamano)
+    c.drawCentredString(x_centro, y_linea1, order_number)
+    c.drawCentredString(x_centro, y_linea1 - interlineado, detail)
 
 
 def rellenar_factura(pdf_bytes: bytes, detail: str, order_number: str) -> bytes:
@@ -169,6 +191,8 @@ def rellenar_factura(pdf_bytes: bytes, detail: str, order_number: str) -> bytes:
     tamano_order = _tamano_fuente_ajustado(order_number, (ancho - margen_derecho) - x_columna_derecha)
     c.setFont("Helvetica", tamano_order)
     c.drawString(x_columna_derecha, y_order, order_number)
+
+    _dibujar_sello_centrado(c, ancho, alto, order_number, detail)
 
     c.save()
     overlay_buf.seek(0)
