@@ -141,7 +141,43 @@ def generar_despachos_del_dia(fecha: Optional[date_type] = None) -> dict:
             insertados = sum(1 for r in resultados if r[0])
             actualizados = sum(1 for r in resultados if not r[0])
 
-    return {"encontrados": len(grupos), "insertados": insertados, "actualizados": actualizados}
+        # Retirar despachos PENDIENTE obsoletos: Dartis puede corregir el
+        # postcosecha de una guia ya generada (ej. una reimportacion que
+        # corrige el dato), y como postcosecha es parte de la clave unica de
+        # arriba, esa correccion no actualiza el despacho viejo -- crea uno
+        # NUEVO con el postcosecha corregido y deja el viejo huerfano, sin
+        # ninguna fila de dartis_ventas detras, duplicando la pieza en el
+        # reporte (encontrado en produccion: caso BOCA INC/pedido 212164,
+        # 76 despachos afectados en 10 dias). Un despacho PENDIENTE de esta
+        # fecha cuyo postcosecha ya no figura entre los validos actuales
+        # para su mismo cliente+guia queda `OBSOLETO` -- no se borra (el
+        # bot podria haberlo mostrado ya al auditor), solo deja de contar
+        # como pendiente ni de aparecer en el reporte activo.
+        validos = defaultdict(set)
+        for g in grupos.values():
+            validos[(g["customer_id"], g["guia_hija"] or "")].add(g["postcosecha"])
+
+        fecha_efectiva = fecha or date_type.today()
+        pendientes_actuales = conn.execute(text("""
+            SELECT id, customer_id, guia_hija, postcosecha
+            FROM special_dispatches
+            WHERE fecha = :fecha AND estado = 'PENDIENTE'
+        """), {"fecha": fecha_efectiva}).mappings().all()
+
+        obsoletos_ids = [
+            p["id"] for p in pendientes_actuales
+            if p["postcosecha"] not in validos.get((p["customer_id"], p["guia_hija"] or ""), set())
+        ]
+        if obsoletos_ids:
+            conn.execute(
+                text("UPDATE special_dispatches SET estado = 'OBSOLETO' WHERE id = ANY(:ids)"),
+                {"ids": obsoletos_ids},
+            )
+
+    return {
+        "encontrados": len(grupos), "insertados": insertados, "actualizados": actualizados,
+        "retirados": len(obsoletos_ids),
+    }
 
 
 def despachos_pendientes(poscosecha: Optional[str] = None) -> list[dict]:

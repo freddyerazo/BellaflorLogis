@@ -70,7 +70,7 @@ def listar_despachos(desde: Optional[date_type] = None, hasta: Optional[date_typ
                     SELECT sd.id_pedido
                     WHERE sd.id_pedidos IS NULL OR jsonb_array_length(sd.id_pedidos) = 0
                 ) pedido
-                WHERE sd.fecha BETWEEN :desde AND :hasta
+                WHERE sd.fecha BETWEEN :desde AND :hasta AND sd.estado != 'OBSOLETO'
             ),
             especies AS (
                 SELECT p.dispatch_id, string_agg(DISTINCT dv.especie, ', ' ORDER BY dv.especie) AS especies
@@ -81,7 +81,7 @@ def listar_despachos(desde: Optional[date_type] = None, hasta: Optional[date_typ
             SELECT sd.*, COALESCE(e.especies, '') AS especies
             FROM special_dispatches sd
             LEFT JOIN especies e ON e.dispatch_id = sd.id
-            WHERE sd.fecha BETWEEN :desde AND :hasta
+            WHERE sd.fecha BETWEEN :desde AND :hasta AND sd.estado != 'OBSOLETO'
             ORDER BY sd.fecha, sd.postcosecha, sd.cliente
         """), {"desde": desde, "hasta": hasta}).mappings().all()
     return rows

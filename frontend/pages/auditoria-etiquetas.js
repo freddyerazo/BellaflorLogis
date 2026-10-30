@@ -202,7 +202,8 @@ $("#btnGenerar").addEventListener("click", async () => {
   $("#resultado").innerHTML = `<p class="msg-info">Generando despachos desde dartis_ventas...</p>`;
   try {
     const r = await apiPost(`/auditoria-etiquetas/despachos/generar?fecha=${fechaHoyLocal()}`, {});
-    $("#resultado").innerHTML = `<p class="msg-ok">${r.encontrados} facturas de clientes especiales encontradas: ${r.insertados} despachos nuevos, ${r.actualizados} actualizados con la venta mas reciente.</p>`;
+    const retirados = r.retirados ? ` ${r.retirados} retirado(s) por quedar desactualizados frente a la venta mas reciente.` : "";
+    $("#resultado").innerHTML = `<p class="msg-ok">${r.encontrados} facturas de clientes especiales encontradas: ${r.insertados} despachos nuevos, ${r.actualizados} actualizados con la venta mas reciente.${retirados}</p>`;
     await cargar();
   } catch (err) {
     $("#resultado").innerHTML = `<p class="msg-error">${err.message}</p>`;
