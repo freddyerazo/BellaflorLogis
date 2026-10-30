@@ -219,6 +219,10 @@ function avisoCache(r) {
 }
 
 /* ─── Historial ──────────────────────────────────────────────────────── */
+// Lo mismo que se pinta en #historyBody, ya filtrado y ordenado -- el boton
+// "Exportar" baja exactamente esto, no una consulta aparte sin filtros.
+let historialFiltrado = [];
+
 async function cargarHistorial() {
   const params = new URLSearchParams();
   const esp = document.getElementById("filter_species").value;
@@ -232,6 +236,7 @@ async function cargarHistorial() {
   try {
     const filas = await apiGet(`/agrocalidad/requisitos?${params.toString()}`);
     if (!filas.length) {
+      historialFiltrado = [];
       tbody.innerHTML = `<tr><td colspan="8" class="empty">Sin consultas registradas</td></tr>`;
       return;
     }
@@ -242,6 +247,7 @@ async function cargarHistorial() {
        se desempata por pais. */
     const cmp = (a, b) => (a || "").localeCompare(b || "", "es", { sensitivity: "base" });
     filas.sort((a, b) => cmp(a.especie, b.especie) || cmp(a.pais, b.pais));
+    historialFiltrado = filas;
     tbody.innerHTML = filas.map((f) => {
       /* n_requisitos viene de la vista y cubre tambien las filas del scraping
          viejo, que tienen los requisitos en texto plano y 0 items. */
@@ -263,9 +269,43 @@ async function cargarHistorial() {
     tbody.querySelectorAll(".ag-ver").forEach((b) =>
       b.addEventListener("click", () => verGuardada(b.dataset.id)));
   } catch (err) {
+    historialFiltrado = [];
     tbody.innerHTML = `<tr><td colspan="8" class="error">${esc(err.message)}</td></tr>`;
   }
 }
+
+// Mismo patron de descarga que el resto de BLIS (BOM para que Excel respete
+// tildes, comillas escapadas). Baja exactamente lo que esta en pantalla --
+// mismos filtros, mismo orden -- no una consulta nueva sin filtrar.
+function exportarHistorial() {
+  if (!historialFiltrado.length) {
+    alert("No hay consultas guardadas para exportar con estos filtros.");
+    return;
+  }
+  const encabezados = ["Especie", "País", "Movimiento", "Requisitos", "Partida", "Código", "Consultado", "Fuente"];
+  const filas = historialFiltrado.map((f) => [
+    f.especie || "",
+    f.pais || "",
+    f.trade_type || "",
+    f.n_requisitos ?? (f.requisitos || []).length,
+    f.tariff_heading || "",
+    f.agrocalidad_code || "",
+    new Date(f.queried_at).toLocaleDateString("es-EC"),
+    f.fuente || "",
+  ]);
+  const csv = [encabezados, ...filas]
+    .map((fila) => fila.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `agrocalidad_consultas_guardadas_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("btnExportarHistorial").addEventListener("click", exportarHistorial);
 
 async function verGuardada(id) {
   try {
