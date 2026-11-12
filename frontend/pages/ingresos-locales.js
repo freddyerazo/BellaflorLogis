@@ -4,6 +4,7 @@
 
 let todosLosDatos = [];
 let datosFiltrados = [];
+let regAbierto = null;
 
 async function init() {
   const content = document.getElementById("panel-recibos");
@@ -101,6 +102,8 @@ function renderPage() {
         <div class="il-modal-guia" id="il-modal-guia">—</div>
         <div id="il-modal-foto"></div>
         <div class="il-modal-detalle" id="il-modal-detalle"></div>
+        <button class="btn btn-outline btn-sm" id="btn-editar-raw">Editar datos</button>
+        <div id="il-modal-editar"></div>
         <div class="il-link-row">
           <input type="text" id="il-link-input" readonly>
           <button class="btn btn-primary btn-sm" id="btn-copiar">Copiar</button>
@@ -125,6 +128,7 @@ function renderPage() {
   document.getElementById("btn-limpiar").addEventListener("click", limpiarFiltros);
   document.getElementById("btn-refresh").addEventListener("click", () => init());
   document.getElementById("btn-copiar").addEventListener("click", copiarLink);
+  document.getElementById("btn-editar-raw").addEventListener("click", () => mostrarFormularioEdicion(regAbierto));
   document.getElementById("btn-cerrar-modal").addEventListener("click", cerrarModal);
   document.getElementById("il-overlay").addEventListener("click", (e) => {
     if (e.target === document.getElementById("il-overlay")) cerrarModal();
@@ -305,8 +309,113 @@ function badgeEmpresa(empresa) {
 }
 
 /* ─── Modal ────────────────────────────────────────────────────── */
-function abrirModal(reg) {
+// Campos crudos que se pueden corregir y reescribir en el Sheet real (ver
+// COLUMNA_LETRA en entregas_locales_sheet.py, backend) -- mapeo entre el
+// encabezado que usa el JSON del bot y el nombre de columna que espera el
+// endpoint PATCH /entregas-locales/raw/{fila_sheet}.
+const CAMPOS_EDITABLES_IL = [
+  ["fecha_registro",       "Fecha Registro"],
+  ["hora_registro",        "Hora Registro"],
+  ["fecha_documento",      "Fecha Documento"],
+  ["hora_documento",       "Hora Documento"],
+  ["empresa_logistica",    "Empresa Logística"],
+  ["nombre_chofer",        "Nombre del Chofer"],
+  ["cedula",               "Cédula / ID"],
+  ["placa",                "Placa Vehículo"],
+  ["finca_exportador",     "Finca / Exportador"],
+  ["nombre_cliente",       "Nombre del Cliente"],
+  ["numero_guia_ingreso",  "N° Guía / Ingreso"],
+  ["detalle_cajas",        "Detalle Cajas"],
+  ["total_fulls_pcs",      "Total Fulls / PCS"],
+  ["temperatura",          "Temperatura (°C)"],
+  ["observaciones",        "Observaciones"],
+];
+
+function mostrarFormularioEdicion(reg) {
   if (!reg) return;
+  const cont = document.getElementById("il-modal-editar");
+  const campos = CAMPOS_EDITABLES_IL.map(([campo, clave]) => {
+    const valor = (reg[clave] ?? "").toString().replace(/"/g, "&quot;");
+    const esLargo = campo === "observaciones" || campo === "detalle_cajas";
+    const input = esLargo
+      ? `<textarea data-campo="${campo}" rows="2">${valor}</textarea>`
+      : `<input type="text" data-campo="${campo}" value="${valor}">`;
+    return `<div class="il-editar-campo"><label>${clave}</label>${input}</div>`;
+  }).join("");
+
+  cont.innerHTML = `
+    <div class="il-editar-form">
+      ${campos}
+      <p id="il-editar-msg" style="font-size:13px; margin:0"></p>
+      <div style="display:flex; gap:8px">
+        <button class="btn btn-primary btn-sm" id="btn-guardar-raw" style="flex:1">Guardar cambios</button>
+        <button class="btn btn-outline btn-sm" id="btn-cancelar-edicion" style="flex:1">Cancelar</button>
+      </div>
+    </div>`;
+
+  document.getElementById("btn-cancelar-edicion").addEventListener("click", () => {
+    cont.innerHTML = "";
+  });
+  document.getElementById("btn-guardar-raw").addEventListener("click", () => guardarEdicionRaw(reg));
+}
+
+async function guardarEdicionRaw(reg) {
+  const cont = document.getElementById("il-modal-editar");
+  const msg = document.getElementById("il-editar-msg");
+  const btn = document.getElementById("btn-guardar-raw");
+
+  // Solo manda lo que de verdad cambio -- no tiene sentido reescribir en el
+  // Sheet un campo que el usuario ni toco.
+  const cambios = {};
+  cont.querySelectorAll("[data-campo]").forEach((el) => {
+    const campo = el.dataset.campo;
+    const [, clave] = CAMPOS_EDITABLES_IL.find(([c]) => c === campo);
+    const valorOriginal = (reg[clave] ?? "").toString();
+    if (el.value !== valorOriginal) cambios[campo] = el.value;
+  });
+
+  if (Object.keys(cambios).length === 0) {
+    msg.textContent = "No hay cambios para guardar.";
+    msg.style.color = "var(--text-muted)";
+    return;
+  }
+
+  btn.disabled = true;
+  msg.textContent = "Guardando…";
+  msg.style.color = "var(--text-muted)";
+  try {
+    const r = await fetch(`/api/entregas-locales/raw/${reg["_fila"]}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cambios),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+
+    // Refleja el cambio en memoria sin recargar toda la pantalla (son ~5.000
+    // filas via GAS, un reload completo tarda igual que la primera carga).
+    for (const [campo, clave] of CAMPOS_EDITABLES_IL) {
+      if (campo in cambios) reg[clave] = cambios[campo];
+    }
+    renderTabla();
+
+    if (d.sheet_actualizado) {
+      msg.textContent = "✓ Guardado en Supabase y en el Sheet.";
+      msg.style.color = "var(--success, #2f8a4e)";
+    } else {
+      msg.textContent = "Guardado en Supabase, pero no se pudo escribir en el Sheet: " + d.sheet_error;
+      msg.style.color = "var(--danger, #c0392b)";
+    }
+    pintarDetalleModal(reg); // refresca guia/foto/detalle sin tocar el formulario ni el mensaje
+  } catch (err) {
+    msg.textContent = "Error: " + err.message;
+    msg.style.color = "var(--danger, #c0392b)";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function pintarDetalleModal(reg) {
   document.getElementById("il-modal-guia").textContent =
     "Guía / Ingreso: " + (reg["N° Guía / Ingreso"] || "—");
 
@@ -333,6 +442,13 @@ function abrirModal(reg) {
     <strong>Cajas:</strong> ${reg["Detalle Cajas"] || "—"}<br>
     <strong>Fulls:</strong> ${reg["Total Fulls / PCS"] || "—"}<br>
     <strong>Temperatura:</strong> ${reg["Temperatura (°C)"] || "—"}`;
+}
+
+function abrirModal(reg) {
+  if (!reg) return;
+  regAbierto = reg;
+  document.getElementById("il-modal-editar").innerHTML = "";
+  pintarDetalleModal(reg);
 
   const url = window.location.href.split("?")[0] + "?fila=" + reg["_fila"];
   document.getElementById("il-link-input").value = url;
@@ -356,7 +472,10 @@ function copiarLink() {
 }
 
 init();
-setInterval(init, 180000);
+// Antes se llamaba a init() cada 3 minutos, lo que tapaba toda la pantalla
+// con el loader y perdia el filtro/scroll aunque el usuario siguiera
+// mirando la tabla. Se saco: ahora solo recarga al entrar a la pestaña o
+// al tocar "Actualizar" a mano.
 
 /* ═══════════════════════════════════════════════════════════════════
    SUB-PESTAÑA: Dartis Ventas vs Entregas Locales

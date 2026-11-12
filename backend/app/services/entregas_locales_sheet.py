@@ -93,7 +93,7 @@ def configurado() -> bool:
 def _servicio():
     creds = service_account.Credentials.from_service_account_file(
         str(_ruta_credenciales()),
-        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
+        scopes=["https://www.googleapis.com/auth/spreadsheets"],
     )
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
@@ -134,6 +134,103 @@ def leer_sheet() -> list[dict]:
             break
         inicio = fin + 1
     return filas
+
+
+# Columnas que se pueden corregir a mano desde BLIS y reescribir en el Sheet
+# real. A proposito NO incluye "ver_foto_url" (es una formula HYPERLINK;
+# escribirla como texto plano le borraria el link a la foto) ni "texto_ocr"
+# (insumo crudo del LLM, no se edita a mano).
+COLUMNA_LETRA = {
+    "fecha_registro":     "A",
+    "hora_registro":      "B",
+    "fecha_documento":    "C",
+    "hora_documento":     "D",
+    "empresa_logistica":  "E",
+    "nombre_chofer":      "F",
+    "cedula":             "G",
+    "placa":              "H",
+    "finca_exportador":   "I",
+    "nombre_cliente":     "J",
+    "numero_guia_ingreso": "K",
+    "detalle_cajas":      "L",
+    "total_fulls_pcs":    "M",
+    "temperatura":        "N",
+    "observaciones":      "O",
+}
+CAMPOS_EDITABLES = set(COLUMNA_LETRA)
+
+
+def escribir_celdas(fila_sheet: int, campos: dict) -> None:
+    """Escribe uno o mas campos de una fila YA EXISTENTE de vuelta en el
+    Sheet real. Unico lugar donde BLIS deja de ser solo lectura sobre este
+    Sheet -- a proposito acotado a filas que el bot ya escribio (nunca la
+    ultima fila, que puede seguir "en construccion" si el bot esta a mitad
+    de guardar una foto nueva en ese mismo instante).
+    """
+    datos = [
+        {
+            "range": f"'{HOJA}'!{COLUMNA_LETRA[campo]}{fila_sheet}",
+            "values": [[valor if valor is not None else ""]],
+        }
+        for campo, valor in campos.items() if campo in COLUMNA_LETRA
+    ]
+    if not datos:
+        return
+    servicio = _servicio()
+    servicio.spreadsheets().values().batchUpdate(
+        spreadsheetId=SHEET_ID,
+        body={"valueInputOption": "RAW", "data": datos},
+    ).execute()
+
+
+def actualizar_raw(fila_sheet: int, campos: dict) -> dict:
+    """Corrige campos de una fila ya sincronizada: guarda en Supabase y
+    escribe la misma celda en el Sheet real.
+
+    Se identifica por `fila_sheet` (el numero de fila real del Sheet) y no
+    por el id interno de Supabase -- es la llave que ya conocen las dos
+    pantallas que necesitan editar (el proxy en vivo del bot trae `_fila`,
+    que es el mismo numero).
+
+    Si falla la escritura al Sheet, el cambio en Supabase NO se revierte --
+    mejor un dato corregido en BLIS pero momentaneamente desalineado con el
+    Sheet, que perder la correccion por un problema transitorio de Google.
+    """
+    campos = {k: v for k, v in campos.items() if k in CAMPOS_EDITABLES}
+    if not campos:
+        raise ValueError("Ningun campo editable en la solicitud.")
+
+    with engine.begin() as conn:
+        set_clause = ", ".join(f"{c} = :{c}" for c in campos)
+        fila = conn.execute(text(f"""
+            UPDATE entregas_locales_raw SET {set_clause}
+            WHERE fila_sheet = :fila_sheet
+            RETURNING id, fila_sheet
+        """), {**campos, "fila_sheet": fila_sheet}).mappings().first()
+
+    if not fila:
+        raise LookupError(
+            f"La fila {fila_sheet} del Sheet todavia no esta sincronizada en "
+            "Supabase -- usa \"1. Traer del Sheet\" primero."
+        )
+
+    sheet_ok, sheet_error = True, None
+    try:
+        escribir_celdas(fila["fila_sheet"], campos)
+    except Exception as e:
+        sheet_ok, sheet_error = False, str(e)
+        logger.warning(
+            "entregas_locales_raw (fila %s) actualizado en Supabase pero "
+            "fallo escribir al Sheet: %s", fila_sheet, e,
+        )
+
+    return {
+        "id": fila["id"],
+        "fila_sheet": fila["fila_sheet"],
+        "campos_actualizados": list(campos.keys()),
+        "sheet_actualizado": sheet_ok,
+        "sheet_error": sheet_error,
+    }
 
 
 def mapa_urls_fotos() -> dict[int, str]:
