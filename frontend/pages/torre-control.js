@@ -287,4 +287,9 @@ timerUI = setInterval(() => {
   if (s === 0) { nextAt = null; cargar(); }
 }, 1000);
 
-cargar();
+// Forzado (no el refresco de fondo del scheduler, que en Render free no
+// corre mientras el servicio esta dormido por inactividad -- la pantalla
+// podia quedar mostrando el ultimo snapshot de quien sabe cuando hasta que
+// alguien volvia a tocar la API). Al entrar a la pantalla, siempre dispara
+// un refresco real antes de mostrar nada.
+cargar(true);
