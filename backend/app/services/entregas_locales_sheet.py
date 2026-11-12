@@ -17,6 +17,7 @@ numero nunca duplica una fila ya traida.
 
 import logging
 import os
+import re
 from pathlib import Path
 
 from google.oauth2 import service_account
@@ -27,6 +28,23 @@ from sqlalchemy import text
 from app.database.connection import engine
 
 logger = logging.getLogger(__name__)
+
+# La columna P ("Ver Foto") es `=HYPERLINK("https://drive.google.com/...","📷
+# Ver Foto")`. Leida con el renderizado normal de la API (igual que el propio
+# doGet() del bot con getValues()), Sheets devuelve el VALOR CALCULADO de la
+# formula -- el texto "📷 Ver Foto" -- y la URL real se pierde. Para
+# recuperarla hay que pedir esa columna con valueRenderOption=FORMULA.
+_RE_HYPERLINK = re.compile(r'HYPERLINK\(\s*"([^"]+)"', re.IGNORECASE)
+
+
+def _url_desde_formula(valor) -> str | None:
+    """`valor` casi siempre es texto ("=HYPERLINK(...)" o "📷 Ver Foto"), pero
+    con valueRenderOption=FORMULA una celda sin formula a veces vuelve como
+    numero/booleano tal cual -- de ahi el str() antes de buscar el patron."""
+    if valor is None or valor == "":
+        return None
+    m = _RE_HYPERLINK.search(str(valor))
+    return m.group(1) if m else None
 
 SHEET_ID = os.getenv("ENTREGAS_LOCALES_SHEET_ID", "")
 SA_JSON = os.getenv("ENTREGAS_LOCALES_SA_JSON", "google-sheets-sa.json")
@@ -91,15 +109,51 @@ def leer_sheet() -> list[dict]:
         fin = inicio + LOTE_FILAS - 1
         resp = valores.get(spreadsheetId=SHEET_ID, range=f"'{HOJA}'!A{inicio}:Q{fin}").execute()
         lote = resp.get("values", [])
+
+        # Segunda lectura, solo de la columna P, pidiendo la FORMULA en vez
+        # del valor calculado -- es la unica forma de recuperar la URL real
+        # detras de "📷 Ver Foto". Una columna sola (sin el OCR de la Q) es
+        # liviana, no hace falta paginar como el resto.
+        resp_p = valores.get(
+            spreadsheetId=SHEET_ID,
+            range=f"'{HOJA}'!P{inicio}:P{fin}",
+            valueRenderOption="FORMULA",
+        ).execute()
+        formulas_p = resp_p.get("values", [])
+
         for i, fila in enumerate(lote):
             registro = {"fila_sheet": inicio + i}
             for j, col in enumerate(COLUMNAS_RAW):
                 registro[col] = (fila[j].strip() if j < len(fila) and fila[j] else None)
+            formula = formulas_p[i][0] if i < len(formulas_p) and formulas_p[i] else None
+            url_real = _url_desde_formula(formula)
+            if url_real:
+                registro["ver_foto_url"] = url_real
             filas.append(registro)
         if len(lote) < LOTE_FILAS:
             break
         inicio = fin + 1
     return filas
+
+
+def mapa_urls_fotos() -> dict[int, str]:
+    """{numero de fila del Sheet -> URL real de Drive}, para pantallas que no
+    pasan por `entregas_locales_raw` (ej. la pestaña vieja, proxy directo al
+    bot) y necesitan la foto igual. Una sola llamada liviana, sin paginar."""
+    if not configurado():
+        return {}
+    servicio = _servicio()
+    resp = servicio.spreadsheets().values().get(
+        spreadsheetId=SHEET_ID,
+        range=f"'{HOJA}'!P2:P",
+        valueRenderOption="FORMULA",
+    ).execute()
+    mapa: dict[int, str] = {}
+    for i, fila in enumerate(resp.get("values", [])):
+        url = _url_desde_formula(fila[0] if fila else None)
+        if url:
+            mapa[2 + i] = url
+    return mapa
 
 
 def sincronizar() -> dict:

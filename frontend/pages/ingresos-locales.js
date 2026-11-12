@@ -99,6 +99,7 @@ function renderPage() {
       <div class="il-modal">
         <h3>Compartir entrega</h3>
         <div class="il-modal-guia" id="il-modal-guia">—</div>
+        <div id="il-modal-foto"></div>
         <div class="il-modal-detalle" id="il-modal-detalle"></div>
         <div class="il-link-row">
           <input type="text" id="il-link-input" readonly>
@@ -308,6 +309,21 @@ function abrirModal(reg) {
   if (!reg) return;
   document.getElementById("il-modal-guia").textContent =
     "Guía / Ingreso: " + (reg["N° Guía / Ingreso"] || "—");
+
+  const fotoDiv = document.getElementById("il-modal-foto");
+  const fotoUrl = reg["_foto_url"];
+  if (fotoUrl) {
+    const m = fotoUrl.match(/\/d\/([^/]+)/);
+    const thumb = m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000` : fotoUrl;
+    fotoDiv.innerHTML = `
+      <a href="${fotoUrl}" target="_blank" rel="noopener">
+        <img src="${thumb}" alt="Foto del recibo"
+             style="width:100%; border-radius:8px; margin-bottom:.75rem; cursor:zoom-in">
+      </a>`;
+  } else {
+    fotoDiv.innerHTML = "";
+  }
+
   document.getElementById("il-modal-detalle").innerHTML = `
     <strong>Empresa:</strong> ${reg["Empresa Logística"] || "—"}<br>
     <strong>Fecha:</strong> ${reg["Fecha Documento"] || "—"} ${reg["Hora Registro"] || ""}<br>
