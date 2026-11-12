@@ -217,13 +217,16 @@ def obtener_cruce(estado: str | None = None, texto: str | None = None,
                 SELECT id_pedido,
                        MAX(fecha)          AS fecha,
                        MAX(empresa)        AS empresa,
+                       MAX(destinatario)   AS destinatario,
                        MAX(agencia_carga)  AS agencia_carga,
+                       MAX(id_comercializadora) AS id_comercializadora,
                        round(SUM(total_piezas)) AS cajas
                 FROM dartis_ventas
                 WHERE active AND agencia_carga IS NOT NULL
                 GROUP BY id_pedido
             )
-            SELECT v.id_pedido, v.fecha, v.empresa, v.agencia_carga, v.cajas,
+            SELECT v.id_pedido, v.fecha, v.empresa, v.destinatario,
+                   v.agencia_carga, v.id_comercializadora, v.cajas,
                    COALESCE(c.estado, 'SIN PROCESAR') AS estado,
                    c.criterio, c.verificado_manual, c.candidatos,
                    e.id            AS entrega_id,

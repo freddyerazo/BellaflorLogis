@@ -434,12 +434,12 @@ async function cargarCruce() {
   if (hasta) params.set("hasta", hasta);
 
   const tbody = $$("#elTabla");
-  tbody.innerHTML = `<tr><td colspan="9" class="loading">Cargando…</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="11" class="loading">Cargando…</td></tr>`;
   try {
     const r = await fetch(`/api/entregas-locales/cruce?${params}`);
     const filas = await r.json();
     if (!filas.length) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty">Sin resultados con esos filtros.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="empty">Sin resultados con esos filtros.</td></tr>`;
       return;
     }
     tbody.innerHTML = filas.map((f) => `
@@ -447,6 +447,8 @@ async function cargarCruce() {
         <td><strong>${f.id_pedido}</strong></td>
         <td>${f.fecha || "—"}</td>
         <td>${f.empresa || "—"}</td>
+        <td>${f.destinatario || "—"}</td>
+        <td>${f.id_comercializadora ?? "—"}</td>
         <td>${f.agencia_carga || "—"}</td>
         <td class="num">${f.cajas ?? "—"}</td>
         <td>${f.numero_ingreso || "—"}</td>
@@ -455,7 +457,7 @@ async function cargarCruce() {
         <td><span class="badge ${BADGE_CRUCE[f.estado] || "badge-gray"}">${f.estado}</span></td>
       </tr>`).join("");
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="9" class="error">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="error">${err.message}</td></tr>`;
   }
 }
 
