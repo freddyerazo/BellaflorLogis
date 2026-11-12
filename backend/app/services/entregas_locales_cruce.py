@@ -240,17 +240,53 @@ def obtener_cruce(estado: str | None = None, texto: str | None = None,
         """), params).mappings().all()]
 
 
-def resumen() -> dict:
-    """Contadores para las tarjetas de la pantalla."""
+def resumen(desde: str | None = None, hasta: str | None = None) -> dict:
+    """Contadores para las tarjetas de la pantalla.
+
+    `desde`/`hasta` (YYYY-MM-DD) acotan el universo de pedidos por
+    `dartis_ventas.fecha` -- el mismo criterio que usa `obtener_cruce` para
+    la tabla de abajo, para que las tarjetas y las filas siempre cuenten lo
+    mismo. Sin fechas, cuenta todo el historico (igual que antes).
+    """
+    cond = []
+    params: dict = {}
+    if desde:
+        cond.append("v.fecha >= :desde")
+        params["desde"] = desde
+    if hasta:
+        cond.append("v.fecha <= :hasta")
+        params["hasta"] = hasta
+    where = ("WHERE " + " AND ".join(cond)) if cond else ""
+
+    cond_e = []
+    params_e: dict = {}
+    if desde:
+        cond_e.append("fecha_documento >= :desde")
+        params_e["desde"] = desde
+    if hasta:
+        cond_e.append("fecha_documento <= :hasta")
+        params_e["hasta"] = hasta
+    where_e = ("WHERE " + " AND ".join(cond_e)) if cond_e else ""
+
     with engine.connect() as conn:
-        universo = conn.execute(text("""
-            SELECT count(DISTINCT id_pedido) FROM dartis_ventas
-            WHERE active AND agencia_carga IS NOT NULL
-        """)).scalar()
-        por_estado = {f["estado"]: f["n"] for f in conn.execute(text("""
-            SELECT estado, count(*) n FROM dartis_entregas_cruce GROUP BY estado
-        """)).mappings()}
-        recibos = conn.execute(text("SELECT count(*) FROM entregas_locales")).scalar()
+        filas = conn.execute(text(f"""
+            WITH v AS (
+                SELECT id_pedido, MAX(fecha) AS fecha
+                FROM dartis_ventas
+                WHERE active AND agencia_carga IS NOT NULL
+                GROUP BY id_pedido
+            )
+            SELECT COALESCE(c.estado, 'SIN PROCESAR') AS estado
+            FROM v
+            LEFT JOIN dartis_entregas_cruce c ON c.id_pedido = v.id_pedido
+            {where}
+        """), params).mappings().all()
+
+        por_estado: dict[str, int] = {}
+        for f in filas:
+            por_estado[f["estado"]] = por_estado.get(f["estado"], 0) + 1
+
+        recibos = conn.execute(text(f"SELECT count(*) FROM entregas_locales {where_e}"), params_e).scalar()
         crudos = conn.execute(text("SELECT count(*) FROM entregas_locales_raw")).scalar()
         sin_interpretar = conn.execute(text("""
             SELECT count(*) FROM entregas_locales_raw r
@@ -258,13 +294,12 @@ def resumen() -> dict:
             WHERE e.id IS NULL AND r.texto_ocr IS NOT NULL AND length(r.texto_ocr) > 30
         """)).scalar()
 
-    procesados = sum(por_estado.values())
     return {
-        "pedidos_dartis": universo,
+        "pedidos_dartis": len(filas),
         "ok": por_estado.get("OK", 0),
         "ambiguo": por_estado.get("AMBIGUO", 0),
         "sin_recibo": por_estado.get("SIN RECIBO", 0),
-        "sin_procesar": max(universo - procesados, 0),
+        "sin_procesar": por_estado.get("SIN PROCESAR", 0),
         "recibos_interpretados": recibos,
         "recibos_crudos": crudos,
         "recibos_sin_interpretar": sin_interpretar,

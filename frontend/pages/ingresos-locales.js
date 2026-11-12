@@ -373,9 +373,32 @@ document.querySelectorAll(".subtab").forEach((tab) => {
   });
 });
 
+/* ─── Filtro de fechas por defecto: ayer a ayer ───────────────────
+   El resumen y la tabla solo tienen sentido para revisar el dia anterior
+   (hoy el bot todavia puede seguir recibiendo fotos) -- por eso arrancan
+   acotados a ayer en vez de mostrar todo el historico de entrada. */
+function fechaISO(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function fijarFiltroFechaPorDefecto() {
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  const iso = fechaISO(ayer);
+  if (!$$("#elDesde").value) $$("#elDesde").value = iso;
+  if (!$$("#elHasta").value) $$("#elHasta").value = iso;
+}
+fijarFiltroFechaPorDefecto();
+
 /* ─── Resumen + tabla ──────────────────────────────────────────── */
 async function cargarResumenCruce() {
-  const r = await fetch("/api/entregas-locales/resumen");
+  const params = new URLSearchParams();
+  const desde = $$("#elDesde").value;
+  const hasta = $$("#elHasta").value;
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+
+  const r = await fetch(`/api/entregas-locales/resumen?${params}`);
   const d = await r.json();
   const tarjeta = (valor, etiqueta, acento = false) => `
     <div class="il-card${acento ? " il-card--accent" : ""}">

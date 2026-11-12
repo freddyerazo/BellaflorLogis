@@ -22,10 +22,14 @@ router = APIRouter(prefix="/entregas-locales", tags=["Entregas Locales"])
 
 
 @router.get("/resumen")
-def resumen():
+def resumen(desde: str | None = None, hasta: str | None = None):
     """Contadores de la pantalla: universo de Dartis, estados del cruce y
-    cuantos recibos quedan por interpretar."""
-    return {**cruce.resumen(), "sheet_configurado": sheet.configurado()}
+    cuantos recibos quedan por interpretar.
+
+    `desde`/`hasta` acotan los contadores al mismo rango de fechas que la
+    tabla de `/cruce` -- sin ellos, cuenta todo el historico.
+    """
+    return {**cruce.resumen(desde=desde, hasta=hasta), "sheet_configurado": sheet.configurado()}
 
 
 @router.get("/cruce")
