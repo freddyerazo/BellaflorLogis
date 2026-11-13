@@ -76,8 +76,12 @@ function renderPage() {
         <select id="il-filtro-empresa"><option value="">Todas</option></select>
       </div>
       <div class="il-filtro-campo">
-        <label>Fecha</label>
-        <input type="date" id="il-filtro-fecha">
+        <label>Desde</label>
+        <input type="date" id="il-filtro-desde">
+      </div>
+      <div class="il-filtro-campo">
+        <label>Hasta</label>
+        <input type="date" id="il-filtro-hasta">
       </div>
       <button class="btn btn-outline" id="btn-limpiar">
         <i class="ph ph-x"></i> Limpiar
@@ -119,12 +123,14 @@ function renderPage() {
 
   poblarResumen();
   poblarFiltroEmpresas();
+  fijarFiltroFechaIlPorDefecto();
   aplicarFiltros();
 
   // Listeners
   document.getElementById("il-buscar").addEventListener("input", aplicarFiltros);
   document.getElementById("il-filtro-empresa").addEventListener("change", aplicarFiltros);
-  document.getElementById("il-filtro-fecha").addEventListener("change", aplicarFiltros);
+  document.getElementById("il-filtro-desde").addEventListener("change", aplicarFiltros);
+  document.getElementById("il-filtro-hasta").addEventListener("change", aplicarFiltros);
   document.getElementById("btn-limpiar").addEventListener("click", limpiarFiltros);
   document.getElementById("btn-refresh").addEventListener("click", () => init());
   document.getElementById("btn-copiar").addEventListener("click", copiarLink);
@@ -199,7 +205,8 @@ function poblarFiltroEmpresas() {
 function aplicarFiltros() {
   const texto   = document.getElementById("il-buscar").value.toLowerCase();
   const empresa = document.getElementById("il-filtro-empresa").value;
-  const fecha   = document.getElementById("il-filtro-fecha").value;
+  const desde   = document.getElementById("il-filtro-desde").value;
+  const hasta   = document.getElementById("il-filtro-hasta").value;
 
   datosFiltrados = todosLosDatos.filter(r => {
     const campos = [
@@ -208,24 +215,42 @@ function aplicarFiltros() {
     ].join(" ").toLowerCase();
     const passTexto   = !texto   || campos.includes(texto);
     const passEmpresa = !empresa || r["Empresa Logística"] === empresa;
-    const passFecha   = !fecha   || coincideFecha(r["Fecha Documento"], fecha);
+    const passFecha   = coincideRangoFecha(r["Fecha Documento"], desde, hasta);
     return passTexto && passEmpresa && passFecha;
   });
 
   renderTabla();
 }
 
-function coincideFecha(fechaReg, fechaInput) {
-  if (!fechaReg || !fechaInput) return false;
-  const p = String(fechaReg).split("/");
+// Por defecto la pantalla arranca acotada a ayer -- igual que la pestaña de
+// cruce -- para no cargar visualmente las ~5.000 filas que trae el bot de
+// una. "Limpiar" vuelve a ese mismo default, no a mostrar todo el historico.
+function fechaISOIl(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function fijarFiltroFechaIlPorDefecto() {
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  const iso = fechaISOIl(ayer);
+  document.getElementById("il-filtro-desde").value = iso;
+  document.getElementById("il-filtro-hasta").value = iso;
+}
+
+function coincideRangoFecha(fechaReg, desde, hasta) {
+  if (!desde && !hasta) return true;
+  const p = String(fechaReg || "").split("/");
   if (p.length !== 3) return false;
-  return `${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}` === fechaInput;
+  const iso = `${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`;
+  if (desde && iso < desde) return false;
+  if (hasta && iso > hasta) return false;
+  return true;
 }
 
 function limpiarFiltros() {
   document.getElementById("il-buscar").value = "";
   document.getElementById("il-filtro-empresa").value = "";
-  document.getElementById("il-filtro-fecha").value = "";
+  fijarFiltroFechaIlPorDefecto();
   aplicarFiltros();
 }
 
